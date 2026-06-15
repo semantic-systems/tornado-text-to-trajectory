@@ -1,2 +1,13 @@
-Requests~=2.33.1
-tqdm~=4.67.3
+# Extraction (extract_noaa_polygons.py)
+requests~=2.33
+tqdm~=4.67
+
+# Analysis & reporting (analyze_noaa_data.py)
+numpy~=2.4
+matplotlib~=3.11
+spacy~=3.8
+
+# spaCy English model used for toponym detection. Install with:
+#   python -m spacy download en_core_web_sm
+# or pip-install the pinned wheel directly:
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
