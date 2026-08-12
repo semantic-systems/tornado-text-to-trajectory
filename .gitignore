@@ -13,7 +13,8 @@ venv/
 .idea/
 .vscode/
 .DS_Store
-.claude/settings.local.json
+# Claude Code workspace settings — local tooling, not project code
+.claude/
 
 # Generated data — 4.7 GB, obtained from the project owner (see HANDOVER.md)
 /data/
