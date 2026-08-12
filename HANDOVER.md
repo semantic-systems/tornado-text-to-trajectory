@@ -1,6 +1,6 @@
 # Handover — state of play
 
-Written 2026-08-12, as the project owner leaves for several weeks. This page is
+Written 2026-08-12. This page is
 the current state; [README.md](README.md) is the orientation,
 [docs/PIPELINE.md](docs/PIPELINE.md) the per-stage detail.
 
@@ -11,16 +11,12 @@ Read the **traps** section before quoting any number out of this repository.
 Nothing under `data/` or `outputs/figures/` is in git. The reports
 (`outputs/*.md`) are, so the findings are readable from a clone alone.
 
-| | size | in git |
-|---|---:|---|
-| `data/` | 4.7 GB | no — ask the owner for a copy |
-| `outputs/` figures | ~300 MB | no |
-| `outputs/*.md` (12 reports) | small | **yes** |
+| | size | in git                                                                                         |
+|---|---:|------------------------------------------------------------------------------------------------|
+| `data/` | 4.7 GB | no — they are stored separately on tohuus at /data/share/geoai/tornado-text-to-trajectory/data |
+| `outputs/` figures | ~300 MB | no                                                                                             |
+| `outputs/*.md` (12 reports) | small | **yes**                                                                                        |
 
-Regenerating from scratch is days of work, not hours: IEM ~3.5 h, GDELT >10 h,
-Media Cloud LLM labelling ~2.5 h of GPU, full-text crawl ~30 h. **Get a copy of
-`data/` rather than rebuilding it.** Every stage caches its raw responses, so with
-a copy in place a re-run costs no network and no GPU.
 
 ## Stage status
 
@@ -28,8 +24,8 @@ a copy in place a re-run costs no network and no GPU.
 |---|---|
 | 01–05 DAT | **complete.** 11,520 lines + 9,989 polygons → 9,982 hazards in 2,795 episodes. Geometry linker validated at 99.3% precision / 96.2% recall on the 289-polygon `path_guid` gold set |
 | 06 IEM text | **complete.** 15,687 LSRs + 14,956 survey products; 7,314 hazards (73.3%) have survey text |
-| 07 GDELT | **partial and the processed table is stale — see traps.** Sweep stopped at 5,155/6,615 queries (78%). Cache holds **153,354 distinct URLs**; the table holds 66,034 |
-| 08–10 QA, analysis, map | complete against the data as of early August |
+| 07 GDELT | **rebuilt from cache 12 Aug; partial by construction.** The sweep stopped at 5,155/6,615 queries (78%), so 1,442 queries were never fetched and 57 episodes have no cached slice at all. From what *was* fetched: **83,778 unique URLs** (was 66,034), 100,661 links, **1,857 episodes covered** — 66.4% of all episodes, 84.2% within GDELT's own 2017+ era |
+| 08–10 QA, analysis, map | 08 refreshed 12 Aug against the rebuilt GDELT tables; 09–10 read DAT tables that have not changed |
 | 11 article linking | ran **ungated**; 18,306 of 22,896 articles linked (80%). The `--labels` gate is wired but has never been used |
 | 12–16 annotation, overlap, viewer | sheets drawn and viewer working; **no annotations have been made** |
 | 17 Media Cloud fetch | complete. 491,432 rows, 266,258 distinct headlines, 2010–2025 |
@@ -42,25 +38,17 @@ a copy in place a re-run costs no network and no GPU.
 
 Things that will produce wrong answers if taken at face value.
 
-**The GDELT table is nine days older than its cache.** `textrefs_news_*.csv` was
-written 2 Aug and holds 66,034 URLs; the cache under `data/raw/gdelt/` holds
-**153,354**. Every GDELT figure in the reports — including the conclusion in
-`outputs/corpus_overlap_report.md` that GDELT adds little — rests on less than
-half the collected data. Rebuilding the table from cache needs no network. The
-sweep process was killed on 11 Aug at 78% (5,155 of 6,615 queries) after its rate
-had collapsed roughly tenfold, most likely because the 45 s × attempt backoff in
-`config.HTTP_RATE_LIMIT_BACKOFF` over-corrects against sustained 429s.
+**GDELT is 78% of its intended sweep, and structurally blind before 2017.** 1,442 queries
+were never fetched (`uncached_queries`), and 57 episodes have no cached slice at
+all, so every GDELT coverage figure is a **lower bound**. Separately, the API
+cannot return anything before 2017-01-01, which is 590 of 2,795 episodes and
+92,000 Media Cloud stories that GDELT can never reach.
 
-**Stage 19 looks like it over-calls `EVENT`.** 61.5% of LexisNexis articles are
-`EVENT` against 22.5% of Media Cloud; `UNCLEAR` never fires once in 24,917
-articles; and `is_passing_mention` — the flag built for this corpus's main failure
-mode — is 0.0% of the EVENT set. Spot-checks of the stage-20 disagreements found
-the *headline-only* Media Cloud label was often the better one, on opinion pieces,
-1925 retrospectives and study explainers. The suspected cause is the `windows`
-evidence mode: it selects ±40 words around each tornado mention, which for a
-retrospective concentrates the damage language and discards the framing that would
-reveal what the article is. `scripts/19_filter_lexisnexis.py window` runs the
-ablation that would confirm or refute this.
+
+Finishing the remaining 1,442 queries is possible but was abandoned deliberately:
+the sweep's rate had collapsed roughly tenfold, most likely because the 45 s ×
+attempt backoff in `config.HTTP_RATE_LIMIT_BACKOFF` over-corrects against
+sustained 429s. Tune that before restarting, or the last 22% will take weeks.
 
 **`--limit` bounds reads, not writes.** On stages 18 and 19 it caps how much of the
 corpus is *read*, so a "small test" happily reuses a full labels file and then
@@ -108,11 +96,16 @@ Outcomes append to `data/raw/fulltext/retrievals.jsonl` as they happen; killing 
 resuming across sessions is safe. `--retry-failed` re-attempts only transient
 failures, never settled ones.
 
-### 2. Schema design for the assembled corpus
+### 2. Re-Assess the news coverage
+Finish the GDELT crawl, then analyze the coverage in terms of events and unique headlines. If there are any gains
+(which is likely), try to crawl the full text of the articles in GDELT that contain event descriptions. Assess the
+overlap between LexisNexis, Media Cloud, and GDELT full-texts.
+
+### 3. Schema design for the assembled corpus
 
 Design the published schema by reusing existing ontologies where they fit, and
-defining new terms only where the disaster↔text combination has no precedent.
-Research task; no code needed to start. Read
+defining new terms where the disaster↔text combination has no precedent.
+Read
 [docs/DATA_MODEL.md](docs/DATA_MODEL.md) first — it specifies the current model
 (Episode → Hazard → Geometry, with TextRef/TextLink) and the decisions already
 locked for v0.2.
@@ -142,7 +135,7 @@ as a column.
 Deliverable: a design note in `docs/` proposing the mapping and the new terms,
 before any serialisation work.
 
-### 3. Making the linker more faithful
+### 4. Making the linker more faithful
 
 `src/tornado_dataset/text/linking.py` with `scripts/11_link_articles.py`. Current
 approach: a −14/+3 day window as a cheap shortlist, IDF-weighted toponym matching
@@ -153,12 +146,7 @@ precision is **unmeasured**.
 
 Known weaknesses, roughly in order of expected payoff:
 
-- **Toponym resolution is shallow.** Proper-noun n-grams plus a stoplist, adopted
-  after case-insensitive matching proved catastrophic — "IN" matched the word
-  "in", and GNIS towns named *Enough*, *Hurricane* and *March* matched ordinary
-  prose. Real NER plus gazetteer disambiguation is the obvious upgrade.
-- **Numeric corroboration is weak.** Fatality counts and EF ratings are matched
-  loosely, although both are strong identifying signals.
+- **Toponym resolution is weak and relies on the cities the tornados passed through. Probably most improvement lies in here.
 - **The outbreak-versus-single-tornado decision** rests on one margin ratio
   (`config.LINK_HAZARD_MARGIN = 1.4`), which was a guess.
 - **Wire copy is linked independently per article**, ignoring that syndicated
@@ -175,10 +163,10 @@ Sequence this with thread 4: no improvement here is measurable until a gold set
 exists. `docs/linking_coverage_analysis.md` records the last diagnosis, which took
 linking from 55% to 80%.
 
-### 4. Human annotation
+### 5. Human annotation
 
-The highest-leverage unblocking work. Three separate measurements are waiting on
-it: article-link precision, stage 18/19 label accuracy, and the stage 19
+Three separate measurements are waiting on
+human annotation: article-link precision, stage 18/19 label accuracy, and the stage 19
 over-calling question in the traps section.
 
 Infrastructure exists. `docs/annotation_codebook.md` defines the labels;

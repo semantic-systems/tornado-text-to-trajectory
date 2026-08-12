@@ -253,10 +253,12 @@ long poles are the downloads (running) and the annotation (yours).
 
 ## 9. Limitations that go into the datasheet regardless of how well this works
 
-1. **The LexisNexis corpus is a convenience sample**, not a random sample of
-   coverage: it is the result of one Lexis query (`(Tornado) and length >= 50`),
-   capped at the most recent 1,000 hits per export. Recall figures computed on it
-   are conditional on that query.
+1. **The LexisNexis corpus is one query's complete export** (`(Tornado) and
+   length >= 50`) — not a random sample of coverage, and not truncated. Recall
+   figures computed on it are conditional on that query, not on a retrieval cap.
+   *(Corrected 2026-08-12: this section was written against an early 994-article
+   pilot export that was capped at 1,000 hits. The full corpus is 24,917 rows /
+   22,896 unique articles; the per-article counts below still describe the pilot.)*
 2. **Wire copy is duplicated.** 64 of 994 articles are verbatim re-runs. Article
    counts are reported both raw and deduplicated (`dup_group`).
 3. **Linking is a measurement, not ground truth.** Even at 0.95 precision, one

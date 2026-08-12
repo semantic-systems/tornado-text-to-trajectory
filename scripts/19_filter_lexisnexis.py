@@ -417,8 +417,9 @@ def write_report(out: pd.DataFrame, labels: pd.DataFrame, args) -> None:
         "articles are not linked and a filter false negative becomes invisible. "
         "The `crosstab` subcommand is the only check on this, and only while "
         "stage 11's ungated run is still on disk.",
-        "5. **The corpus is a convenience sample** from capped LexisNexis "
-        "queries, not a census of coverage.", "",
+        "5. **The corpus is one LexisNexis query's complete export** — 22,896 "
+        "unique articles, not truncated — but not a census of coverage: it is "
+        "bounded by which outlets LexisNexis indexes and by the query terms.", "",
     ]
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text("\n".join(lines), encoding="utf-8")

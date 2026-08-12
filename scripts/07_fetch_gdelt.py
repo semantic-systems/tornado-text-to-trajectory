@@ -61,6 +61,12 @@ def main() -> None:
                         help="capture Internet Archive snapshots for kept articles")
     parser.add_argument("--wayback-per-episode", type=int, default=10)
     parser.add_argument("--refresh", action="store_true")
+    parser.add_argument("--cache-only", action="store_true",
+                        help="rebuild the tables from data/raw/gdelt/ without any "
+                             "network access. Queries never fetched are skipped and "
+                             "counted separately from failures, so partial coverage "
+                             "stays visible in the manifest instead of looking like "
+                             "a complete sweep.")
     args = parser.parse_args()
 
     episodes = pd.read_csv(config.PROCESSED_DIR / f"episodes_{args.tag}.csv")
@@ -123,14 +129,19 @@ def main() -> None:
             continue
 
         day = dt.date.fromisoformat(episode.convective_day)
-        articles, capped, failed_slices = [], False, 0
+        articles, capped, failed_slices, uncached_slices = [], False, 0, 0
         for offset_start, offset_end in slices:
             if offset_start >= offset_end:
                 continue
             batch = gdelt.query_articles(
                 query, day + dt.timedelta(days=offset_start),
                 day + dt.timedelta(days=offset_end),
-                cache_dir=cache_dir, refresh=args.refresh)
+                cache_dir=cache_dir, refresh=args.refresh,
+                cache_only=args.cache_only)
+            if batch is gdelt.NOT_CACHED:   # never fetched; not a failure either
+                uncached_slices += 1
+                stats["uncached_queries"] += 1
+                continue
             if batch is None:          # the request failed; not an empty window
                 failed_slices += 1
                 stats["failed_queries"] += 1
@@ -140,6 +151,11 @@ def main() -> None:
         if failed_slices:
             stats["episodes_with_a_failed_slice"] += 1
             stats["episodes_fully_failed"] += int(failed_slices == len(slices))
+        if uncached_slices:
+            # Coverage for this episode is partial by construction, so it must be
+            # visible in the manifest rather than looking like a complete sweep.
+            stats["episodes_with_an_uncached_slice"] += 1
+            stats["episodes_fully_uncached"] += int(uncached_slices == len(slices))
         seen_urls = set()
         articles = [a for a in articles
                     if a.get("url") and not (a["url"] in seen_urls or seen_urls.add(a["url"]))]
@@ -195,6 +211,12 @@ def main() -> None:
                   f"articles kept of {stats['articles_returned']} returned", end="\r", flush=True)
     print()
 
+    if args.cache_only and stats["uncached_queries"]:
+        print(f"\ncache-only: {stats['uncached_queries']:,} queries were never "
+              f"fetched and are absent from this rebuild "
+              f"({stats['episodes_fully_uncached']:,} episodes have no cached slice "
+              "at all). Coverage figures from these tables are a lower bound.")
+
     refs = pd.DataFrame(textrefs).drop_duplicates(subset="textref_uid")
     links = pd.DataFrame(textlinks).drop_duplicates(subset=["textref_uid", "target_uid"])
 
@@ -213,6 +235,10 @@ def main() -> None:
         "failed_queries": stats["failed_queries"],
         "episodes_with_a_failed_slice": stats["episodes_with_a_failed_slice"],
         "episodes_fully_failed": stats["episodes_fully_failed"],
+        "cache_only": bool(args.cache_only),
+        "uncached_queries": stats["uncached_queries"],
+        "episodes_with_an_uncached_slice": stats["episodes_with_an_uncached_slice"],
+        "episodes_fully_uncached": stats["episodes_fully_uncached"],
         "window_slices_days": slices,
         "articles_returned": stats["articles_returned"],
         "articles_relevant": stats["articles_relevant"],

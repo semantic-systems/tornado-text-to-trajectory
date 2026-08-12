@@ -84,8 +84,8 @@ than the section matched to it.
 | episodes | 2795 |
 | … within GDELT coverage (≥ 2017-01-01) | 2205 |
 | … before it, flagged and never queried | 590 |
-| episodes with retrieved articles | 0 |
-| unique articles | 0 |
+| episodes with retrieved articles | 1857 |
+| unique articles | 83778 |
 
 **Query form was decided by measurement.** The prototype queried place names
 alone, having found that adding a hazard word to a *single* place name collapsed
@@ -106,10 +106,12 @@ articles; slicing recovered them. Episodes whose slices hit the cap are flagged
 
 ## 4. Text by independence role
 
-| text_role       |     n |
-|:----------------|------:|
-| official_timely | 15731 |
-| oracle          | 14912 |
+| text_role                 |     n |
+|:--------------------------|------:|
+| independent_timely        | 53795 |
+| independent_retrospective | 29977 |
+| official_timely           | 15736 |
+| oracle                    | 14913 |
 
 The two axes behind these labels (`same_org_as_geometry` × `temporal_class`) are
 assigned by one versioned rule, `tier_rules_v1_2026-07`, recorded on every

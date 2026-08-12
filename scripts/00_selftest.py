@@ -102,6 +102,7 @@ check("window and paths", config_sane)
 print("\nbehaviour")
 from tornado_dataset.text import fulltext, labelling, lexisnexis_filter  # noqa: E402
 from tornado_dataset.text import matching, mediacloud                    # noqa: E402
+from tornado_dataset.text import gdelt                                   # noqa: E402
 
 
 def evidence_windows_reach_late_mentions() -> None:
@@ -121,6 +122,18 @@ def paywall_stub_is_a_failure_not_an_article() -> None:
             + "Already a subscriber? Sign in. " * 12 + "</p></article></body></html>")
     _, _, reason = fulltext.extract_text(html, "http://example.com/a")
     assert reason, "a paywall teaser was accepted as an article"
+
+
+def uncached_gdelt_query_is_a_third_state() -> None:
+    """"Never fetched" must not read as "failed" or as "GDELT has nothing"."""
+    import datetime as dt
+    import tempfile
+    from pathlib import Path
+    empty = Path(tempfile.mkdtemp())
+    got = gdelt.query_articles("Joplin tornado", dt.date(2011, 5, 22),
+                               dt.date(2011, 5, 23), cache_dir=empty, cache_only=True)
+    assert got is gdelt.NOT_CACHED, f"expected NOT_CACHED, got {got!r}"
+    assert got is not None and got != [], "the third state collapsed into another"
 
 
 def unparseable_answer_is_not_a_judgement() -> None:
@@ -176,6 +189,7 @@ def body_key_is_content_derived() -> None:
 for name, fn in [
     ("evidence windows reach late mentions", evidence_windows_reach_late_mentions),
     ("paywall stub is a failure, not an article", paywall_stub_is_a_failure_not_an_article),
+    ("uncached GDELT query is a third state", uncached_gdelt_query_is_a_third_state),
     ("unparseable answer is not a judgement", unparseable_answer_is_not_a_judgement),
     ("protect rule is enforced", protect_rule_is_enforced),
     ("dedup groups collapse syndication", dedup_groups_collapse_syndication),

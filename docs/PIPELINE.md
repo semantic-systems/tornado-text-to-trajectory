@@ -400,3 +400,29 @@ To view the map locally:
 ```bash
 python -m http.server 8791 --directory outputs
 ```
+
+
+### Rebuilding GDELT from cache — `scripts/07_fetch_gdelt.py --cache-only`
+
+Every GDELT response is cached under `data/raw/gdelt/`, so the tables can be
+rebuilt without touching the network. `--cache-only` skips any query that was
+never fetched instead of requesting it, which matters because a partial sweep
+would otherwise stall for days on the remainder at one request per five seconds.
+
+Skipped queries are counted as `uncached_queries` and `episodes_fully_uncached`
+in the manifest, kept separate from `failed_queries`. The distinction is the same
+one `query_articles` already makes between `None` and `[]`: "not attempted",
+"refused" and "genuinely empty" are three different facts, and a rebuild that
+conflated them would report partial coverage as complete.
+
+### Comparing two corpora — `scripts/20_corpus_overlap.py --pair`
+
+| pair | method |
+|---|---|
+| `lexisnexis-mediacloud` (default) | headline + date + outlet identity — LexisNexis publishes no URL |
+| `gdelt-mediacloud` | **exact normalised URL** — both carry one, so identity is not inferred |
+| `lexisnexis-gdelt` | redirects to `scripts/13_overlap_report.py`, which already does it |
+
+The two methods are not comparable and the output says which produced each
+figure. The URL pair writes no report: GDELT carries no relevance label, so there
+is no EVENT subset to count and no label agreement to measure.

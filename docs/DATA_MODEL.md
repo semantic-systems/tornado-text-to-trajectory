@@ -22,7 +22,7 @@ Episode 1───* Hazard 1───* Geometry
 
 ### 1. Episode
 A named, time-bounded disaster event that groups one or more hazards. For the pilot,
-an outbreak (e.g. "Tornado outbreak of March 13–16, 2025"). For a hurricane, the storm.
+an outbreak (e.g. "Tornado outbreak of March 13–16, 2025").
 
 Key fields: `episode_uid`, `title`, `hazard_family` (tornado|flood|wildfire|tropical_cyclone|…),
 `time_begin_utc`, `time_end_utc`, `country`, `admin_regions[]`, external IDs
@@ -30,7 +30,7 @@ Key fields: `episode_uid`, `title`, `hazard_family` (tornado|flood|wildfire|trop
 
 ### 2. Hazard
 One authoritative sub-event with its own geometry — one tornado track, one flood extent,
-one burn scar. This is the unit the inference metric is computed on.
+one burn scar. 
 
 Key fields: `hazard_uid`, `episode_uid` (FK), `hazard_type`, `time_begin_utc`,
 `time_end_utc`, external IDs (`ncei_event_id`, `dat_event_ids[]`), `wfo`,

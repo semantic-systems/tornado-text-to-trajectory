@@ -239,8 +239,9 @@ def main() -> None:
         "1. **Linking is a measurement.** Even in a band measured at 0.95, one link in "
         "twenty is wrong; downstream work should carry `link_score` rather than treat "
         "links as facts.",
-        "2. **The corpus is a convenience sample** — one Lexis query capped at its most "
-        "recent 1,000 hits — so recall is conditional on what that query returned.",
+        "2. **The corpus is one LexisNexis query's complete export** — 22,896 unique "
+        "articles, not truncated — so recall is conditional on what that query "
+        "covered, not on a retrieval cap.",
         "3. **News coverage is itself biased** towards deadly, photogenic and urban "
         "tornadoes; the linked subset inherits that, and it has to be stated wherever "
         "text→geometry results are reported.",

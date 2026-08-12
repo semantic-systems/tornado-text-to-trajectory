@@ -90,10 +90,19 @@ def build_query(toponyms: Iterable[str], max_terms: int = 12,
     return f"{group} {hazard_term}".strip()
 
 
+# Returned when --cache-only is in force and this query was never fetched. It is
+# deliberately its own object rather than None or []: "not attempted" is a third
+# state, and folding it into either of the other two would repeat the mistake the
+# docstring below describes — one would report a rate-limit failure, the other
+# would claim GDELT holds nothing for that window.
+NOT_CACHED = object()
+
+
 def query_articles(query: str, start: dt.date | dt.datetime, end: dt.date | dt.datetime, *,
                    cache_dir: Path, refresh: bool = False,
+                   cache_only: bool = False,
                    max_records: int = config.GDELT_MAX_RECORDS
-                   ) -> list[dict[str, Any]] | None:
+                   ) -> list[dict[str, Any]] | None | object:
     """De-duplicated article records for ``query``, or **None** if the request failed.
 
     The distinction matters more than it looks. An earlier version returned ``[]``
@@ -114,6 +123,8 @@ def query_articles(query: str, start: dt.date | dt.datetime, end: dt.date | dt.d
         "format": "json", "sort": "datedesc",
     }
     cache_path = cache_dir / f"gdelt_{cache_key(config.GDELT_DOC_API, params)}.json"
+    if cache_only and not cache_path.exists():
+        return NOT_CACHED
     try:
         payload = get_json(config.GDELT_DOC_API, params, cache_path=cache_path,
                            refresh=refresh, min_interval=config.GDELT_MIN_REQUEST_INTERVAL,

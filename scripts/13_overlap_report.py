@@ -176,9 +176,11 @@ def main() -> None:
         "3. **The source→domain map is incomplete** for outlets that never print a URL; "
         f"it currently covers {level1['domain_map_coverage']:.0%} of articles. Unmapped "
         "outlets can still match on a strong headline agreement alone.",
-        "4. **LexisNexis is a convenience sample** — one Lexis query, capped at the most "
-        "recent 1,000 hits — so these shares describe this corpus, not news coverage "
-        "of tornadoes in general.",
+        "4. **The LexisNexis corpus is one query's complete export** — 22,896 unique "
+        "articles, not truncated — but it is not a census of tornado coverage: it is "
+        "bounded by which outlets LexisNexis indexes and by the query terms. These "
+        "shares therefore describe this corpus, not news coverage of tornadoes in "
+        "general.",
     ]
 
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

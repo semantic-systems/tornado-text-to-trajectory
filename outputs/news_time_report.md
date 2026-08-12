@@ -14,8 +14,9 @@
 ![volume](figures/nt_volume.png)
 
 Article volume is **not** a measure of how much tornado news existed: the corpus
-is the result of capped LexisNexis queries, so the growth after 2018 partly
-reflects how the export was assembled. The composition panel is the more useful
+is one LexisNexis query's complete export, and which outlets LexisNexis indexes
+has changed over the period, so the growth after 2018 partly reflects the index
+rather than tornado activity. The composition panel is the more useful
 one — it shows how much of the corpus is wire copy versus original reporting, and
 that mix changes materially across the period.
 
@@ -95,7 +96,8 @@ with the episode's onset and its first survey publication as boundaries.
 
 1. **Links are candidates, not facts.** Precision is unmeasured; the annotation
    phase sets it.
-2. **The corpus is a convenience sample** — capped Lexis queries, not a census.
+2. **The corpus is one LexisNexis query's complete export** — 22,896 unique
+   articles, not truncated, but not a census of tornado coverage either.
 3. **The news hours in §5 are date-resolution.** LexisNexis gives a publication
    *date* for most articles, so an article's time is taken as midnight of that
    date while the tornado's onset is a real timestamp. An article published the

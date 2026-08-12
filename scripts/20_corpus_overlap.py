@@ -112,6 +112,75 @@ def load_mediacloud() -> pd.DataFrame:
     return df
 
 
+
+def load_gdelt() -> pd.DataFrame:
+    """GDELT news links, from whatever the last stage-07 run wrote.
+
+    GDELT carries no relevance label — nothing has ever labelled it — so `primary`
+    is left empty and label-agreement figures skip this corpus.
+    """
+    tag = f"{config.WINDOW_START.isoformat()}_{config.WINDOW_END.isoformat()}"
+    path = config.PROCESSED_DIR / f"textrefs_news_{tag}.csv"
+    if not path.exists():
+        sys.exit(f"missing {path} — run scripts/07_fetch_gdelt.py --cache-only")
+    df = pd.read_csv(path, keep_default_na=False, low_memory=False)
+    df["date"] = [as_date(d) for d in
+                  pd.to_datetime(df.published_at, errors="coerce", utc=True).dt.tz_localize(None)]
+    df["domain"] = df.url.map(matching.domain_of)
+    df["primary"] = ""
+    return df
+
+
+def normalise_url(series: pd.Series) -> pd.Series:
+    """Comparable form of a URL: no scheme, no www, no query, no trailing slash."""
+    return (series.fillna("").astype(str).str.lower()
+                  .str.replace(r"^https?://(www\.)?", "", regex=True)
+                  .str.replace(r"[?#].*$", "", regex=True)
+                  .str.rstrip("/"))
+
+
+def url_overlap(left: pd.DataFrame, right: pd.DataFrame,
+                left_name: str, right_name: str,
+                left_story: str, right_story: str) -> None:
+    """Exact-URL comparison, for two corpora that both carry URLs.
+
+    Where both sides have a URL there is no reason to infer identity from titles:
+    the URL *is* the identity. This is a different and stricter method than the
+    LexisNexis pairing, which has to go through headline, date and outlet because
+    LexisNexis publishes no URL — so the two sets of numbers are not comparable
+    and the report says which method produced each.
+    """
+    left = left.assign(_u=normalise_url(left.url))
+    right = right.assign(_u=normalise_url(right.url))
+    shared = set(left._u) & set(right._u)
+
+    print("\n" + "=" * 74)
+    print(f"EXACT URL OVERLAP — {left_name} x {right_name}")
+    print("=" * 74)
+    for name, frame, story in ((left_name, left, left_story), (right_name, right, right_story)):
+        hit = frame[frame._u.isin(shared)]
+        n_story = frame[story].nunique() if story in frame.columns else frame._u.nunique()
+        hit_story = hit[story].nunique() if story in frame.columns else hit._u.nunique()
+        lo, hi = wilson_interval(hit_story, max(n_story, 1))
+        print(f"  {name:<12} {hit_story:>7,}/{n_story:<9,} = {hit_story/max(n_story,1):>5.1%} "
+              f"[{lo:.1%}, {hi:.1%}]  of its distinct stories")
+    print(f"  shared URLs  {len(shared):>7,}")
+    print(f"  union (URLs) {len(set(left._u) | set(right._u)):>7,}")
+
+    ld = set(left.domain.str.lower().str.removeprefix("www."))
+    rd = set(right.domain.str.lower().str.removeprefix("www."))
+    print(f"\n  domains: {left_name} {len(ld):,} | {right_name} {len(rd):,} | "
+          f"shared {len(ld & rd):,} | {left_name}-only {len(ld - rd):,} | "
+          f"{right_name}-only {len(rd - ld):,}")
+
+    lyr = pd.to_datetime(left.date, errors="coerce").dt.year.value_counts()
+    ryr = pd.to_datetime(right.date, errors="coerce").dt.year.value_counts()
+    cov = (pd.DataFrame({left_name: lyr, right_name: ryr})
+             .fillna(0).astype(int).sort_index())
+    print(f"\n  coverage by year (a corpus absent from a year cannot overlap in it)")
+    print("  " + cov.to_string().replace("\n", "\n  "))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -119,7 +188,28 @@ def main() -> None:
                     help="match every article, not only those labelled EVENT in "
                          "at least one corpus (slower; needed for label agreement)")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--pair", default="lexisnexis-mediacloud",
+                    choices=["lexisnexis-mediacloud", "gdelt-mediacloud",
+                             "lexisnexis-gdelt"],
+                    help="which two corpora to compare. The gdelt-mediacloud pair "
+                         "is matched on exact URLs, since both carry them; the "
+                         "LexisNexis pairs go through headline, date and outlet "
+                         "because LexisNexis publishes no URL.")
     args = ap.parse_args()
+
+    if args.pair == "gdelt-mediacloud":
+        gd, mc = load_gdelt(), load_mediacloud()
+        if args.limit:
+            gd, mc = gd.head(args.limit), mc.head(args.limit * 10)
+        print(f"GDELT      : {len(gd):,} URLs")
+        print(f"Media Cloud: {len(mc):,} rows, {mc.dup_group.nunique():,} distinct headlines")
+        gd["story"] = normalise_url(gd.url)   # GDELT has no dedup notion of its own
+        url_overlap(gd, mc, "GDELT", "MediaCloud", "story", "dup_group")
+        print("\nNo report written for this pair — GDELT carries no relevance "
+              "label, so there is no EVENT subset to count or agreement to measure.")
+        return
+    if args.pair == "lexisnexis-gdelt":
+        sys.exit("use scripts/13_overlap_report.py for LexisNexis x GDELT")
 
     lexis = load_lexis()
     mc = load_mediacloud()

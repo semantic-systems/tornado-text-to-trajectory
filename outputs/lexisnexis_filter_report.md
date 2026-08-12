@@ -41,4 +41,4 @@ The decisive question here is *aboutness*: 15.2% of articles mention a tornado a
 2. **The evidence window bounds what is knowable.** An article whose only tornado content falls outside the window cannot be labelled on it; the `window` subcommand measures the size of that effect rather than assuming it away.
 3. **Exact-duplicate detection only.** Bodies are grouped by normalised identity, the cheap variant of `LexisNexisTools::lnt_similarity`, so lightly edited wire copy is counted as distinct.
 4. **Gating is one-directional.** Once stage 11 runs gated, filtered articles are not linked and a filter false negative becomes invisible. The `crosstab` subcommand is the only check on this, and only while stage 11's ungated run is still on disk.
-5. **The corpus is a convenience sample** from capped LexisNexis queries, not a census of coverage.
+5. **The corpus is one LexisNexis query's complete export** — 22,896 unique articles, not truncated — but not a census of coverage: it is bounded by which outlets LexisNexis indexes and by the query terms.
