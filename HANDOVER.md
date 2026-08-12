@@ -31,7 +31,8 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 | 17 Media Cloud fetch | complete. 491,432 rows, 266,258 distinct headlines, 2010–2025 |
 | 18 Media Cloud labels | **complete.** 110,438 EVENT rows / 48,741 distinct stories. Self-consistency: 88.9% unanimous over 3 draws at T=1 |
 | 19 LexisNexis labels | **complete.** 15,324 EVENT articles / 12,077 distinct bodies — but see traps |
-| 20 corpus overlap | **complete.** Union of both corpora = **58,467** distinct tornado-event stories; the two overlap by only 1.4% |
+| 13, 20 pairwise overlap | **retired** to `legacy/` — superseded by stage 22, which counts all three in one unit. Their unique functions (the GDELT index probe, the label-agreement crosstab) are ported |
+| 22 corpus atlas | **complete.** All three corpora as a set. Run twice: `corpus_atlas_report.md` (collected) and `corpus_atlas_events_report.md` (**the usable subset — the one to read**) |
 | 21 full text | **pilot only.** Crawl built, verified resumable, never run |
 
 ## Traps
@@ -69,7 +70,7 @@ is the one exception, and its gold set covers 289 of 9,989 polygons.
 
 ## Open threads
 
-Four, in no fixed order. Each is self-contained.
+Five, in no fixed order. Each is self-contained.
 
 ### 1. Media Cloud full-text crawl
 
@@ -197,3 +198,39 @@ has to be recorded in the codebook version line and in the datasheet.
 - Every threshold lives in `src/tornado_dataset/config.py`, with the reasoning in
   a comment beside it. Those comments are dataset documentation, not incidental.
 - Long stages are resumable through their caches. Prefer resuming to restarting.
+
+### 5. Three-way corpus atlas — *done; read the EVENT report*
+
+`scripts/22_corpus_atlas.py` compares all three news corpora as a set rather than
+pairwise, in one unit (`normalised title + publication date`) with the matching
+method recorded per edge. It supersedes stages 13 and 20, which are left in place
+until it has run against a labelled GDELT.
+
+GDELT was labelled with stage 18 (`--source gdelt`) and the atlas has been run in
+both scopes. **`outputs/corpus_atlas_events_report.md` is the one to read** — it
+covers the tornado-event subset, which is the usable corpus; the unrestricted
+report describes what was *collected*.
+
+| | all stories | `EVENT` only |
+|---|---:|---:|
+| union across the three | 325,690 | **76,536** |
+| held by all three | 660 | 438 |
+| Media Cloud alone | 83.4% | 59.6% |
+| GDELT alone | 9.2% | 22.0% |
+| LexisNexis alone | 4.4% | 11.7% |
+
+The corpora are close to **complementary, not redundant** — and restricting to
+`EVENT` makes that clearer, not weaker: Media Cloud's dominance falls from 83% to
+60% while the other two roughly double their share.
+
+Two things to be careful with, both already flagged in the report:
+
+- **Capture–recapture is computed but is not a population estimate.** The
+  estimator assumes one shared sampling frame; these three have partly disjoint
+  frames, so a small overlap reflects how differently they were built rather than
+  how much coverage exists, and it sends the estimate toward infinity. The spread
+  between pairs is informative; the values are not.
+- **Transitive merging can over-collapse.** The run prints a hub count. Large hubs
+  usually mean a template URL or a generic headline rather than one very widely
+  syndicated story — that is how a URL-normalisation bug was found that had
+  fabricated 6,559 of 14,018 Media Cloud ↔ GDELT edges.

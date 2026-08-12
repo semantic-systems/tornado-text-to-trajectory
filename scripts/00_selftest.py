@@ -43,6 +43,7 @@ MODULES = [
     "tornado_dataset.text.labelling", "tornado_dataset.text.mediacloud",
     "tornado_dataset.text.lexisnexis_filter", "tornado_dataset.text.fulltext",
     "tornado_dataset.text.linking", "tornado_dataset.text.matching",
+    "tornado_dataset.text.corpora",
     "tornado_dataset.text.overlap",
 ]
 
@@ -78,9 +79,9 @@ scripts = sorted(p for p in (REPO / "scripts").glob("*.py")
 for path in scripts:
     check(path.name, lambda p=path: py_compile.compile(str(p), doraise=True))
 if len(scripts) < 20:
-    failures.append(f"only {len(scripts)} stage scripts found — expected 22 "
-                    "(00 plus 01-21). Some are probably untracked.")
-    print(f"  FAIL  expected 22 stage scripts, found {len(scripts)}")
+    failures.append(f"only {len(scripts)} stage scripts found — expected ~21 "
+                    "(00, 01-12, 14-19, 21-22). Some are probably untracked.")
+    print(f"  FAIL  expected ~21 stage scripts, found {len(scripts)}")
 
 # ── 2. configuration ────────────────────────────────────────────────────────
 print("\nconfiguration")
@@ -103,6 +104,7 @@ print("\nbehaviour")
 from tornado_dataset.text import fulltext, labelling, lexisnexis_filter  # noqa: E402
 from tornado_dataset.text import matching, mediacloud                    # noqa: E402
 from tornado_dataset.text import gdelt                                   # noqa: E402
+from tornado_dataset.text import corpora                                 # noqa: E402
 
 
 def evidence_windows_reach_late_mentions() -> None:
@@ -134,6 +136,34 @@ def uncached_gdelt_query_is_a_third_state() -> None:
                                dt.date(2011, 5, 23), cache_dir=empty, cache_only=True)
     assert got is gdelt.NOT_CACHED, f"expected NOT_CACHED, got {got!r}"
     assert got is not None and got != [], "the third state collapsed into another"
+
+
+def url_normalisation_keeps_the_article_id() -> None:
+    """Dropping the query merged 2,253 distinct articles into one identifier."""
+    import pandas as pd
+    u = pd.Series(["https://ktbb.com/post/?p=1379487",
+                   "https://ktbb.com/post/?p=1397923",
+                   "https://www.cnn.com/a/b.html?utm_source=x&fbclid=y",
+                   "https://cnn.com/a/b.html"])
+    n = corpora.normalise_url(u)
+    assert n.iloc[0] != n.iloc[1], "query-borne article ids must stay distinct"
+    assert n.iloc[2] == n.iloc[3], "tracking parameters must be stripped"
+
+
+def story_id_separates_recurring_headlines() -> None:
+    """The same headline in two different years is two stories, not one."""
+    import pandas as pd
+    s = corpora._story_id(pd.Series(["Storms move through the area"] * 2),
+                          pd.Series(["2012-04-14", "2019-05-20"]))
+    assert s.nunique() == 2, "a recurring headline collapsed across years"
+
+
+def components_are_transitive() -> None:
+    """A story reached through an intermediate corpus must count once."""
+    comp = corpora.components([("L::a", "M::b"), ("M::b", "G::c")])
+    assert len(set(comp.values())) == 1, "transitive merge failed"
+    two = corpora.components([("L::a", "M::b"), ("L::x", "M::y")])
+    assert len(set(two.values())) == 2, "disjoint pairs were merged"
 
 
 def unparseable_answer_is_not_a_judgement() -> None:
@@ -190,6 +220,9 @@ for name, fn in [
     ("evidence windows reach late mentions", evidence_windows_reach_late_mentions),
     ("paywall stub is a failure, not an article", paywall_stub_is_a_failure_not_an_article),
     ("uncached GDELT query is a third state", uncached_gdelt_query_is_a_third_state),
+    ("url normalisation keeps the article id", url_normalisation_keeps_the_article_id),
+    ("story id separates recurring headlines", story_id_separates_recurring_headlines),
+    ("components are transitive", components_are_transitive),
     ("unparseable answer is not a judgement", unparseable_answer_is_not_a_judgement),
     ("protect rule is enforced", protect_rule_is_enforced),
     ("dedup groups collapse syndication", dedup_groups_collapse_syndication),

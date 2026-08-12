@@ -415,14 +415,54 @@ one `query_articles` already makes between `None` and `[]`: "not attempted",
 "refused" and "genuinely empty" are three different facts, and a rebuild that
 conflated them would report partial coverage as complete.
 
-### Comparing two corpora — `scripts/20_corpus_overlap.py --pair`
+### Labelling a second headline corpus — `18_filter_media_cloud.py --source`
 
-| pair | method |
-|---|---|
-| `lexisnexis-mediacloud` (default) | headline + date + outlet identity — LexisNexis publishes no URL |
-| `gdelt-mediacloud` | **exact normalised URL** — both carry one, so identity is not inferred |
-| `lexisnexis-gdelt` | redirects to `scripts/13_overlap_report.py`, which already does it |
+GDELT is the same shape as Media Cloud — headline, URL, date, outlet, no body —
+so it needs no separate labeller, only a loader that renames its columns.
+`--source {mediacloud,gdelt}` selects the input and the output prefix; the dedup,
+cues, prompt, protect rule and label vocabulary are identical, which is the point:
+two corpora labelled by different code could not be compared.
 
-The two methods are not comparable and the output says which produced each
-figure. The URL pair writes no report: GDELT carries no relevance label, so there
-is no EVENT subset to count and no label agreement to measure.
+Each source keeps its own response cache. The prompt embeds the URL and the date,
+so the same headline in two corpora produces different prompts and different cache
+keys — a shared cache would buy nothing, and renaming the existing one would
+orphan the answers already paid for.
+
+### The corpus atlas — `scripts/22_corpus_atlas.py`
+
+Replaces the retired stages 13 and 20. Run it twice; the two scopes answer
+different questions and write to different files:
+
+```bash
+python scripts/22_corpus_atlas.py                 # what was collected
+python scripts/22_corpus_atlas.py --events-only   # what is usable  <- the relevant one
+python scripts/22_corpus_atlas.py --probe         # + ask GDELT about missed stories
+```
+
+`--events-only` restricts to stories labelled `EVENT` and writes
+`corpus_atlas_events_report.md`; the unrestricted run writes
+`corpus_atlas_report.md`. Each report states its scope in its first line.
+
+Compares all three news corpora as a set. Supersedes stages 13 and 20, which are
+retained until the atlas has run against a labelled GDELT.
+
+Three design points, each fixing something the pairwise scripts got wrong:
+
+**One unit.** The corpora natively deduplicate by body (LexisNexis), by title
+(Media Cloud) and not at all (GDELT). Comparing them natively produced a published
+figure measuring URLs against titles. The atlas imposes `normalised title +
+publication date`, the only identity all three can produce, and keeps the native
+key alongside for within-corpus statements.
+
+**Method recorded per edge.** Media Cloud and GDELT both publish URLs, so their
+identity is read directly; LexisNexis publishes none, so its edges are inferred
+from headline, date and outlet. The two are never pooled.
+
+**Union from connected components**, not from subtracting pairwise intersections
+— matching is many-to-many and transitive across three corpora.
+
+`normalise_url` keeps the identifying part of the query and strips only known
+tracking keys. Dropping the query wholesale merged `ktbb.com/post/?p=…` (454
+articles) and `tulsaworld.com/…/articlepath.aspx?id=…` (2,253) into single
+identifiers that then matched indiscriminately, fabricating 6,559 of 14,018
+Media Cloud ↔ GDELT edges.

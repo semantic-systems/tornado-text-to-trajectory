@@ -64,7 +64,20 @@ from tornado_dataset.dat.evaluate import wilson_interval        # noqa: E402
 from tornado_dataset.llm import LLMClient, iter_progress        # noqa: E402
 from tornado_dataset.text import mediacloud as mc               # noqa: E402
 
-SOURCE_CSV = config.RAW_DIR / "media_cloud" / "national_state_local_2010-2025.csv"
+MEDIACLOUD_CSV = config.RAW_DIR / "media_cloud" / "national_state_local_2010-2025.csv"
+GDELT_TAG = f"{config.WINDOW_START.isoformat()}_{config.WINDOW_END.isoformat()}"
+GDELT_CSV = config.PROCESSED_DIR / f"textrefs_news_{GDELT_TAG}.csv"
+
+# GDELT is the same *shape* as Media Cloud — a headline, a URL, a date and an
+# outlet, with no body — so it needs no separate labeller, only a loader that
+# renames its columns. Labelling it with the identical prompt is what makes a
+# three-way corpus comparison possible at all: without labels there is no EVENT
+# subset on the GDELT side to compare.
+SOURCES = {
+    "mediacloud": {"path": MEDIACLOUD_CSV, "prefix": "mediacloud"},
+    "gdelt": {"path": GDELT_CSV, "prefix": "gdelt"},
+}
+SOURCE_CSV = MEDIACLOUD_CSV      # rebound by set_paths()
 
 # Output paths are resolved from --tag, the convention the rest of the pipeline
 # already uses (`hazards_march2025.csv`, `article_status_2010-…csv`). A smoke
@@ -76,30 +89,65 @@ LABELS = CONSISTENCY = SENSITIVITY = LLM_CACHE = None
 FILTERED = EVENTS = REPORT = None
 
 
-def set_paths(tag: str | None) -> None:
-    """Bind the module's output paths for this run's tag."""
+def set_paths(tag: str | None, source: str = "mediacloud") -> None:
+    """Bind the module's input and output paths for this run's source and tag."""
     global LABELS, CONSISTENCY, SENSITIVITY, LLM_CACHE, FILTERED, EVENTS, REPORT
+    global SOURCE_CSV
+    spec = SOURCES[source]
+    SOURCE_CSV = spec["path"]
+    stem = spec["prefix"]
     suffix = f"_{tag}" if tag else ""
-    LABELS = config.INTERIM_DIR / f"mediacloud_labels{suffix}.csv"
-    CONSISTENCY = config.INTERIM_DIR / f"mediacloud_consistency{suffix}.csv"
-    SENSITIVITY = config.INTERIM_DIR / f"mediacloud_sensitivity{suffix}.csv"
-    # The response cache is keyed by (model, prompt, temperature, sample) and a
-    # tagged run asks the same questions, so it shares the untagged cache and
-    # inherits every answer already paid for.
-    LLM_CACHE = config.INTERIM_DIR / "mediacloud_llm_cache.jsonl"
-    FILTERED = config.PROCESSED_DIR / f"mediacloud_filtered{suffix}.csv.gz"
-    EVENTS = config.PROCESSED_DIR / f"mediacloud_events{suffix}.csv.gz"
-    REPORT = config.OUTPUT_DIR / f"mediacloud_filter_report{suffix}.md"
+    LABELS = config.INTERIM_DIR / f"{stem}_labels{suffix}.csv"
+    CONSISTENCY = config.INTERIM_DIR / f"{stem}_consistency{suffix}.csv"
+    SENSITIVITY = config.INTERIM_DIR / f"{stem}_sensitivity{suffix}.csv"
+    # One cache per source, not a shared one. The prompt embeds the URL and the
+    # date, so the same headline in two corpora produces different prompts and
+    # therefore different cache keys — a shared file would buy nothing, while
+    # renaming the existing one would orphan the 346,136 answers already paid
+    # for on the Media Cloud side. Tags share it, because a tagged run asks the
+    # identical questions.
+    LLM_CACHE = config.INTERIM_DIR / f"{stem}_llm_cache.jsonl"
+    FILTERED = config.PROCESSED_DIR / f"{stem}_filtered{suffix}.csv.gz"
+    EVENTS = config.PROCESSED_DIR / f"{stem}_events{suffix}.csv.gz"
+    REPORT = config.OUTPUT_DIR / f"{stem}_filter_report{suffix}.md"
 
 UNCERTAINTY_TEMPERATURE = 1.0
 SENSITIVITY_TEMPERATURES = (0.0, 0.3, 0.7, 1.0)
 
 
 # ── shared plumbing ─────────────────────────────────────────────────────────
-def load_corpus(limit: int | None = None, literal_protect: bool = False) -> pd.DataFrame:
+def load_corpus(limit: int | None = None, literal_protect: bool = False,
+                source: str = "mediacloud") -> pd.DataFrame:
+    """Read the chosen source and normalise it to the Media Cloud column names.
+
+    GDELT publishes `title`, `url`, `published_at` and `source_name`; Media Cloud
+    publishes `title`, `url`, `publish_date` and `media_name`. Renaming is the
+    whole of the difference — the dedup, the cues, the prompt and the protect
+    rule all apply unchanged, which is the point: two corpora labelled by
+    different code could not be compared.
+    """
     if not SOURCE_CSV.exists():
-        sys.exit(f"missing input: {SOURCE_CSV}\nRun scripts/17_fetch_media_cloud.py first.")
+        hint = ("Run scripts/17_fetch_media_cloud.py first."
+                if source == "mediacloud"
+                else "Run scripts/07_fetch_gdelt.py --cache-only first.")
+        sys.exit(f"missing input: {SOURCE_CSV}\n{hint}")
     df = pd.read_csv(SOURCE_CSV, dtype=str, keep_default_na=False)
+    if source == "gdelt":
+        df = df.rename(columns={"published_at": "publish_date",
+                                "source_name": "media_name",
+                                "textref_uid": "id"})
+        # GDELT timestamps are full datetimes; the pipeline keys on the date.
+        df["publish_date"] = df["publish_date"].str.slice(0, 10)
+        # GDELT names languages ("English"), Media Cloud uses ISO codes ("en").
+        # Left alone, the non-English count reports 100% of the corpus.
+        if "language" in df.columns:
+            df["language"] = (df["language"].str.strip().str.lower()
+                              .map({"english": "en", "spanish": "es", "german": "de",
+                                    "french": "fr", "italian": "it", "dutch": "nl",
+                                    "portuguese": "pt"})
+                              .fillna(df["language"].str.strip().str.lower().str[:2]))
+        else:
+            df["language"] = "en"
     if limit:
         df = df.head(limit).copy()
     return mc.add_rule_cues(mc.add_dedup_groups(df), literal_protect=literal_protect)
@@ -156,7 +204,7 @@ def require(path: Path, what: str) -> pd.DataFrame:
 
 # ── profile ─────────────────────────────────────────────────────────────────
 def cmd_profile(args) -> None:
-    df = load_corpus(args.limit, args.literal_protect)
+    df = load_corpus(args.limit, args.literal_protect, args.source)
     reps = df[df.is_representative]
     print(f"\nrows {len(df):,} | distinct headlines {len(reps):,} "
           f"({1 - len(reps) / len(df):.1%} redundant)")
@@ -182,7 +230,7 @@ def cmd_profile(args) -> None:
 
 # ── label ───────────────────────────────────────────────────────────────────
 def cmd_label(args) -> pd.DataFrame:
-    df = load_corpus(args.limit, args.literal_protect)
+    df = load_corpus(args.limit, args.literal_protect, args.source)
     reps = df[df.is_representative].copy()
     print(f"\nlabelling {len(reps):,} distinct headlines at temperature 0"
           f"{' (with provenance note)' if args.provenance else ''}")
@@ -289,7 +337,7 @@ def cmd_sensitivity(args) -> None:
 # ── apply ───────────────────────────────────────────────────────────────────
 def cmd_apply(args) -> None:
     labels = require(LABELS, "label")
-    df = load_corpus(args.limit, args.literal_protect)
+    df = load_corpus(args.limit, args.literal_protect, args.source)
 
     # Join on the normalised headline, not on dup_group. Group codes come from
     # factorize order, so they are only meaningful within one read of the corpus
@@ -344,7 +392,7 @@ def write_report(out: pd.DataFrame, labels: pd.DataFrame, args) -> None:
     n = len(out)
     ev = out[out.is_event]
     lines = [
-        "# Media Cloud filter — Stage 18", "",
+        f"# {args.source} filter — Stage 18", "",
         f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')} "
         f"from `{SOURCE_CSV.relative_to(config.REPO_ROOT)}`.", "",
         "## What went in", "",
@@ -419,6 +467,10 @@ def main() -> None:
                         help="apply the protect list verbatim, without the "
                              "twister/funnel-cloud/EF-n extension")
         sp.add_argument("--random-seed", type=int, default=20260807)
+        sp.add_argument("--source", default="mediacloud", choices=sorted(SOURCES),
+                        help="which headline corpus to label. Both are headline+URL "
+                             "only, so they share the prompt, the cache and the "
+                             "label vocabulary; only the output prefix differs.")
         sp.add_argument("--tag", default=None,
                         help="suffix for this run's output files; use one for "
                              "smoke tests so they cannot overwrite a real run")
@@ -456,7 +508,7 @@ def main() -> None:
         sp.set_defaults(func=fn)
 
     args = p.parse_args()
-    set_paths(args.tag)
+    set_paths(args.tag, args.source)
     if getattr(args, "api_base", None) is None:
         from tornado_dataset.llm import DEFAULT_API_BASE
         args.api_base = DEFAULT_API_BASE
