@@ -131,6 +131,12 @@ public APIs. Keys live in the environment, never in the source:
 |---|---|---|
 | `MEDIACLOUD_API_KEY` | `scripts/17_fetch_media_cloud.py` | <https://search.mediacloud.org/> |
 | `TORNADO_LLM_BASE` | stages 18–19 (optional) | your own vLLM server; defaults to `http://127.0.0.1:8000/v1` |
+| `TORNADO_DATA_DIR` | every stage (optional) | local path or mount point for the 4.7 GB `data/`; see [HANDOVER.md](HANDOVER.md) |
+| `TORNADO_OUTPUT_DIR` | every stage (optional) | defaults to `outputs/` in the working tree |
+
+`data/` is not in git. The canonical copy is on the group server at
+`192.168.106.17:/data/share/geoai/tornado-text-to-trajectory/data`; copy or mount
+it and point `TORNADO_DATA_DIR` at the local path.
 
 Stages 18 and 19 label every article with a locally hosted LLM. If it runs on
 another machine, forward the port and the default base URL applies unchanged:

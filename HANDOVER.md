@@ -13,7 +13,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 
 | | size | in git                                                                                         |
 |---|---:|------------------------------------------------------------------------------------------------|
-| `data/` | 4.7 GB | no — they are stored separately on tohuus at /data/share/geoai/tornado-text-to-trajectory/data |
+| `data/` | 4.7 GB | no — on the group server, see below |
 | `outputs/` figures | ~300 MB | no                                                                                             |
 | `outputs/*.md` (12 reports) | small | **yes**                                                                                        |
 
@@ -198,39 +198,3 @@ has to be recorded in the codebook version line and in the datasheet.
 - Every threshold lives in `src/tornado_dataset/config.py`, with the reasoning in
   a comment beside it. Those comments are dataset documentation, not incidental.
 - Long stages are resumable through their caches. Prefer resuming to restarting.
-
-### 5. Three-way corpus atlas — *done; read the EVENT report*
-
-`scripts/22_corpus_atlas.py` compares all three news corpora as a set rather than
-pairwise, in one unit (`normalised title + publication date`) with the matching
-method recorded per edge. It supersedes stages 13 and 20, which are left in place
-until it has run against a labelled GDELT.
-
-GDELT was labelled with stage 18 (`--source gdelt`) and the atlas has been run in
-both scopes. **`outputs/corpus_atlas_events_report.md` is the one to read** — it
-covers the tornado-event subset, which is the usable corpus; the unrestricted
-report describes what was *collected*.
-
-| | all stories | `EVENT` only |
-|---|---:|---:|
-| union across the three | 325,690 | **76,536** |
-| held by all three | 660 | 438 |
-| Media Cloud alone | 83.4% | 59.6% |
-| GDELT alone | 9.2% | 22.0% |
-| LexisNexis alone | 4.4% | 11.7% |
-
-The corpora are close to **complementary, not redundant** — and restricting to
-`EVENT` makes that clearer, not weaker: Media Cloud's dominance falls from 83% to
-60% while the other two roughly double their share.
-
-Two things to be careful with, both already flagged in the report:
-
-- **Capture–recapture is computed but is not a population estimate.** The
-  estimator assumes one shared sampling frame; these three have partly disjoint
-  frames, so a small overlap reflects how differently they were built rather than
-  how much coverage exists, and it sends the estimate toward infinity. The spread
-  between pairs is informative; the values are not.
-- **Transitive merging can over-collapse.** The run prints a hub count. Large hubs
-  usually mean a template URL or a generic headline rather than one very widely
-  syndicated story — that is how a URL-normalisation bug was found that had
-  fabricated 6,559 of 14,018 Media Cloud ↔ GDELT edges.

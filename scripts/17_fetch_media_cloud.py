@@ -6,6 +6,10 @@ import mediacloud.api
 from pathlib import Path
 from tqdm import tqdm
 
+import _bootstrap  # noqa: F401
+
+from tornado_dataset import config
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
@@ -26,13 +30,16 @@ if not api_key:
 mc_search = mediacloud.api.SearchApi(api_key)
 
 fieldnames = ['id', 'publish_date', 'title', 'url', 'language', 'media_name', 'media_url', 'indexed_date']
-output_dir = Path(__file__).parent.parent / "data" / "raw" / "media_cloud"
+# Through config, so TORNADO_DATA_DIR is honoured like everywhere else.
+output_dir = config.RAW_DIR / "media_cloud"
 outfile = output_dir / "national_state_local_2010-2025.csv"
 
 pagination_token = None
 more_stories = True
 total = 0
 page_num = 0
+
+output_dir.mkdir(parents=True, exist_ok=True)
 
 with open(outfile, 'w', newline='') as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')

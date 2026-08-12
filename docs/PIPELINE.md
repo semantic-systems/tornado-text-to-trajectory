@@ -1,5 +1,14 @@
 # Pipeline detail
 
+## Where the data lives
+
+`data/` is 4.7 GB and not in git; the canonical copy is at
+`192.168.106.17:/data/share/geoai/tornado-text-to-trajectory/data`. Point the
+pipeline at a local copy or mount with `TORNADO_DATA_DIR` — every stage resolves
+through `config.DATA_DIR`, so nothing else needs changing. `config.require_data()`
+turns a missing dataset into a message naming the server rather than a
+missing-file traceback.
+
 Per-stage documentation for the dataset pipeline. Orientation, setup and the
 stage map live in [the README](../README.md); current state and open threads
 in [HANDOVER.md](../HANDOVER.md); the schema in

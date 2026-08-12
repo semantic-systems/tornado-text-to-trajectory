@@ -8,16 +8,69 @@ of the dataset documentation, not incidental constants.
 
 from __future__ import annotations
 
+import os
 from datetime import date
 from pathlib import Path
 
 # ── paths ────────────────────────────────────────────────────────────────────
+# `data/` is 4.7 GB and is not in git. It lives on the group server at
+#   192.168.106.17:/data/share/geoai/tornado-text-to-trajectory/data
+# so a colleague either copies it or mounts it, and then points the pipeline at
+# it with TORNADO_DATA_DIR rather than moving it into the working tree:
+#
+#   export TORNADO_DATA_DIR=/mnt/geoai/tornado-text-to-trajectory/data
+#
+# The value must be a path this machine can open — a local directory or a mount
+# point. It is not an SSH URL: nothing here speaks SSH, and a `host:/path` string
+# would be silently created as a directory named "host:" in the current
+# directory, which is exactly the kind of failure that looks like an empty
+# dataset rather than a misconfiguration.
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-DATA_DIR = REPO_ROOT / "data"
+
+
+def _dir_from_env(variable: str, default: Path) -> Path:
+    raw = os.environ.get(variable)
+    if not raw:
+        return default
+    if ":" in raw.split("/")[0] and not raw[1:3] == ":\\":   # host:/path, not C:\
+        raise SystemExit(
+            f"{variable}={raw!r} looks like a remote location. This project reads "
+            "a local filesystem path; mount the share first (for example with "
+            "sshfs) and point the variable at the mount point."
+        )
+    return Path(raw).expanduser().resolve()
+
+
+DATA_DIR = _dir_from_env("TORNADO_DATA_DIR", REPO_ROOT / "data")
 RAW_DIR = DATA_DIR / "raw"            # verbatim API responses, never edited
 INTERIM_DIR = DATA_DIR / "interim"    # intermediate tables (links, candidates)
 PROCESSED_DIR = DATA_DIR / "processed"  # dataset-grade outputs
-OUTPUT_DIR = REPO_ROOT / "outputs"    # reports and figures
+# Reports are small and tracked in git, so they default to the working tree even
+# when the data lives elsewhere; override only if you want them beside the data.
+OUTPUT_DIR = _dir_from_env("TORNADO_OUTPUT_DIR", REPO_ROOT / "outputs")
+
+# Where the canonical copy lives, for the error messages that need to say so.
+DATA_SHARE = "192.168.106.17:/data/share/geoai/tornado-text-to-trajectory/data"
+
+
+def require_data(*paths: Path) -> None:
+    """Fail with the location of the canonical copy, not with a bare ENOENT.
+
+    Every stage reads from `data/`, which is not in git. A colleague who has not
+    obtained it should be told where it is and how to point at it, rather than
+    left to interpret a missing-file traceback.
+    """
+    missing = [p for p in (paths or (DATA_DIR,)) if not p.exists()]
+    if not missing:
+        return
+    where = "\n".join(f"  {p}" for p in missing)
+    raise SystemExit(
+        f"missing input:\n{where}\n\n"
+        f"data/ is {('set by TORNADO_DATA_DIR to ' + str(DATA_DIR)) if 'TORNADO_DATA_DIR' in os.environ else 'expected at ' + str(DATA_DIR)}.\n"
+        f"The canonical copy lives on the group server at\n  {DATA_SHARE}\n"
+        "Copy or mount it, then point the pipeline at the local path:\n"
+        "  export TORNADO_DATA_DIR=/path/to/tornado-text-to-trajectory/data"
+    )
 
 # ── temporal scope ───────────────────────────────────────────────────────────
 # Geometry window. Closed on both ends and fully in the past, so a rerun of the

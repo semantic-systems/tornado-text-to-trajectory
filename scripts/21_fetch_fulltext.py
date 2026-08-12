@@ -72,6 +72,7 @@ YEAR_BANDS = [(2010, 2015, "2010-2015"), (2016, 2020, "2016-2020"),
 
 
 def load_events() -> pd.DataFrame:
+    config.require_data(config.PROCESSED_DIR)
     if not MC_LABELS.exists():
         sys.exit(f"missing {MC_LABELS} — run scripts/18_filter_media_cloud.py apply")
     df = pd.read_csv(MC_LABELS, keep_default_na=False, low_memory=False)

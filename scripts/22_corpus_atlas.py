@@ -119,6 +119,7 @@ def main() -> None:
     ap.add_argument("--probe-size", type=int, default=60)
     args = ap.parse_args()
     set_paths(args.events_only)
+    config.require_data(config.PROCESSED_DIR)
 
     scope = ("stories labelled EVENT" if args.events_only
              else "all retrieved stories, whatever their label")
@@ -136,7 +137,7 @@ def main() -> None:
             print(f"\n  note: {len(big):,} story pairs where one story matches >5 on the "
                   f"other side (max {hubs.max()}). Components merge transitively, so a "
                   "hub\n        collapses everything it touches into one story. Inspect "
-                  f"data/interim/corpus_atlas_edges.csv if the union looks low.")
+                  f"{EDGES_CSV} if the union looks low.")
 
     member = corpora.membership(frames, edges)
     names = list(frames)
