@@ -30,6 +30,13 @@ def hazard_year(hazard: dict) -> int | None:
     return int(str(day)[:4]) if day else None
 
 
+def _state_name(code: str | None) -> str:
+    """Two-letter code to the full state name GNIS uses."""
+    from tornado_dataset.text.linking import STATE_NAMES
+
+    return STATE_NAMES.get(str(code or "").upper(), "")
+
+
 def main() -> None:
     default_tag = f"{config.WINDOW_START.isoformat()}_{config.WINDOW_END.isoformat()}"
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -56,12 +63,27 @@ def main() -> None:
         geom = to_shapely(feature.get("geometry"))
         year = hazard_year(props)
 
-        county_hits, place_hits = [], []
+        county_hits, place_hits, match_hits = [], [], []
         if geom is not None:
             proj = to_equal_area(geom)
             county_hits = counties.lookup(proj, year)
+            # `places` feeds the GDELT query strings and must stay byte-identical
+            # to what the running sweep used, or every cache key changes.
             place_hits = places.nearby(proj, args.place_radius_m,
                                        limit=config.MAX_PLACES_PER_HAZARD)
+            # `places_matching` is the wide set used to recognise an event in an
+            # article: everything nearby, plus prominent cities further out, plus
+            # each county's largest town.
+            match_hits = places.nearby_for_matching(proj)
+            if config.INCLUDE_COUNTY_LARGEST_PLACE:
+                seen = {p["name"] for p in match_hits}
+                for county in county_hits:
+                    largest = places.county_largest(county.get("county") or "",
+                                                    _state_name(county.get("state")))
+                    if largest and largest["name"] not in seen:
+                        match_hits.append({**largest, "distance_m": None,
+                                           "reason": "county_largest"})
+                        seen.add(largest["name"])
 
         spatial_wfos = sorted({c["wfo"] for c in county_hits if c.get("wfo")})
         dat_wfos = [w for w in str(props.get("wfo_all") or "").split(";") if w]
@@ -93,6 +115,12 @@ def main() -> None:
             "nearest_place": place_hits[0]["name"] if place_hits else None,
             "nearest_place_m": place_hits[0]["distance_m"] if place_hits else None,
             "n_places": len(place_hits),
+            "places_matching": ";".join(p["name"] for p in match_hits),
+            "n_places_matching": len(match_hits),
+            "largest_place": max(match_hits, key=lambda p: p.get("population", 0))["name"]
+                             if match_hits else None,
+            "largest_place_population": max(
+                (p.get("population", 0) for p in match_hits), default=0),
         })
         if i % 500 == 0:
             print(f"  enriched {i}/{len(features)}", end="\r", flush=True)
@@ -111,7 +139,13 @@ def main() -> None:
         "wfo_agreement": float(checkable.wfo_agrees.mean()) if len(checkable) else None,
         "hazards_with_places": int((table.n_places > 0).sum()),
         "hazards_with_counties": int((table.n_counties > 0).sum()),
+        "mean_places_query": round(float(table.n_places.mean()), 1),
+        "mean_places_matching": round(float(table.n_places_matching.mean()), 1),
+        "hazards_with_a_town_over_20k": int((table.largest_place_population >= 20_000).sum()),
         "place_radius_m": args.place_radius_m,
+        "place_match_radius_m": config.PLACE_MATCH_RADIUS_M,
+        "place_prominent_radius_m": config.PLACE_PROMINENT_RADIUS_M,
+        "place_prominent_min_population": config.PLACE_PROMINENT_MIN_POPULATION,
         "ugc_snapshot_years": sorted(years),
     }
     write_manifest(config.PROCESSED_DIR / f"manifest_geography_{args.tag}.json",
@@ -123,6 +157,11 @@ def main() -> None:
         print(f"  DAT and spatial join agree on {counts['wfo_agreement']:.1%} "
               f"of the {len(checkable)} hazards where both are available")
     print(f"  place names for {counts['hazards_with_places']}/{len(table)} hazards")
+    print(f"  query set: {counts['mean_places_query']} names/hazard  |  "
+          f"matching set: {counts['mean_places_matching']} names/hazard")
+    print(f"  hazards with a town over 20k people nearby: "
+          f"{counts['hazards_with_a_town_over_20k']} "
+          f"({counts['hazards_with_a_town_over_20k'] / max(1, len(table)):.1%})")
     print(f"wrote {out_path.name}")
 
 

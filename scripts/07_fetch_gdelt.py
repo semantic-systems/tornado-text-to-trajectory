@@ -123,7 +123,7 @@ def main() -> None:
             continue
 
         day = dt.date.fromisoformat(episode.convective_day)
-        articles, capped = [], False
+        articles, capped, failed_slices = [], False, 0
         for offset_start, offset_end in slices:
             if offset_start >= offset_end:
                 continue
@@ -131,8 +131,15 @@ def main() -> None:
                 query, day + dt.timedelta(days=offset_start),
                 day + dt.timedelta(days=offset_end),
                 cache_dir=cache_dir, refresh=args.refresh)
+            if batch is None:          # the request failed; not an empty window
+                failed_slices += 1
+                stats["failed_queries"] += 1
+                continue
             capped = capped or len(batch) >= config.GDELT_MAX_RECORDS
             articles.extend(batch)
+        if failed_slices:
+            stats["episodes_with_a_failed_slice"] += 1
+            stats["episodes_fully_failed"] += int(failed_slices == len(slices))
         seen_urls = set()
         articles = [a for a in articles
                     if a.get("url") and not (a["url"] in seen_urls or seen_urls.add(a["url"]))]
@@ -178,6 +185,9 @@ def main() -> None:
                 "link_confidence": 0.5,
                 "query": query,
                 "hit_record_cap": capped,
+                # An episode whose slices were rate-limited away is *undersampled*,
+                # not quiet; anything counting articles per episode must exclude it.
+                "failed_slices": failed_slices,
             })
 
         if i % 10 == 0 or i == len(eligible):
@@ -200,6 +210,9 @@ def main() -> None:
         "episodes_queried": stats["episodes_queried"],
         "episodes_without_toponyms": stats["episodes_without_toponyms"],
         "episodes_hit_record_cap": stats["episodes_hit_record_cap"],
+        "failed_queries": stats["failed_queries"],
+        "episodes_with_a_failed_slice": stats["episodes_with_a_failed_slice"],
+        "episodes_fully_failed": stats["episodes_fully_failed"],
         "window_slices_days": slices,
         "articles_returned": stats["articles_returned"],
         "articles_relevant": stats["articles_relevant"],
@@ -217,6 +230,12 @@ def main() -> None:
 
     print(f"{len(refs)} unique articles across {counts['episodes_with_articles']} episodes")
     print(f"  roles: {counts['by_text_role']}")
+    if stats["failed_queries"]:
+        total_queries = stats["episodes_queried"] * len(slices)
+        print(f"  ⚠ {stats['failed_queries']}/{total_queries} queries FAILED "
+              f"({stats['failed_queries'] / max(1, total_queries):.0%}, mostly rate limiting); "
+              f"{stats['episodes_fully_failed']} episodes got nothing at all.")
+        print(f"    Re-run this script to retry only those — cached responses are skipped.")
     if args.wayback:
         print(f"  wayback: {stats['wayback_found']}/{stats['wayback_attempted']} archived")
     print(f"wrote {refs_path.name}, {links_path.name}")
