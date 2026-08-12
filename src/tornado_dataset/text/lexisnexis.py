@@ -30,6 +30,7 @@ Run as a script, it parses ``data/lexis_nexis_tornado_news`` and writes
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -309,6 +310,26 @@ def parse_directory(directory: str | Path, recursive: bool = True,
         if progress and (i % 100 == 0 or i == len(files)):
             print(f"  parsed {i}/{len(files)} files", file=sys.stderr)
     return articles
+
+
+def textref_uid(row: dict) -> str:
+    """Stable identifier for one LexisNexis article.
+
+    File name and headline are **not** enough: LexisNexis exports every episode of
+    a programme under one title, so 3,402 of the downloaded files share a name and
+    keying on those alone merged 5,774 distinct articles. The publication date and
+    a body hash pin it down. Two byte-identical copies of the same article — 14% of
+    the export, from overlapping download batches — deliberately share an id.
+
+    Every consumer must import this rather than recompute it; the linker, the
+    overlap study and the viewer all have to agree on which article is which.
+    """
+    from ..ids import uid
+
+    body = str(row.get("body") or "")
+    return uid("textref", "lexisnexis", row.get("file", ""), row.get("headline", ""),
+               str(row.get("pub_date") or ""),
+               hashlib.sha1(body.encode("utf-8")).hexdigest()[:12])
 
 
 def add_duplicate_flags(df: pd.DataFrame) -> pd.DataFrame:

@@ -25,6 +25,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import zipfile
 from pathlib import Path
 from typing import Any, Iterable
@@ -40,11 +41,116 @@ IEM_UGC_URL = "https://mesonet.agron.iastate.edu/api/1/nws/ugcs.geojson"
 GNIS_URL = ("https://prd-tnm.s3.amazonaws.com/StagedProducts/GeographicNames/"
             "DomesticNames/DomesticNames_National_Text.zip")
 GNIS_ARCHIVE_MEMBER = "Text/DomesticNames_National.txt"
+# Census sub-county population estimates: place name, state and population. GNIS
+# carries no population at all, and without one there is no way to tell the town
+# a newspaper names from the hamlet next to it.
+CENSUS_POPULATION_URL = ("https://www2.census.gov/programs-surveys/popest/datasets/"
+                         "2020-2024/cities/totals/sub-est2024.csv")
+CENSUS_POPULATION_FIELD = "POPESTIMATE2024"
+
+# Legal-status suffixes Census appends to a place name ("Tuscaloosa city").
+_LEGAL_SUFFIXES = (
+    " city", " town", " village", " borough", " township", " municipality",
+    " cdp", " comunidad", " zona urbana", " urbana", " plantation", " gore",
+    " grant", " location", " reservation", " charter township", " unified government",
+    " metro government", " consolidated government", " metropolitan government",
+)
+# Abbreviations that differ between the gazetteer and how anyone writes them.
+# GNIS stores "Saint Louis"; every newspaper writes "St. Louis"; Census writes
+# "St. Louis city". One canonical form joins all three, and both surface forms
+# are indexed so an article matches whichever it uses.
+_ALIAS_EXPANSIONS = {"saint": "st", "fort": "ft", "mount": "mt"}
 
 # GNIS classes worth querying news for. "Populated Place" is the settlement
 # class; "Civil" (townships, boroughs) is deliberately excluded — those names
 # rarely appear in reporting and add noise to a place-name query.
 GNIS_CLASSES = ("Populated Place",)
+
+
+# ── place-name normalisation and aliases ─────────────────────────────────────
+_WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+def canonical_place_key(name: str) -> str:
+    """One key per real place, whichever way the name is written or suffixed.
+
+    Strips parenthetical qualifiers and Census legal suffixes, then folds the
+    Saint/St., Fort/Ft. and Mount/Mt. variants together, so GNIS's "Saint Louis",
+    Census's "St. Louis city" and a newspaper's "St. Louis" all reduce to the same
+    thing.
+    """
+    text = re.sub(r"\s*\([^)]*\)", " ", str(name or "")).lower().strip()
+    for suffix in _LEGAL_SUFFIXES:
+        if text.endswith(suffix):
+            text = text[: -len(suffix)]
+            break
+    words = _WORD_RE.findall(text)
+    return " ".join(_ALIAS_EXPANSIONS.get(w, w) for w in words)
+
+
+def alias_forms(name: str) -> set[str]:
+    """Surface forms an article might use for this place, lowercased.
+
+    Both the expanded and abbreviated spellings are produced, because which one
+    appears is a house-style decision we cannot predict per outlet.
+    """
+    cleaned = re.sub(r"\s*\([^)]*\)", " ", str(name or "")).lower()
+    words = _WORD_RE.findall(cleaned)
+    if not words:
+        return set()
+    forms = {" ".join(words)}
+    swaps = {**_ALIAS_EXPANSIONS, **{v: k for k, v in _ALIAS_EXPANSIONS.items()}}
+    for i, word in enumerate(words):
+        if word in swaps:
+            variant = list(words)
+            variant[i] = swaps[word]
+            forms.add(" ".join(variant))
+    return forms
+
+
+# ── place population (prominence) ────────────────────────────────────────────
+def population_path() -> Path:
+    return config.RAW_DIR / "gazetteer" / "census_sub_est_population.csv"
+
+
+def download_place_population(*, refresh: bool = False) -> Path:
+    """Census sub-county population estimates, cached once (~7 MB)."""
+    import requests
+
+    path = population_path()
+    if path.exists() and not refresh:
+        return path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    response = requests.get(CENSUS_POPULATION_URL, timeout=600)
+    response.raise_for_status()
+    path.write_bytes(response.content)
+    path.with_suffix(".meta.json").write_text(
+        json.dumps({"url": CENSUS_POPULATION_URL, "field": CENSUS_POPULATION_FIELD,
+                    "retrieved_at": http_module.utcnow_iso()}, indent=2), encoding="utf-8")
+    return path
+
+
+def load_place_population() -> dict[tuple[str, str], int]:
+    """``(canonical name, state name) -> population`` for incorporated places."""
+    path = download_place_population()
+    populations: dict[tuple[str, str], int] = {}
+    # Census publishes this one in Latin-1, not UTF-8: Spanish place names
+    # ("Peñasco") are what give it away.
+    with path.open(encoding="latin-1", newline="") as handle:
+        for row in csv.DictReader(handle):
+            # 162 = incorporated place. State and county rows would otherwise
+            # attach a state's population to a same-named town.
+            if row.get("SUMLEV") != "162":
+                continue
+            try:
+                population = int(row.get(CENSUS_POPULATION_FIELD) or 0)
+            except ValueError:
+                continue
+            key = (canonical_place_key(row.get("NAME", "")),
+                   str(row.get("STNAME", "")).strip().lower())
+            if population > populations.get(key, 0):
+                populations[key] = population
+    return populations
 
 
 # ── NWS county / WFO polygons ────────────────────────────────────────────────
@@ -121,6 +227,47 @@ class CountyIndex:
         return hits
 
 
+def state_outlines(year: int, *, simplify_deg: float = 0.02,
+                   refresh: bool = False) -> dict[str, Any]:
+    """State boundaries, dissolved from the cached county polygons.
+
+    Built from the same NWS county layer the WFO assignment uses, so the basemap
+    and the analysis agree by construction and no extra download is needed. The
+    result is cached because dissolving ~3,300 polygons is slow, and simplified
+    because a map drawn at screen scale cannot show the detail anyway.
+    """
+    from shapely.geometry import mapping
+    from shapely.ops import unary_union
+
+    cache_path = config.INTERIM_DIR / f"state_outlines_{year}_{simplify_deg}.geojson"
+    if cache_path.exists() and not refresh:
+        return json.loads(cache_path.read_text(encoding="utf-8"))
+
+    by_state: dict[str, list[Any]] = {}
+    for county in load_counties(year):
+        if county["state"]:
+            by_state.setdefault(county["state"], []).append(county["geom"])
+
+    # The UGC polygons are generalised for web display, so neighbouring counties
+    # do not share exact edges and a plain union leaves every internal boundary
+    # behind as a sliver. Dilating before the union and eroding afterwards closes
+    # those gaps, which is what makes this a state outline rather than 3,300
+    # county outlines.
+    snap = simplify_deg / 2
+    features = []
+    for state, geoms in sorted(by_state.items()):
+        merged = unary_union([g.buffer(snap) for g in geoms]).buffer(-snap)
+        merged = merged.simplify(simplify_deg, preserve_topology=True)
+        if merged.is_empty:
+            continue
+        features.append({"type": "Feature", "properties": {"state": state},
+                         "geometry": mapping(merged)})
+    payload = {"type": "FeatureCollection", "features": features}
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(payload), encoding="utf-8")
+    return payload
+
+
 # ── GNIS populated places ────────────────────────────────────────────────────
 def gnis_archive_path() -> Path:
     return config.RAW_DIR / "gazetteer" / "DomesticNames_National_Text.zip"
@@ -145,9 +292,16 @@ def download_gnis(*, refresh: bool = False) -> Path:
     return path
 
 
-def load_places(classes: tuple[str, ...] = GNIS_CLASSES) -> list[dict[str, Any]]:
-    """Populated places as ``{name, state, county, lat, lon}`` records."""
+def load_places(classes: tuple[str, ...] = GNIS_CLASSES,
+                with_population: bool = True) -> list[dict[str, Any]]:
+    """Populated places as ``{name, state, county, lat, lon, population}`` records.
+
+    Population comes from the Census join and is 0 where the place is
+    unincorporated — which is the normal case for the hamlets that dominate GNIS
+    and exactly the signal needed to rank them below a real town.
+    """
     archive = download_gnis()
+    populations = load_place_population() if with_population else {}
     places = []
     with zipfile.ZipFile(archive) as bundle, bundle.open(GNIS_ARCHIVE_MEMBER) as handle:
         reader = csv.DictReader(io.TextIOWrapper(handle, encoding="utf-8-sig"),
@@ -162,8 +316,14 @@ def load_places(classes: tuple[str, ...] = GNIS_CLASSES) -> list[dict[str, Any]]
                 continue
             if not lat and not lon:
                 continue
-            places.append({"name": row["feature_name"], "state": row["state_name"],
-                           "county": row["county_name"], "lat": lat, "lon": lon})
+            name = row["feature_name"]
+            state = row["state_name"]
+            places.append({
+                "name": name, "state": state, "county": row["county_name"],
+                "lat": lat, "lon": lon,
+                "population": populations.get(
+                    (canonical_place_key(name), str(state).strip().lower()), 0),
+            })
     return places
 
 
@@ -179,7 +339,12 @@ class PlaceIndex:
         self.tree = STRtree(self.points)
 
     def nearby(self, geom_proj, radius_m: float, limit: int = 8) -> list[dict[str, Any]]:
-        """Places within ``radius_m`` of a projected geometry, nearest first."""
+        """Places within ``radius_m`` of a projected geometry, nearest first.
+
+        This is what builds the GDELT query terms. Its behaviour is deliberately
+        frozen: the query strings are cache keys for a multi-day sweep, so
+        changing the selection here would invalidate every cached response.
+        """
         hits = []
         for index in self.tree.query(geom_proj.buffer(radius_m)):
             distance = geom_proj.distance(self.points[index])
@@ -187,3 +352,48 @@ class PlaceIndex:
                 hits.append({**self.places[index], "distance_m": round(distance, 1)})
         hits.sort(key=lambda p: p["distance_m"])
         return hits[:limit]
+
+    def nearby_for_matching(
+        self, geom_proj, *,
+        radius_m: float = config.PLACE_MATCH_RADIUS_M,
+        prominent_radius_m: float = config.PLACE_PROMINENT_RADIUS_M,
+        prominent_min_population: int = config.PLACE_PROMINENT_MIN_POPULATION,
+        limit: int = config.MAX_MATCH_PLACES_PER_HAZARD,
+    ) -> list[dict[str, Any]]:
+        """Every name an article might plausibly use for this event.
+
+        Three sources, because coverage names places for three different reasons:
+        everything close by (the damage), any sizeable city somewhat further out
+        (the dateline and the "near X" framing), and — via
+        :meth:`county_largest` — the county's main town.
+
+        Ranked by population then proximity, so the cap trims hamlets rather than
+        cities if it binds at all.
+        """
+        hits: dict[int, dict[str, Any]] = {}
+        search = max(radius_m, prominent_radius_m)
+        for index in self.tree.query(geom_proj.buffer(search)):
+            distance = geom_proj.distance(self.points[index])
+            place = self.places[index]
+            near_enough = distance <= radius_m
+            prominent = (distance <= prominent_radius_m
+                         and place.get("population", 0) >= prominent_min_population)
+            if near_enough or prominent:
+                hits[index] = {**place, "distance_m": round(distance, 1),
+                               "reason": "near" if near_enough else "prominent"}
+        ranked = sorted(hits.values(),
+                        key=lambda p: (-p.get("population", 0), p["distance_m"]))
+        return ranked[:limit]
+
+    def county_largest(self, county: str, state: str) -> dict[str, Any] | None:
+        """The most populous place in a county — a county-seat proxy."""
+        if not hasattr(self, "_by_county"):
+            self._by_county: dict[tuple[str, str], dict[str, Any]] = {}
+            for place in self.places:
+                key = (str(place.get("county") or "").strip().lower(),
+                       str(place.get("state") or "").strip().lower())
+                current = self._by_county.get(key)
+                if current is None or place.get("population", 0) > current.get("population", 0):
+                    self._by_county[key] = place
+        return self._by_county.get((str(county).strip().lower(),
+                                    str(state).strip().lower()))

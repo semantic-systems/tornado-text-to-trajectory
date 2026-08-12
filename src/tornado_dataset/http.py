@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -70,6 +71,17 @@ def get_json(url: str, params: dict[str, Any], *, cache_path: Path | None = None
         _throttle(url, min_interval)
         try:
             response = _SESSION.get(url, params=params, timeout=timeout)
+            # A rate limiter needs its own, much longer backoff. Retrying a 429
+            # a couple of seconds later just spends another request on the same
+            # refusal — which is how a sweep can look like it is working while
+            # a third of its queries quietly return nothing.
+            if response.status_code == 429 or (
+                    response.status_code == 200
+                    and response.text.lstrip().startswith("Please limit requests")):
+                last_error = RuntimeError(f"rate limited (HTTP {response.status_code})")
+                time.sleep(config.HTTP_RATE_LIMIT_BACKOFF * attempt
+                           + random.uniform(0, 5))
+                continue
             response.raise_for_status()
             payload = response.json()
         except Exception as exc:  # network error, non-2xx, or non-JSON body

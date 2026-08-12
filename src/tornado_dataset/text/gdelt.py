@@ -92,8 +92,15 @@ def build_query(toponyms: Iterable[str], max_terms: int = 12,
 
 def query_articles(query: str, start: dt.date | dt.datetime, end: dt.date | dt.datetime, *,
                    cache_dir: Path, refresh: bool = False,
-                   max_records: int = config.GDELT_MAX_RECORDS) -> list[dict[str, Any]]:
-    """De-duplicated article records for ``query`` within the window.
+                   max_records: int = config.GDELT_MAX_RECORDS
+                   ) -> list[dict[str, Any]] | None:
+    """De-duplicated article records for ``query``, or **None** if the request failed.
+
+    The distinction matters more than it looks. An earlier version returned ``[]``
+    for both "GDELT has nothing" and "GDELT refused the request", so a sweep in
+    which 38% of queries were rate-limited away finished with a confident summary
+    and no indication that a third of the corpus was missing. ``None`` forces the
+    caller to count failures; ``[]`` means the window genuinely holds no articles.
 
     A result of exactly ``max_records`` means the response was truncated; callers
     record that as ``hit_record_cap`` so incomplete coverage stays visible in the
@@ -112,9 +119,10 @@ def query_articles(query: str, start: dt.date | dt.datetime, end: dt.date | dt.d
                            refresh=refresh, min_interval=config.GDELT_MIN_REQUEST_INTERVAL,
                            timeout=120)
     except Exception:
-        # A query that keeps failing (unparsable syntax, service hiccup) must not
-        # abort a multi-hour sweep; the empty result is visible in the counts.
-        return []
+        # A query that keeps failing (rate limit, unparsable syntax, service
+        # hiccup) must not abort a multi-hour sweep — but it must not masquerade
+        # as an empty result either.
+        return None
 
     seen, articles = set(), []
     for article in payload.get("articles", []) or []:

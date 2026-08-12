@@ -27,6 +27,7 @@ import csv
 import datetime as dt
 import io
 import re
+import time
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -96,13 +97,31 @@ def list_pns_products(date: dt.date, *, cache_dir: Path,
     return payload.get("data", []) or []
 
 
-def fetch_product_text(product_id: str, *, cache_dir: Path, refresh: bool = False) -> str:
-    """Raw text of one NWS product, cached by product id."""
+def fetch_product_text(product_id: str, *, cache_dir: Path, refresh: bool = False,
+                       retries: int = 4) -> str:
+    """Raw text of one NWS product, cached by product id.
+
+    Retries on transient failures and gives up quietly rather than raising: this
+    is called tens of thousands of times in one sweep, and a single dropped
+    connection must not end the run. An empty result is cached as empty, which
+    the caller counts.
+    """
     cache_path = cache_dir / f"{product_id}.txt"
     if cache_path.exists() and not refresh:
         return cache_path.read_text(encoding="utf-8", errors="replace")
-    response = requests.get(f"{NWSTEXT_URL}/{product_id}", timeout=120)
-    text = response.text if response.status_code == 200 else ""
+
+    text = ""
+    for attempt in range(1, retries + 1):
+        try:
+            response = requests.get(f"{NWSTEXT_URL}/{product_id}", timeout=120)
+            if response.status_code == 200:
+                text = response.text
+            break
+        except Exception:
+            if attempt == retries:
+                return ""          # not cached, so a later run retries it
+            time.sleep(1.5 * attempt)
+
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(text, encoding="utf-8")
     return text

@@ -60,6 +60,10 @@ PLACEHOLDER_TEXT_VALUES = ("NONE", "N/A", "NULL", "NA", "UNKNOWN")
 HTTP_TIMEOUT = 120
 HTTP_RETRIES = 4
 HTTP_BACKOFF = 1.5      # seconds, multiplied by the attempt number
+# A rate limiter is not a transient error and must not be retried on the ordinary
+# backoff: GDELT refused 38% of a sustained sweep's queries with HTTP 429 even at
+# one request per 12-16 s, and four retries seconds apart all hit the same wall.
+HTTP_RATE_LIMIT_BACKOFF = 45.0
 DAT_CHUNK_SIZE = 200    # objectIds per attribute+geometry request
 DAT_SLEEP = 0.2         # polite pause between DAT requests
 
@@ -108,7 +112,25 @@ EPISODE_LINK_DISTANCE_M = 200_000.0
 # 25 km is roughly what local reporting names as "the place that was hit"; wider
 # radii pull in the next town over and dilute a news query.
 PLACE_RADIUS_M = 25_000.0
+# Query budget. This governs the `places` column ONLY, which builds the GDELT
+# query strings — changing it changes every query, hence every cache key, hence a
+# full refetch. It is deliberately decoupled from the matching set below.
 MAX_PLACES_PER_HAZARD = 8
+
+# The matching set is a different problem from the query set. Capping matching at
+# the eight nearest names was the single largest cause of missed article links:
+# 97% of hazards hit that cap while 40-100 places sat within range, and because
+# selection was nearest-first the eight were hamlets ("Buffalo Mop") rather than
+# the towns news actually names. See docs/linking_coverage_analysis.md.
+PLACE_MATCH_RADIUS_M = 25_000.0
+MAX_MATCH_PLACES_PER_HAZARD = 150
+# A city is named in coverage well beyond the damage path ("a tornado near
+# Tuscaloosa"), so prominent places get a wider radius of their own.
+PLACE_PROMINENT_RADIUS_M = 50_000.0
+PLACE_PROMINENT_MIN_POPULATION = 20_000
+# The largest place in each county the track crosses, as a county-seat proxy:
+# local reporting is organised by county and names its seat.
+INCLUDE_COUNTY_LARGEST_PLACE = True
 
 # ── NWS / IEM text ───────────────────────────────────────────────────────────
 IEM_BASE = "https://mesonet.agron.iastate.edu"
@@ -150,3 +172,62 @@ GDELT_WINDOW_DAYS_BEFORE = 0
 GDELT_WINDOW_DAYS_AFTER = 7
 
 WAYBACK_AVAILABILITY_URL = "https://archive.org/wayback/available"
+
+# ── article → event linking (Stage C) ────────────────────────────────────────
+# Candidate window: an article can look back over the aftermath reporting period
+# and forward over forecast coverage. Measured on the current corpus, this leaves
+# a median of 22 candidate episodes (125 hazards) per article — a shortlist, which
+# the toponym step then has to decide.
+LINK_DAYS_BEFORE_EVENT = 3      # article published up to 3 days *before* onset
+LINK_DAYS_AFTER_EVENT = 14      # …up to 14 days after
+# Place names are matched as 1–3 token n-grams ("Cave City", "Oak Grove").
+LINK_MAX_NAME_TOKENS = 3
+# Where a name appears changes what it means: a headline names the subject, a body
+# also names context.
+LINK_POSITION_WEIGHTS = {"headline": 1.5, "dateline": 1.5, "lede": 1.2, "body": 1.0}
+LINK_LEDE_PARAGRAPHS = 2
+# Specificity: a state-level hit is weak evidence and never sufficient alone.
+LINK_LEVEL_WEIGHTS = {"place": 1.0, "county": 0.7, "state": 0.35}
+# Saturation constant for the toponym sum, so an article naming twenty places
+# cannot outscore one naming the right place unmistakably.
+LINK_TOPONYM_SATURATION = 2.0
+# How the two halves of the score combine. Deliberately simple and stored per
+# component in the output, so both can be re-weighted after annotation without
+# re-running the expensive parts.
+LINK_WEIGHT_TOPONYM = 0.6
+LINK_WEIGHT_CORROBORATION = 0.4
+# Floor for writing a link into the *candidate* file. Lowered from 0.25 because
+# the candidate/publish split means a low floor costs nothing in rigour: the
+# median near-miss scored 0.218 and 1,229 of 1,784 near-misses clear 0.15, which
+# is material the annotation should get to judge rather than material we discard
+# on an unmeasured hunch. The *publishable* threshold comes from the annotated
+# sample (docs/stage_c_plan.md §4) and from nothing else.
+LINK_MIN_SCORE = 0.15
+# A bare year ("the 2011 tornado") pins nothing on its own, so a year-only
+# retrospective candidate is admitted only behind a strong place match that sits
+# in the headline or lede. Without the position requirement the pass links to
+# *an* outbreak in the right year rather than the right one — it sent a Joplin
+# 2011 article to the April 2011 Super Outbreak.
+LINK_YEAR_ONLY_MIN_TOPONYM = 0.45
+LINK_YEAR_ONLY_REQUIRE_PROMINENT = True
+# …and the non-geographic evidence has to agree too. A prominent name is not
+# enough when the true event is absent from DAT: the Joplin EF5 of 22 May 2011
+# (158 dead) has no surveyed geometry at all, so an article about it found only
+# "Joplin" near the April 2011 Super Outbreak and linked there. Requiring the
+# rating / casualty / date signals to agree refuses that link instead of
+# inventing one.
+LINK_YEAR_ONLY_MIN_CORROBORATION = 0.5
+
+# An article is about a few events, not dozens. The cap keeps a wire round-up
+# from contributing a hundred weak candidates that would swamp the annotation
+# sample; ranked by score, so what survives is the strongest evidence.
+LINK_MAX_PER_ARTICLE = 12
+# A hazard-level link needs the best hazard to beat the runner-up by this factor,
+# otherwise the article is about the outbreak and stays at episode level.
+LINK_HAZARD_MARGIN = 1.4
+LINK_HAZARD_MIN_SCORE = 0.3
+
+# ── LexisNexis ↔ GDELT overlap (Stage C) ────────────────────────────────────
+OVERLAP_DATE_TOLERANCE_DAYS = 3
+OVERLAP_TITLE_SIMILARITY = 0.72     # same story, different desk edit
+OVERLAP_TITLE_SIMILARITY_STRICT = 0.90   # accept without a source match
