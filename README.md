@@ -1,6 +1,6 @@
 # tornado-text-to-trajectory
 
-A dataset pairing natural-language descriptions of tornadoes with authoritative
+A dataset pairing natural-language descriptions of tornados with authoritative
 damage geometries, built to measure how accurately humans and GeoAI systems can
 infer a disaster's spatial footprint from text.
 
