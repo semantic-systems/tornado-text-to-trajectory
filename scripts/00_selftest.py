@@ -45,6 +45,7 @@ MODULES = [
     "tornado_dataset.text.linking", "tornado_dataset.text.matching",
     "tornado_dataset.text.corpora",
     "tornado_dataset.text.overlap", "tornado_dataset.text.wikipedia",
+    "tornado_dataset.text.refcoverage",
 ]
 
 failures: list[str] = []
@@ -106,6 +107,7 @@ from tornado_dataset.text import matching, mediacloud                    # noqa:
 from tornado_dataset.text import gdelt                                   # noqa: E402
 from tornado_dataset.text import corpora                                 # noqa: E402
 from tornado_dataset.text import wikipedia                               # noqa: E402
+from tornado_dataset.text import refcoverage                             # noqa: E402
 
 
 def evidence_windows_reach_late_mentions() -> None:
@@ -253,6 +255,57 @@ def wikipedia_pages_are_classified_and_scoped() -> None:
                                "categories": {"Category:Disambiguation pages"}}) == "disambiguation"
 
 
+def wikipedia_references_keep_their_section() -> None:
+    text = ("Lead.<ref name=nws>{{cite web|url=https://www.weather.gov/x|title=Survey"
+            "|publisher=National Weather Service}}</ref>\n"
+            "== Confirmed tornadoes ==\n=== Cullman, Alabama ===\n"
+            "Hit.<ref>{{cite news|url=https://web.archive.org/web/2011/http://al.com/a"
+            "|title=Cullman hit|work=AL.com|date=April 28, 2011}}</ref>"
+            "<ref name=nws/><ref group=note>An aside.</ref>\n")
+    refs = {r["ref_key"]: r for r in wikipedia.extract_references(text)}
+    assert len(refs) == 2, "the footnote group is not a source"
+    nws = refs["name:nws"]
+    assert nws["n_citations"] == 2 and nws["sections"] == "(lead) | Confirmed tornadoes > Cullman, Alabama"
+    assert wikipedia.classify_reference(nws) == "nws"
+    news = next(r for k, r in refs.items() if k.startswith("anon:"))
+    assert news["url"] == "http://al.com/a" and news["archive_url"].startswith("https://web.archive.org")
+    assert (news["pub_date"], news["date_precision"]) == ("2011-04-28", "day")
+    assert wikipedia.classify_reference(news) == "news"
+    assert wikipedia.parse_cite_date("April 2011") == ("2011-04-01", "month")
+
+
+def outlet_names_match_only_their_own_paper() -> None:
+    import pandas as pd
+
+    lexis = pd.DataFrame({"source": [
+        "The Courier-Journal (Louisville, Kentucky)", "The Leader", "Daily News (New York)",
+        "Associated Press State & Local", "The Associated Press", "The Gazette (Montreal)",
+        "CBS News Transcripts CBS EVENING NEWS 6:30 PM EST"], "body": ""})
+    idx = refcoverage.OutletIndex(lexis)
+    assert idx.sources_for("courier-journal.com", ["Courier Journal"]) == {
+        "The Courier-Journal (Louisville, Kentucky)"}
+    assert idx.sources_for("apnews.com", ["Associated Press"]) == {
+        "Associated Press State & Local", "The Associated Press"}
+    assert not idx.sources_for("kentucky.com", ["Lexington Herald-Leader"]), "Leader is not it"
+    assert not idx.sources_for("daytondailynews.com", ["Dayton Daily News"])
+    assert not idx.sources_for("thegazette.com", ["The Gazette"]), "one generic word"
+    assert not idx.sources_for("cbsnews.com", ["CBS News"]), "transcripts are not web articles"
+
+
+def content_tier_sees_through_a_new_headline() -> None:
+    import pandas as pd
+
+    body = ("A powerful tornado tore through the town late Wednesday, destroying dozens of "
+            "homes along Main Street and injuring at least twelve people, officials said. "
+            "The National Weather Service rated the storm EF3 after a survey on Thursday, "
+            "with peak winds estimated at 150 miles per hour along a path of nine miles. ") * 2
+    lexis = pd.DataFrame({"textref_uid": ["a", "b"], "headline": ["x", "y"],
+                          "source": ["S", "S"], "pub_date": ["2020-03-03", "2020-03-03"],
+                          "body": [body + " Local reaction followed.", "An unrelated budget story. " * 30]})
+    best = refcoverage.ShingleIndex(lexis).best(body)
+    assert best["textref_uid"] == "a" and best["containment"] > 0.9, best
+
+
 for name, fn in [
     ("evidence windows reach late mentions", evidence_windows_reach_late_mentions),
     ("paywall stub is a failure, not an article", paywall_stub_is_a_failure_not_an_article),
@@ -267,6 +320,9 @@ for name, fn in [
     ("body key is content-derived", body_key_is_content_derived),
     ("wikipedia sections are per tornado", wikipedia_sections_are_per_tornado),
     ("wikipedia pages are classified and scoped", wikipedia_pages_are_classified_and_scoped),
+    ("wikipedia references keep their section", wikipedia_references_keep_their_section),
+    ("outlet names match only their own paper", outlet_names_match_only_their_own_paper),
+    ("content tier sees through a new headline", content_tier_sees_through_a_new_headline),
 ]:
     check(name, fn)
 

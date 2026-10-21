@@ -322,3 +322,27 @@ WIKIPEDIA_TORNADO_SECTION_PARENTS = (
     "confirmed tornadoes", "notable tornadoes", "tornadoes",
     "tornado summary", "significant tornadoes",
 )
+
+# ── Wikipedia reference coverage (stage 24) ─────────────────────────────────
+# The title tiers reuse OVERLAP_DATE_TOLERANCE_DAYS and the OVERLAP_TITLE_*
+# thresholds above, so "same story" means the same thing here as in the atlas.
+# The weak tier widens the window to a week — print editions run a day or two
+# behind the web copy Wikipedia cites, and corrections run later still — and
+# accepts partial headline agreement, but only within the same outlet.
+WIKI_REF_FUZZY_DATE_DAYS = 7
+WIKI_REF_FUZZY_JACCARD = 0.5
+WIKI_REF_FUZZY_CONTAINMENT = 0.75
+# A near-identical headline from a *different* outlet is accepted as syndicated
+# copy only when it is long enough to be distinctive: "Tornado hits town" is
+# five words and matches a dozen unrelated stories.
+WIKI_REF_SYNDICATED_MIN_TOKENS = 5
+# Content tier: 8-word shingles, one in eight kept by hash, so the LexisNexis
+# index fits in memory. Half the cited article's sampled shingles must appear in
+# one LexisNexis body — wire copy trimmed by a local desk still clears that, a
+# different article about the same tornado does not — and the dates must be
+# within two weeks, so a later article quoting the first does not count.
+WIKI_REF_SHINGLE_WORDS = 8
+WIKI_REF_SHINGLE_SAMPLE = 8
+WIKI_REF_MIN_SHINGLES = 8          # ≈ 70 words of text before a containment means anything
+WIKI_REF_CONTENT_CONTAINMENT = 0.5
+WIKI_REF_CONTENT_DATE_DAYS = 14

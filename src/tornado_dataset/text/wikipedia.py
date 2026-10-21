@@ -421,3 +421,220 @@ def plain_text(text: str) -> str:
     plain = code.strip_code(normalize=True, collapse=True)
     plain = re.sub(r"^\s*(?:File|Image):.*$", "", plain, flags=re.M)
     return re.sub(r"[ \t]+", " ", plain).strip()
+
+
+# ── references ───────────────────────────────────────────────────────────────
+# Every reference is attributed to the section it is cited from, because that
+# is what says which tornado it is evidence about: a reference cited only in the
+# "Cullman–Arab, Alabama" section is about that tornado, not the outbreak.
+_REF_RE = re.compile(
+    r"<ref(?P<attrs>\s[^>]*?)?(?:/>|>(?P<body>.*?)</ref\s*>)", re.S | re.I)
+_REF_NAME = re.compile(r"""name\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s/>]+))""", re.I)
+_REF_GROUP = re.compile(r"""group\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s/>]+))""", re.I)
+_HEADING_RE = re.compile(r"^(={2,6})\s*(.+?)\s*\1\s*$", re.M)
+_BARE_URL = re.compile(r"https?://[^\s\]|<>{}]+")
+_WAYBACK = re.compile(r"^https?://(?:web\.)?archive\.org/web/(\d+)[a-z_]*/(.+)$", re.I)
+_MONTHS = ("january february march april may june july august september october "
+           "november december").split()
+
+CITE_FIELDS = {
+    "url": ("url",),
+    "archive_url": ("archive-url", "archiveurl"),
+    "archive_date": ("archive-date", "archivedate"),
+    "title": ("title", "script-title"),
+    "work": ("work", "newspaper", "website", "magazine", "periodical", "journal"),
+    "publisher": ("publisher",),
+    "agency": ("agency",),
+    "via": ("via",),
+    "date": ("date", "publication-date"),
+    "year": ("year",),
+    "access_date": ("access-date", "accessdate"),
+}
+_AUTHOR_KEY = re.compile(r"^(?:author|last|first|authors)\d*$")
+
+
+def _attr(regex: re.Pattern, attrs: str) -> str:
+    m = regex.search(attrs or "")
+    return next((g for g in m.groups() if g), "").strip() if m else ""
+
+
+def _value(template, keys: tuple[str, ...]) -> str:
+    for key in keys:
+        if template.has(key):
+            text = template.get(key).value.strip_code().strip()
+            if text:
+                return text
+    return ""
+
+
+def unwrap_archive(url: str) -> tuple[str, str]:
+    """``(original url, archive url)`` for a Wayback link given as the url itself."""
+    m = _WAYBACK.match(url or "")
+    if not m:
+        return url, ""
+    original = m.group(2)
+    if not original.startswith("http"):
+        original = "http://" + original
+    return original, url
+
+
+def parse_cite_date(text: str) -> tuple[str | None, str]:
+    """ISO date and its precision (``day`` · ``month`` · ``year`` · ``none``).
+
+    Citation dates come as "April 28, 2011", "28 April 2011", "2011-04-28",
+    "April 2011" or "2011". A month-only date must not be read as the 1st, or a
+    ±3-day window would look for the article in the wrong week.
+    """
+    import pandas as pd
+
+    text = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not text:
+        return None, "none"
+    if re.fullmatch(r"\d{4}", text):
+        return f"{text}-01-01", "year"
+    month_only = re.fullmatch(r"([A-Za-z]+),? (\d{4})", text)
+    if month_only and month_only.group(1).lower() in _MONTHS:
+        return f"{month_only.group(2)}-{_MONTHS.index(month_only.group(1).lower()) + 1:02d}-01", "month"
+    parsed = pd.to_datetime(text, errors="coerce")
+    if pd.isna(parsed):
+        return None, "none"
+    return parsed.date().isoformat(), "day"
+
+
+def _section_at(headings: list[tuple[int, int, str]], pos: int) -> tuple[str, str]:
+    """(level-2 heading, level-3 heading) in force at character ``pos``."""
+    l2 = l3 = ""
+    for start, level, title in headings:
+        if start > pos:
+            break
+        if level == 2:
+            l2, l3 = title, ""
+        elif level == 3:
+            l3 = title
+    return l2 or "(lead)", l3
+
+
+def extract_references(text: str) -> list[dict[str, Any]]:
+    """Every distinct reference on a page, with the sections it is cited from.
+
+    A named reference is defined once and reused (``<ref name=x />``); all of
+    its uses count, and its sections are the union over them. Footnote groups
+    (``group=note``) hold editorial prose, not sources, and are skipped.
+    """
+    headings = [(m.start(), len(m.group(1)), mwparserfromhell.parse(m.group(2)).strip_code().strip())
+                for m in _HEADING_RE.finditer(text)]
+    refs: dict[str, dict[str, Any]] = {}
+    for m in _REF_RE.finditer(text):
+        attrs, body = m.group("attrs") or "", m.group("body")
+        if _attr(_REF_GROUP, attrs):
+            continue
+        name = _attr(_REF_NAME, attrs)
+        key = f"name:{name}" if name else f"anon:{m.start()}"
+        ref = refs.setdefault(key, {"ref_key": key, "body": None, "sections": [],
+                                    "n_citations": 0})
+        if body and body.strip() and ref["body"] is None:
+            ref["body"] = body.strip()
+        l2, l3 = _section_at(headings, m.start())
+        ref["n_citations"] += 1
+        section = f"{l2} > {l3}" if l3 else l2
+        if section not in ref["sections"]:
+            ref["sections"].append(section)
+
+    out = []
+    for ref in refs.values():
+        if not ref["body"]:
+            continue                      # a reuse whose definition we never saw
+        out.append({"ref_key": ref["ref_key"], "n_citations": ref["n_citations"],
+                    "sections": " | ".join(ref["sections"]), **parse_reference(ref["body"])})
+    return out
+
+
+def parse_reference(body: str) -> dict[str, Any]:
+    """Structured fields of one ``<ref>`` body: a citation template or a bare link."""
+    code = mwparserfromhell.parse(body)
+    cite = None
+    for template in code.filter_templates(recursive=False):
+        name = str(template.name).strip().lower()
+        if name.startswith("cite") or name.startswith("citation"):
+            cite, kind = template, name
+            break
+        if name.startswith("#invoke:cite") and template.params:
+            cite, kind = template, "cite " + str(template.params[0].value).strip().lower()
+            break
+    record: dict[str, Any] = {k: "" for k in CITE_FIELDS}
+    if cite is not None:
+        record["template"] = kind
+        for field, keys in CITE_FIELDS.items():
+            record[field] = _value(cite, keys)
+        record["authors"] = "; ".join(
+            p.value.strip_code().strip() for p in cite.params
+            if _AUTHOR_KEY.match(str(p.name).strip()) and p.value.strip_code().strip())
+    else:
+        record["template"] = "bare"
+        url = _BARE_URL.search(body)
+        record["url"] = url.group(0) if url else ""
+        link = re.search(r"\[https?://\S+\s+([^\]]+)\]", body)
+        record["title"] = mwparserfromhell.parse(link.group(1)).strip_code().strip() if link else ""
+        tail = re.sub(r"\[https?://[^\]]*\]", "", body)
+        record["work"] = mwparserfromhell.parse(tail).strip_code().strip(" .,;–-")[:120]
+        record["authors"] = ""
+    record["url"], wrapped = unwrap_archive(record["url"])
+    record["archive_url"] = record["archive_url"] or wrapped
+    date, precision = parse_cite_date(record["date"] or record["year"])
+    record["pub_date"], record["date_precision"] = date, precision
+    record["domain"] = re.sub(r"^www\d?\.", "", (re.match(r"https?://([^/:?#]+)", record["url"])
+                                                or [None, ""])[1].lower())
+    return record
+
+
+# Domains whose references are not news. NWS/NOAA first, with the two academic
+# mirrors of NWS products (IEM, College of DuPage) that Wikipedia cites for them.
+NWS_DOMAINS = ("noaa.gov", "weather.gov", "mesonet.agron.iastate.edu", "kamala.cod.edu",
+               "weather.cod.edu", "nssl.noaa.gov")
+SOCIAL_DOMAINS = ("twitter.com", "x.com", "facebook.com", "youtube.com", "youtu.be",
+                  "instagram.com", "tiktok.com", "reddit.com", "threads.net",
+                  "bsky.app", "flickr.com")
+REFERENCE_DOMAINS = ("wikipedia.org", "wikimedia.org", "storymaps.arcgis.com",
+                     "arcgis.com", "google.com", "books.google.com", "doi.org",
+                     "ams.confex.com", "journals.ametsoc.org", "ametsoc.org",
+                     "researchgate.net", "jstor.org", "tornadoproject.com",
+                     "tornadohistoryproject.com", "findagrave.com", "census.gov",
+                     "data.census.gov")
+_NON_NEWS_TEMPLATES = {"cite report", "cite dat", "cite journal", "cite book",
+                       "cite conference", "cite tweet", "cite thesis", "cite map",
+                       "cite encyclopedia", "cite tech report"}
+
+
+def _under(domain: str, suffixes: Iterable[str]) -> bool:
+    return any(domain == s or domain.endswith("." + s) for s in suffixes)
+
+
+def classify_reference(ref: dict[str, Any]) -> str:
+    """``nws`` · ``government`` · ``social`` · ``reference`` · ``news`` · ``other_web``.
+
+    Only ``news`` enters the coverage denominator. A reference is news when the
+    citation itself says so (``cite news``, a newspaper or agency field) or when
+    a ``cite web`` names a publication on a domain that is none of the above;
+    ``other_web`` is the remainder, listed in the report so misclassified
+    outlets are visible.
+    """
+    domain, template = ref.get("domain", ""), ref.get("template", "")
+    if _under(domain, NWS_DOMAINS) or re.search(r"national weather service|storm prediction center|"
+                                                r"national centers for environmental|noaa",
+                                                f"{ref.get('publisher')} {ref.get('work')}", re.I):
+        return "nws"
+    if _under(domain, SOCIAL_DOMAINS) or template in {"cite tweet"}:
+        return "social"
+    if (domain.endswith(".gov") or ".gov." in domain or domain.endswith(".mil")
+            or re.search(r"\.(state|k12)\.[a-z]{2}\.us$", domain)):
+        return "government"
+    if (_under(domain, REFERENCE_DOMAINS) or domain.endswith(".edu")
+            or template in _NON_NEWS_TEMPLATES):
+        return "reference"
+    if template in {"cite news", "cite newspaper", "cite press release"} or ref.get("agency"):
+        return "news"
+    if template == "cite av media" and domain:
+        return "news"
+    if domain and (ref.get("work") or ref.get("publisher")):
+        return "news"
+    return "other_web"

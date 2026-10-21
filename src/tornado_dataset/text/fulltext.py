@@ -491,6 +491,9 @@ def pending(items: Sequence[dict[str, Any]], store: dict[str, dict[str, Any]],
         elif prior.get("status") != "ok" and retry_failed:
             status = str(prior.get("status", ""))
             error = str(prior.get("error", ""))
-            if status in RETRYABLE or "ConnectionError" in error or "429" in error:
+            # An archive 5xx is the archive being overloaded, not the article
+            # being lost: it is retried like a connection error.
+            if (status in RETRYABLE or "ConnectionError" in error or "429" in error
+                    or "archive:archive_http_5" in error):
                 todo.append(item)
     return todo
