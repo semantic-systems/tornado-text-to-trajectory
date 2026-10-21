@@ -185,7 +185,13 @@ def fetch_html(session: requests.Session, url: str,
         content_type = response.headers.get("Content-Type", "")
         if "html" not in content_type.lower():
             return "", 200, response.url, f"not html: {content_type[:60]}"
-        raw = response.raw.read(MAX_HTML_BYTES, decode_content=True)
+        # The body is streamed, so a server that stalls mid-response raises
+        # here, outside the request's own try — and one such server would
+        # otherwise end a multi-hour crawl.
+        try:
+            raw = response.raw.read(MAX_HTML_BYTES, decode_content=True)
+        except Exception as exc:
+            return "", 200, response.url, f"{type(exc).__name__}: {str(exc)[:120]}"
         encoding = response.encoding or "utf-8"
         return raw.decode(encoding, errors="replace"), 200, response.url, ""
     finally:
@@ -259,7 +265,12 @@ def fetch_wayback(session: requests.Session, url: str, when: str | None = None,
                 last = f"http_{response.status_code}"
                 time.sleep(ARCHIVE_INTERVAL * attempt)
                 continue
-            raw = response.raw.read(MAX_HTML_BYTES, decode_content=True)
+            try:
+                raw = response.raw.read(MAX_HTML_BYTES, decode_content=True)
+            except Exception as exc:          # stalled mid-body: retry like a connection error
+                last = type(exc).__name__
+                time.sleep(ARCHIVE_INTERVAL * attempt)
+                continue
             return raw.decode(response.encoding or "utf-8", errors="replace"), ""
         finally:
             response.close()
