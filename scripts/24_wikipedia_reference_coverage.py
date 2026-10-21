@@ -50,6 +50,7 @@ REFS_CSV = config.INTERIM_DIR / "wikipedia_refs.csv"
 ARTICLES_CSV = config.INTERIM_DIR / "wikipedia_news_articles.csv"
 MATCHES_CSV = config.INTERIM_DIR / "wikipedia_ref_matches.csv"
 HANDCHECK_CSV = config.OUTPUT_DIR / "annotation" / "wikipedia_ref_handcheck.csv"
+HANDCHECK_KEY = config.INTERIM_DIR / "wikipedia_ref_handcheck_key.csv"   # tier per row
 STORE = config.RAW_DIR / "wikipedia" / "ref_fulltext.jsonl"
 LEXIS_JSONL = config.OUTPUT_DIR / "lexisnexis_articles.jsonl"
 REPORT = config.OUTPUT_DIR / "wikipedia_reference_coverage_report.md"
@@ -168,7 +169,7 @@ def match(args) -> None:
         articles["content_textref"] = pd.NA
     articles.to_csv(ARTICLES_CSV, index=False)
 
-    write_handcheck(articles, matches)
+    write_handcheck(articles, matches, lexis, texts)
     write_report(articles, refs, matches, titled, content, lexis)
     write_manifest(config.PROCESSED_DIR / "manifest_wikipedia_reference_coverage.json",
                    "24_wikipedia_reference_coverage",
@@ -185,28 +186,80 @@ def match(args) -> None:
     print(f"wrote {MATCHES_CSV.name}, {HANDCHECK_CSV.name}, {REPORT.name}")
 
 
-def write_handcheck(articles: pd.DataFrame, matches: pd.DataFrame) -> None:
-    """A blind-ish sheet to measure the matcher: matched pairs per tier, plus
-    unmatched in-universe citations, which is where a miss would hide."""
+def _lede(text: str, words: int = 80) -> str:
+    return " ".join(str(text or "").split()[:words])
+
+
+def _nearest(art, lexis: pd.DataFrame) -> pd.Series | None:
+    """The same-outlet LexisNexis article with the closest headline within a
+    week — the candidate a matcher miss would have to be."""
+    sources = set(art.lexis_sources.split("|"))
+    day = pd.Timestamp(art.pub_date)
+    pool = lexis[lexis.source.isin(sources)
+                 & ((pd.to_datetime(lexis.pub_date, errors="coerce") - day).abs()
+                    <= pd.Timedelta(days=config.WIKI_REF_FUZZY_DATE_DAYS))]
+    if pool.empty:
+        return None
+    scores = [rc.matching.title_similarity(art.title, h)["jaccard"] for h in pool.headline]
+    return pool.iloc[max(range(len(scores)), key=scores.__getitem__)]
+
+
+def write_handcheck(articles: pd.DataFrame, matches: pd.DataFrame,
+                    lexis: pd.DataFrame, texts: dict[str, str]) -> None:
+    """A blind sheet to measure the matcher.
+
+    Up to 20 matched pairs per tier measure each tier's precision; 30 misses
+    measure what the matcher leaves behind. The misses are drawn only from
+    citations that *have* a same-outlet LexisNexis article within a week — the
+    rest provably have nothing to match (see "Matcher or export?"). The tier
+    is not on the sheet, so it cannot steer the label; it sits in a key file.
+
+    Never overwrites a sheet that already carries labels.
+    """
+    if HANDCHECK_CSV.exists():
+        prior = pd.read_csv(HANDCHECK_CSV, keep_default_na=False)
+        if "label" in prior and (prior.label != "").any():
+            print(f"  {HANDCHECK_CSV.name} already has labels — left untouched")
+            return
     best = (matches.sort_values("jaccard", ascending=False, na_position="last")
                    .drop_duplicates(["article_key", "tier"]))
-    parts = []
-    for tier in rc.TIERS:
-        sample = best[best.tier == tier]
-        parts.append(sample.sample(min(len(sample), 20), random_state=24))
-    pairs = pd.concat(parts).merge(
-        articles[["article_key", "title", "work", "pub_date", "url"]], on="article_key")
-    missed = articles[articles.in_universe & ~articles.matched_any]
-    missed = missed.sample(min(len(missed), 30), random_state=24).assign(tier="unmatched")
-    sheet = pd.concat([pairs, missed[["article_key", "tier", "title", "work", "pub_date",
-                                      "url", "lexis_sources"]]], ignore_index=True)
-    sheet = sheet.sample(frac=1, random_state=24)        # tiers interleaved
-    sheet["label"] = ""          # same_article | different_article | unsure
-    sheet["notes"] = ""
+    parts = [best[best.tier == t].sample(min((best.tier == t).sum(), 20), random_state=24)
+             for t in rc.TIERS]
+    pairs = pd.concat(parts)[["article_key", "tier", "textref_uid", "jaccard", "containment"]]
+
+    missed = articles[articles.in_universe & ~articles.matched_any
+                      & (articles.date_precision == "day")]
+    rows = []
+    for art in missed.sample(frac=1, random_state=24).itertuples():
+        cand = _nearest(art, lexis)
+        if cand is not None:
+            rows.append({"article_key": art.article_key, "tier": "unmatched",
+                         "textref_uid": cand.textref_uid})
+        if len(rows) == 30:
+            break
+    key = pd.concat([pairs, pd.DataFrame(rows)], ignore_index=True)
+    key = key.sample(frac=1, random_state=24).reset_index(drop=True)
+    key.insert(0, "row_id", [f"h{i + 1:03d}" for i in range(len(key))])
+
+    cited = articles.set_index("article_key")
+    lex = lexis.drop_duplicates("textref_uid").set_index("textref_uid")
+    sheet = pd.DataFrame({
+        "row_id": key.row_id,
+        "cited_title": key.article_key.map(cited.title),
+        "cited_outlet": key.article_key.map(cited.work.where(cited.work != "", cited.domain)),
+        "cited_date": key.article_key.map(cited.pub_date),
+        "cited_url": key.article_key.map(cited.url),
+        "cited_lede": key.article_key.map(cited.url).map(lambda u: _lede(texts.get(u, ""))),
+        "lexis_headline": key.textref_uid.map(lex.headline),
+        "lexis_source": key.textref_uid.map(lex.source),
+        "lexis_date": key.textref_uid.map(lex.pub_date),
+        "lexis_lede": key.textref_uid.map(lex.body).map(_lede),
+        "label": "",
+        "notes": "",
+    })
     HANDCHECK_CSV.parent.mkdir(parents=True, exist_ok=True)
-    sheet[["article_key", "tier", "title", "work", "pub_date", "url", "lexis_headline",
-           "lexis_source", "lexis_date", "lexis_sources", "textref_uid", "label",
-           "notes"]].to_csv(HANDCHECK_CSV, index=False)
+    sheet.to_csv(HANDCHECK_CSV, index=False)
+    key.to_csv(HANDCHECK_KEY, index=False)
 
 
 def _share(n: int, d: int) -> str:
@@ -402,10 +455,13 @@ def write_report(articles, refs, matches, titled, content, lexis) -> None:
         "## Validation",
         "",
         f"`{HANDCHECK_CSV.relative_to(config.REPO_ROOT) if HANDCHECK_CSV.is_relative_to(config.REPO_ROOT) else HANDCHECK_CSV}` "
-        "holds up to 20 matched pairs per tier and 30 unmatched in-universe citations, "
-        "interleaved. Fill `label` with `same_article` / `different_article` / `unsure`; "
-        "the matched rows measure each tier's precision, the unmatched ones the "
-        "matcher's misses among articles LexisNexis should have.",
+        "is blind: each row pairs a cited article with one LexisNexis article, and the "
+        "tier that proposed the pair is in `data/interim/wikipedia_ref_handcheck_key.csv`, "
+        "not on the sheet. Up to 20 pairs per tier measure each tier's precision; 30 "
+        "pairs are a miss with its nearest same-outlet candidate, which measures what "
+        "the matcher leaves behind. Labels: `same_article`, `same_article_edited` (the "
+        "same piece in another version — print edit, update, trimmed wire copy), "
+        "`different_article`, `unsure`.",
         "",
         "## Limitations",
         "",

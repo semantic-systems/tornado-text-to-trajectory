@@ -1,6 +1,6 @@
 # Wikipedia reference coverage — LexisNexis
 
-Generated 2026-10-21T17:25:34+00:00 by `scripts/24_wikipedia_reference_coverage.py match`.
+Generated 2026-10-21T19:14:38+00:00 by `scripts/24_wikipedia_reference_coverage.py match`.
 
 > **Question.** Of the news articles English Wikipedia cites about US tornadoes (2010–2025), how many are in our LexisNexis export (22,896 distinct articles)? Wikipedia's editors chose these without reference to our corpus, so the share is a recall estimate the corpus cannot give about itself — recall on *what Wikipedia cites*, which leans to national, wire and online sources.
 
@@ -168,7 +168,7 @@ Cited without a publication name on a domain that is not NWS, government, social
 
 ## Validation
 
-`outputs/annotation/wikipedia_ref_handcheck.csv` holds up to 20 matched pairs per tier and 30 unmatched in-universe citations, interleaved. Fill `label` with `same_article` / `different_article` / `unsure`; the matched rows measure each tier's precision, the unmatched ones the matcher's misses among articles LexisNexis should have.
+`outputs/annotation/wikipedia_ref_handcheck.csv` is blind: each row pairs a cited article with one LexisNexis article, and the tier that proposed the pair is in `data/interim/wikipedia_ref_handcheck_key.csv`, not on the sheet. Up to 20 pairs per tier measure each tier's precision; 30 pairs are a miss with its nearest same-outlet candidate, which measures what the matcher leaves behind. Labels: `same_article`, `same_article_edited` (the same piece in another version — print edit, update, trimmed wire copy), `different_article`, `unsure`.
 
 ## Limitations
 
