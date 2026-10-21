@@ -11,6 +11,9 @@ spacy~=3.8
 striprtf~=0.0.32
 pandas~=3.0
 
+# Wikipedia wikitext parsing (tornado_dataset.text.wikipedia)
+mwparserfromhell~=0.7
+
 # Dataset pipeline (tornado_dataset / scripts)
 tabulate~=0.9      # pandas.DataFrame.to_markdown in the QA report
 

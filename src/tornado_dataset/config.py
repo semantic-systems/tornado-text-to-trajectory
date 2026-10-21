@@ -284,3 +284,41 @@ LINK_HAZARD_MIN_SCORE = 0.3
 OVERLAP_DATE_TOLERANCE_DAYS = 3
 OVERLAP_TITLE_SIMILARITY = 0.72     # same story, different desk edit
 OVERLAP_TITLE_SIMILARITY_STRICT = 0.90   # accept without a source match
+
+# ── Wikipedia (stage 23) ─────────────────────────────────────────────────────
+WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
+WIKIDATA_API = "https://www.wikidata.org/w/api.php"
+# Wikimedia asks for serial requests and no hard rate; 0.2 s keeps a full
+# discovery run to a few minutes. Wikidata is stricter: its query service was
+# refusing everything above 1 req/min during probing (2026-10-21), so discovery
+# uses the ordinary Wikidata search API instead, at 1 s.
+WIKIPEDIA_MIN_REQUEST_INTERVAL = 0.2
+WIKIDATA_MIN_REQUEST_INTERVAL = 1.0
+
+# Only these two kinds of page are text sources. Per-tornado rows in the monthly
+# and per-outbreak "List of …" pages paraphrase the NCEI narrative they cite, so
+# they would enter the corpus as near-oracle text dressed as independent text;
+# they are kept for lookup (the NCEI event ids they cite) and nothing else.
+WIKIPEDIA_TEXT_KINDS = ("tornado", "outbreak")
+
+# Wikidata classes whose items are discovery candidates: tornado (Q8081) and
+# tornado outbreak (Q2696963), checked against known articles on 2026-10-21.
+WIKIDATA_CLASSES = ("Q8081", "Q2696963")
+
+# Full-text search catches articles that are missing from the year categories
+# and navboxes. Each query is kept narrow; anything off-topic it returns is
+# classified out later rather than trusted.
+WIKIPEDIA_SEARCH_QUERIES = (
+    'hastemplate:"Infobox weather event/Tornado"',
+    'hastemplate:"Infobox weather event" intitle:outbreak',
+    'intitle:"tornado outbreak"',
+    'intitle:tornado incategory:"Tornado outbreaks in the United States"',
+)
+
+# The parent heading under which an outbreak article gives each significant
+# tornado its own subsection. Matched case-insensitively against level-2
+# headings; an outbreak article with none of these is listed in the report.
+WIKIPEDIA_TORNADO_SECTION_PARENTS = (
+    "confirmed tornadoes", "notable tornadoes", "tornadoes",
+    "tornado summary", "significant tornadoes",
+)

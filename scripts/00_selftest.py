@@ -44,7 +44,7 @@ MODULES = [
     "tornado_dataset.text.lexisnexis_filter", "tornado_dataset.text.fulltext",
     "tornado_dataset.text.linking", "tornado_dataset.text.matching",
     "tornado_dataset.text.corpora",
-    "tornado_dataset.text.overlap",
+    "tornado_dataset.text.overlap", "tornado_dataset.text.wikipedia",
 ]
 
 failures: list[str] = []
@@ -105,6 +105,7 @@ from tornado_dataset.text import fulltext, labelling, lexisnexis_filter  # noqa:
 from tornado_dataset.text import matching, mediacloud                    # noqa: E402
 from tornado_dataset.text import gdelt                                   # noqa: E402
 from tornado_dataset.text import corpora                                 # noqa: E402
+from tornado_dataset.text import wikipedia                               # noqa: E402
 
 
 def evidence_windows_reach_late_mentions() -> None:
@@ -216,6 +217,42 @@ def body_key_is_content_derived() -> None:
     assert a.iloc[0] == b.iloc[0], "normalisation should make these identical"
 
 
+def wikipedia_sections_are_per_tornado() -> None:
+    text = ("== Meteorological synopsis ==\nA trough.\n"
+            "== Confirmed tornadoes ==\n{{Main|List of tornadoes in X}}\n"
+            "=== Tuscaloosa–Birmingham, Alabama ===\n{{Main|2011 Tuscaloosa–Birmingham tornado}}\n"
+            "The tornado touched down<ref>{{cite news|title=T}}</ref> southwest of town.\n"
+            "==== Aftermath ====\nMore words here.\n"
+            "=== April 27 event ===\n{| class=wikitable\n|-\n| EF4 \n|}\n"
+            "=== Cullman–Arab, Alabama ===\nAn EF4 struck Cullman.\n"
+            "== Aftermath ==\nRecovery.\n")
+    secs = wikipedia.tornado_sections(text)
+    assert [(s["heading"], s["section_type"]) for s in secs] == [
+        ("Tuscaloosa–Birmingham, Alabama", "tornado"), ("April 27 event", "day"),
+        ("Cullman–Arab, Alabama", "tornado")], secs
+    assert secs[1]["prose_words"] == 0, "a day section that is only a table is empty"
+    assert secs[0]["main_article"] == "2011 Tuscaloosa–Birmingham tornado"
+    assert secs[0]["prose_words"] == 11, secs[0]     # level-4 child kept, ref stripped
+
+
+def wikipedia_pages_are_classified_and_scoped() -> None:
+    page = {"title": "Tornado outbreak of April 25–28, 2024", "templates": set(),
+            "categories": {"Category:Tornadoes in Iowa", "Category:Tornadoes of 2024"}}
+    page.update(kind=wikipedia.classify(page), year=wikipedia.event_year(page),
+                us_states=wikipedia.us_states(page))
+    assert (page["kind"], page["year"], page["us_states"]) == ("outbreak", 2024, ["Iowa"])
+    assert wikipedia.scope(page, range(2010, 2026)) == "in_scope"
+    canada = {"title": "2011 Goderich tornado", "templates": set(),
+              "categories": {"Category:Tornadoes in Ontario"}}
+    assert wikipedia.us_states(canada) == []
+    georgia = {"categories": {"Category:Tornadoes in Georgia (country)"}}
+    assert wikipedia.us_states(georgia) == [], "the country is not the state"
+    assert wikipedia.classify({"title": "List of United States tornadoes in May 2024",
+                               "templates": set()}) == "list"
+    assert wikipedia.classify({"title": "December 2021 tornado outbreak", "templates": set(),
+                               "categories": {"Category:Disambiguation pages"}}) == "disambiguation"
+
+
 for name, fn in [
     ("evidence windows reach late mentions", evidence_windows_reach_late_mentions),
     ("paywall stub is a failure, not an article", paywall_stub_is_a_failure_not_an_article),
@@ -228,6 +265,8 @@ for name, fn in [
     ("dedup groups collapse syndication", dedup_groups_collapse_syndication),
     ("title similarity separates stories", title_similarity_separates_stories),
     ("body key is content-derived", body_key_is_content_derived),
+    ("wikipedia sections are per tornado", wikipedia_sections_are_per_tornado),
+    ("wikipedia pages are classified and scoped", wikipedia_pages_are_classified_and_scoped),
 ]:
     check(name, fn)
 
