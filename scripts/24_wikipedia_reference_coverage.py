@@ -64,7 +64,16 @@ def extract(args) -> None:
     rows = []
     for page in tqdm(pages.itertuples(), total=len(pages), desc="pages", unit="page"):
         text = json.loads(wp.store_path(page.pageid, page.revid).read_text("utf-8"))["wikitext"]
+        # A yearly page is global: only references cited in one of its US event
+        # sections are about US tornadoes.
+        us_sections = ({f"{s['parent']} > {s['heading']}" for s in wp.yearly_sections(text)}
+                       if page.kind == "yearly" else None)
         for ref in wp.extract_references(text):
+            if us_sections is not None:
+                cited_in = set(ref["sections"].split(" | ")) & us_sections
+                if not cited_in:
+                    continue
+                ref = {**ref, "sections": " | ".join(sorted(cited_in))}
             rows.append({"pageid": page.pageid, "revid": page.revid,
                          "page_title": page.title, "page_kind": page.kind,
                          "page_year": page.year, **ref,

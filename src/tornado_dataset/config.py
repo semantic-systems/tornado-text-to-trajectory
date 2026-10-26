@@ -299,7 +299,26 @@ WIKIDATA_MIN_REQUEST_INTERVAL = 1.0
 # and per-outbreak "List of …" pages paraphrase the NCEI narrative they cite, so
 # they would enter the corpus as near-oracle text dressed as independent text;
 # they are kept for lookup (the NCEI event ids they cite) and nothing else.
-WIKIPEDIA_TEXT_KINDS = ("tornado", "outbreak")
+# The yearly "Tornadoes of <year>" pages are global; only their US event
+# sections are text (see wikipedia.yearly_sections).
+WIKIPEDIA_TEXT_KINDS = ("tornado", "outbreak", "yearly")
+
+# Where the census lists live: every monthly/seasonal US list, and the lists
+# split off from large outbreak articles. Their rows are the tornado census.
+WIKIPEDIA_CENSUS_CATEGORIES = (
+    "Category:Lists of tornadoes in the United States by time",
+    "Category:Lists of tornadoes by outbreak",
+)
+# Hand-curated overview pages whose links are a discovery channel of their
+# own — suggested as entry points and checked on 2026-10-26, when none of them
+# linked an in-scope page the other channels had missed.
+WIKIPEDIA_HUB_PAGES = (
+    "List of North American tornadoes and tornado outbreaks",
+    "List of F5, EF5, and IF5 tornadoes",
+    "List of F4, EF4, and IF4 tornadoes",
+    "List of F4, EF4, and IF4 tornadoes (2020–present)",
+    "List of F3, EF3, and IF3 tornadoes (2020–present)",
+)
 
 # Wikidata classes whose items are discovery candidates: tornado (Q8081) and
 # tornado outbreak (Q2696963), checked against known articles on 2026-10-21.

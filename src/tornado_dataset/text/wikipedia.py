@@ -17,6 +17,12 @@ ids they cite, which is the bridge from a section to a DAT hazard.
 
 Discovery, and why it has five channels
 ---------------------------------------
+Besides articles, the ``Tornadoes of <year>`` pages are a text source too
+(kind ``yearly``): their US event sections are the only prose Wikipedia holds
+about many episodes. And the list pages are read in full as a *census* of
+tornadoes (:func:`list_census`) — the yardstick the text sources are measured
+against.
+
 No single way of enumerating articles is complete. Categories are the backbone
 but editors forget them; navboxes are curated per year but only list what the
 editor of that navbox knew about; Wikidata misses new articles; search misses
@@ -32,6 +38,7 @@ navbox      ``Template:<year> tornado outbreaks``
 yearly      ``{{Main}}`` / ``{{Further}}`` targets in ``Tornadoes of <year>``
 search      :data:`config.WIKIPEDIA_SEARCH_QUERIES`
 wikidata    items of class :data:`config.WIKIDATA_CLASSES` with an enwiki page
+list_links  event links in the census lists and :data:`config.WIKIPEDIA_HUB_PAGES`
 main_link   ``{{Main}}`` targets inside an outbreak's tornado sections
 =========== ==================================================================
 
@@ -59,7 +66,7 @@ RAW_DIR = config.RAW_DIR / "wikipedia"
 API_CACHE = RAW_DIR / "api"
 PAGE_STORE = RAW_DIR / "pages"
 
-CHANNELS = ("category", "navbox", "yearly", "search", "wikidata", "main_link")
+CHANNELS = ("category", "navbox", "yearly", "search", "wikidata", "list_links", "main_link")
 
 US_STATES = (
     "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
@@ -232,6 +239,37 @@ def discover(years: Iterable[int], *, refresh: bool = False,
     return hits
 
 
+def census_lists(years: Iterable[int], *, refresh: bool = False) -> set[str]:
+    """Monthly and per-outbreak tornado list pages whose year is in ``years``."""
+    years = set(years)
+    titles: set[str] = set()
+    for cat in config.WIKIPEDIA_CENSUS_CATEGORIES:
+        for title in category_members(cat, depth=2, refresh=refresh):
+            found = [int(y) for y in re.findall(r"\b((?:19|20)\d{2})\b", title)]
+            if title.startswith("List") and found and max(found) in years:
+                titles.add(title)
+    return titles
+
+
+_EVENT_LINK = re.compile(r"tornado|outbreak|derecho|storm complex|severe weather|"
+                         r"hurricane|tropical storm|supercell", re.I)
+
+
+def event_links(text: str) -> set[str]:
+    """Wikilink targets that could be an event page, sections stripped.
+
+    List pages link every town and county on every row; resolving all of them
+    would cost thousands of requests to learn nothing, since a page whose
+    title names no weather event is classified ``other`` anyway.
+    """
+    out = set()
+    for m in re.finditer(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]", text):
+        target = m.group(1).strip()
+        if target and ":" not in target and _EVENT_LINK.search(target):
+            out.add(target[0].upper() + target[1:])
+    return out
+
+
 # ── resolving and classifying ────────────────────────────────────────────────
 def resolve(titles: Iterable[str], *, refresh: bool = False) -> tuple[dict[str, str], list[dict]]:
     """Follow redirects and fetch the metadata classification needs.
@@ -279,7 +317,7 @@ def resolve(titles: Iterable[str], *, refresh: bool = False) -> tuple[dict[str, 
 
 
 def classify(page: dict) -> str:
-    """``list`` · ``index`` · ``outbreak`` · ``tornado`` · ``other``.
+    """``list`` · ``yearly`` · ``index`` · ``outbreak`` · ``tornado`` · ``other``.
 
     By title first — Wikipedia's naming conventions for these pages are strict —
     then by infobox. A hurricane or a town article that mentions a tornado is
@@ -292,7 +330,9 @@ def classify(page: dict) -> str:
         return "index"
     if title.startswith("List of") or title.startswith("Lists of"):
         return "list"
-    if re.match(r"^Tornadoes of \d{4}$", title) or title.startswith("Tornadoes in "):
+    if re.match(r"^Tornadoes of \d{4}$", title):
+        return "yearly"
+    if title.startswith("Tornadoes in "):
         return "index"
     if _OUTBREAK_WORDS.search(title):
         return "outbreak"
@@ -333,7 +373,9 @@ def scope(page: dict, years: range) -> str:
         return "no_year"
     if page["year"] not in years:
         return "out_of_window"
-    if not page["us_states"]:
+    # A yearly page is global; which of its sections are US is decided per
+    # section (see yearly_sections), not by the page's categories.
+    if page["kind"] != "yearly" and not page["us_states"]:
         return "not_us"
     return "in_scope"
 
@@ -366,7 +408,7 @@ def fetch_revision(pageid: int, revid: int, *, refresh: bool = False) -> dict[st
 
 
 # ── per-tornado sections ─────────────────────────────────────────────────────
-def tornado_sections(text: str) -> list[dict[str, Any]]:
+def tornado_sections(text: str, *, with_text: bool = False) -> list[dict[str, Any]]:
     """The subsections an outbreak article gives individual tornadoes.
 
     They sit one level below a parent heading such as "Confirmed tornadoes"
@@ -403,6 +445,68 @@ def tornado_sections(text: str) -> list[dict[str, Any]]:
                 "section_type": "day" if _DAY_HEADING.match(title) else "tornado",
                 "main_article": "|".join(sorted(main_targets(body))),
                 "prose_words": len(plain_text(body).split()),
+                **({"text": plain_text(body)} if with_text else {}),
+            })
+    return out
+
+
+_MONTH_NAMES = {m.capitalize() for m in (
+    "january february march april may june july august september october "
+    "november december").split()}
+_REGION = re.compile(r"^(?P<when>.*?)\s*\((?P<region>[^()]*)\)\s*$")
+_US_REGION = re.compile(r"United States|\bU\.?S\.?\b|" + "|".join(
+    re.escape(s) for s in US_STATES))
+_STORM_REGION = re.compile(r"^(?:Hurricane|Tropical Storm|Tropical Depression|"
+                           r"Post-Tropical|Remnants of|Subtropical)", re.I)
+_STATE_IN_PROSE = re.compile(r"\b(?:" + "|".join(
+    re.escape(s) for s in US_STATES if s not in {"Washington", "Georgia"}) + r")\b")
+
+
+def yearly_sections(text: str, *, with_text: bool = False) -> list[dict[str, Any]]:
+    """US event sections of a ``Tornadoes of <year>`` page.
+
+    The page is laid out by month (level 2) and event (level 3, "April 9–11
+    (United States)"); each event section is a narrative over one episode —
+    usually several tornadoes, sometimes one — and many episodes have no
+    article of their own, so this is the only prose Wikipedia holds about
+    them. The year-level overviews ("United States yearly total") sit outside
+    the month headings and are skipped.
+
+    US membership, from the heading's region: a region naming the US or a state
+    is US; a storm name ("Hurricane Ida") or no region at all (common on the
+    2010 page) is US when the prose names a state; any other region is not.
+    Georgia and Washington are not counted from prose, being a country and a
+    capital as often as a state.
+    """
+    out: list[dict[str, Any]] = []
+    code = mwparserfromhell.parse(text)
+    for month in code.get_sections(levels=[2], include_headings=True):
+        headings = month.filter_headings(recursive=False)
+        if not headings or headings[0].title.strip_code().strip() not in _MONTH_NAMES:
+            continue
+        month_title = headings[0].title.strip_code().strip()
+        for sub in month.get_sections(levels=[3], include_headings=True):
+            heading = sub.filter_headings(recursive=False)[0]
+            title = heading.title.strip_code().strip()
+            body = str(sub)[len(str(heading)):]
+            prose = plain_text(body)
+            m = _REGION.match(title)
+            region = m.group("region").strip() if m else ""
+            if region and _US_REGION.search(region):
+                basis = "region"
+            elif (not region or _STORM_REGION.match(region)) and _STATE_IN_PROSE.search(prose):
+                basis = "storm_prose" if region else "prose"
+            else:
+                continue
+            out.append({
+                "parent": month_title,
+                "heading": title,
+                "section_type": "yearly_event",
+                "region": region,
+                "us_basis": basis,
+                "main_article": "|".join(sorted(main_targets(body))),
+                "prose_words": len(prose.split()),
+                **({"text": prose} if with_text else {}),
             })
     return out
 
@@ -421,6 +525,162 @@ def plain_text(text: str) -> str:
     plain = code.strip_code(normalize=True, collapse=True)
     plain = re.sub(r"^\s*(?:File|Image):.*$", "", plain, flags=re.M)
     return re.sub(r"[ \t]+", " ", plain).strip()
+
+
+# ── list census ──────────────────────────────────────────────────────────────
+# The monthly "List of United States tornadoes in …" pages and the per-outbreak
+# "List of tornadoes in …" pages together enumerate every confirmed US tornado,
+# one table row each. They are not text sources (a row paraphrases the NCEI
+# narrative it cites); they are the spine: a complete count of tornadoes to
+# measure the text sources against, and — through the NCEI event ids the rows
+# cite — the bridge from a Wikipedia mention to a DAT hazard.
+_RATING = re.compile(r"\b(EF[0-5]|EFU|F[0-5]|IF[0-5])\s*$")
+_CAPTION_DATE = re.compile(
+    r"(January|February|March|April|May|June|July|August|September|October|November|"
+    r"December)\s+(\d{1,2})(?:,\s*(\d{4}))?")
+_NCEI_ID = re.compile(r"(?:event-details/|eventdetails\.jsp\?id=|event_id=)(\d{4,})")
+_COORD = re.compile(r"coord\s*\|\s*(-?\d+(?:\.\d+)?)\s*\|\s*(-?\d+(?:\.\d+)?)", re.I)
+_CONVERT = re.compile(r"\{\{\s*convert\s*\|\s*([^|}]+)\|\s*([^|}]+)[^}]*\}\}", re.I)
+US_STATE_ABBR = {
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN",
+    "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV",
+    "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN",
+    "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC", "PR"}
+CENSUS_FIELDS = {          # header text (lower-cased, stripped) → column
+    "ef#": "rating", "f#": "rating", "if#": "rating", "location": "location",
+    "county": "county", "county / parish": "county", "county/parish": "county",
+    "parish": "county", "state": "state", "start coord.": "start_coord",
+    "start coord": "start_coord", "coord.": "start_coord", "coord": "start_coord",
+    "time (utc)": "time_utc", "path length": "path_length",
+    "max width": "max_width", "max. width": "max_width", "summary": "summary",
+    "comments/damage": "summary", "comments": "summary",
+}
+
+
+def _split_top(text: str, sep: str) -> list[str]:
+    """Split on ``sep`` where it is not inside ``[[…]]`` or ``{{…}}``."""
+    parts, depth, start, i = [], 0, 0, 0
+    while i < len(text):
+        two = text[i:i + 2]
+        if two in ("[[", "{{"):
+            depth, i = depth + 1, i + 2
+            continue
+        if two in ("]]", "}}"):
+            depth, i = max(0, depth - 1), i + 2
+            continue
+        if depth == 0 and text.startswith(sep, i):
+            parts.append(text[start:i])
+            i += len(sep)
+            start = i
+            continue
+        i += 1
+    parts.append(text[start:])
+    return parts
+
+
+def _cells(line: str) -> list[str]:
+    """Raw cell values of one table line, attributes ("style=… |") removed."""
+    out = []
+    # Header lines separate cells with "!!" by the book, but some lists use "||".
+    parts = _split_top(line[1:], "||")
+    if line.startswith("!"):
+        parts = [q for p in parts for q in _split_top(p, "!!")]
+    for raw in parts:
+        head = _split_top(raw, "|")
+        if len(head) > 1 and "=" in head[0]:
+            raw = "|".join(head[1:])
+        out.append(raw.strip())
+    return out
+
+
+def _clean(raw: str) -> str:
+    raw = _CONVERT.sub(lambda m: f"{m.group(1).strip()} {m.group(2).strip()}", raw)
+    raw = re.sub(r"<ref[^>]*/>|<ref[^>]*>.*?</ref>", "", raw, flags=re.S)
+    return re.sub(r"\s+", " ", mwparserfromhell.parse(raw).strip_code()).strip()
+
+
+def list_census(text: str, list_year: int | None = None) -> list[dict[str, Any]]:
+    """One record per tornado row in every confirmed-tornado table of a list page.
+
+    Columns are mapped from each table's own header row, because the layout
+    changed over the years: until about 2012 the date sits in a ``!colspan``
+    title row and the state in separator rows (``|colspan=7|[[Colorado]]``)
+    rather than a column; around 2015 the summary moved from a column into a
+    separate "expand-child" row. The NCEI event ids are read from the references
+    wherever they are. The date comes from the caption or title row ("List of
+    confirmed tornadoes – Wednesday, April 27, 2011"), with the list's year when
+    it gives none.
+    """
+    rows: list[dict[str, Any]] = []
+    headings = [(m.start(), m.group(2)) for m in _HEADING_RE.finditer(text)]
+    for match in re.finditer(r"^\{\|.*?^\s*\|\}", text, re.S | re.M):
+        # MediaWiki tolerates leading spaces on table lines; so must we.
+        table = "\n".join(l.lstrip() for l in match.group(0).split("\n"))
+        lines = table.split("\n")
+        caption = next((l for l in lines if l.startswith("|+")
+                        or (l.startswith("!") and "colspan" in l and "tornadoes" in l.lower())), "")
+        m = _CAPTION_DATE.search(mwparserfromhell.parse(caption).strip_code())
+        if not m:
+            # No caption: the date is in the heading above ("===July 4 event===").
+            above = [h for pos, h in headings if pos < match.start()]
+            m = _CAPTION_DATE.search(above[-1]) if above else None
+        date = None
+        if m and (m.group(3) or list_year):
+            date, _ = parse_cite_date(f"{m.group(1)} {m.group(2)}, {m.group(3) or list_year}")
+        chunks = re.split(r"^\|-(.*)$", table, flags=re.M)
+        # Some years put the header straight after the caption, with no "|-"
+        # before it, so it sits in the preamble rather than in a row of its own.
+        preamble = [l for l in chunks[0].split("\n") if l.startswith("!")]
+        header: list[str] = [_clean(c).lower() for l in preamble for c in _cells(l)]
+        if not any(CENSUS_FIELDS.get(h) == "rating" for h in header):
+            header = []                                    # a title row, not the header
+        current: dict[str, Any] | None = None
+        section_state = ""
+        # chunks = [preamble, attrs1, body1, attrs2, body2, …]
+        for attrs, body in zip(chunks[1::2], chunks[2::2]):
+            cell_lines = [l for l in body.split("\n") if l[:1] in ("|", "!")
+                          and not l.startswith(("|}", "|+"))]
+            if not cell_lines:
+                continue
+            if not header and all(l.startswith("!") for l in cell_lines) and \
+                    not any("scope=\"row\"" in l for l in cell_lines):
+                header = [_clean(c).lower() for l in cell_lines for c in _cells(l)]
+                if not any(CENSUS_FIELDS.get(h) == "rating" for h in header):
+                    break                                  # not a tornado table
+                continue
+            if "expand-child" in attrs and current is not None:
+                text_ = " ".join(_clean(c) for l in cell_lines for c in _cells(l))
+                current["summary"] = (current.get("summary", "") + " " + text_).strip()
+                current["ncei_event_ids"] |= set(_NCEI_ID.findall(body))
+                continue
+            values = [c for l in cell_lines for c in _cells(l)]
+            if not header or not values:
+                continue
+            if len(values) == 1 and "colspan" in body:     # a state separator row
+                section_state = _clean(values[0])
+                continue
+            record: dict[str, Any] = {"date": date, "ncei_event_ids": set(_NCEI_ID.findall(body))}
+            for name, raw in zip(header, values):
+                field = CENSUS_FIELDS.get(name)
+                if field == "start_coord":
+                    c = _COORD.search(raw)
+                    record["lat"], record["lon"] = (float(c.group(1)), float(c.group(2))) if c else (None, None)
+                elif field == "rating":
+                    r = _RATING.search(_clean(raw))
+                    record["rating"] = r.group(1) if r else ""
+                elif field:
+                    record[field] = _clean(raw)
+            if not record.get("rating"):
+                continue
+            record.setdefault("state", section_state)
+            states = set(re.findall(r"\b[A-Z]{2}\b", record.get("state", "")))
+            record["is_us"] = bool(states & US_STATE_ABBR) or any(
+                s in record.get("state", "") for s in US_STATES)
+            rows.append(record)
+            current = record
+    for r in rows:
+        r["ncei_event_ids"] = "|".join(sorted(r["ncei_event_ids"]))
+    return rows
 
 
 # ── references ───────────────────────────────────────────────────────────────

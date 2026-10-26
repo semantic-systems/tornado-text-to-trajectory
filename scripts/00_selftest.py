@@ -274,6 +274,58 @@ def wikipedia_references_keep_their_section() -> None:
     assert wikipedia.parse_cite_date("April 2011") == ("2011-04-01", "month")
 
 
+def yearly_sections_keep_us_events_only() -> None:
+    text = ("== Events ==\n=== United States ===\nYear overview in Kansas.\n"
+            "== April ==\n=== April 9–11 (United States) ===\nAn EF3 struck Waxia, Louisiana.\n"
+            "=== April 17 (Indonesia) ===\nA tornado in Java.\n"
+            "== August ==\n=== August 29 – September 2 (Hurricane Ida) ===\n"
+            "Tornadoes in Maryland and New Jersey.\n"
+            "=== September 9 (Typhoon Chanthu) ===\nA waterspout off Taiwan.\n")
+    secs = wikipedia.yearly_sections(text)
+    assert [(s["heading"], s["us_basis"]) for s in secs] == [
+        ("April 9–11 (United States)", "region"),
+        ("August 29 – September 2 (Hurricane Ida)", "storm_prose")], secs
+    assert wikipedia.classify({"title": "Tornadoes of 2021", "templates": set()}) == "yearly"
+
+
+def census_reads_all_three_list_layouts() -> None:
+    old = ("{| class=\"wikitable\"\n|+ List of confirmed tornadoes – Thursday, May 2, 2013\n|-\n"
+           "! EF# !! Location !! County !! State !! Start Coord. !! Time (UTC) !! Path length "
+           "!! Max width !! Summary\n|-\n|bgcolor=#ccc | EF0\n|NE of [[Boca Raton, Florida|Boca Raton]]\n"
+           "|[[Palm Beach County, Florida|Palm Beach]]\n|[[Florida|FL]]\n|{{Coord|26.37|-80.08}}\n"
+           "|1725 – 1727\n|{{convert|0.4|mi|km}}\n|{{convert|50|yd|m}}\n|Roof damage."
+           "<ref>{{cite web|url=https://www.ncei.noaa.gov/access/storm-events-database/event-details/454080}}</ref>\n|}")
+    new = ("{| class=\"wikitable\"\n|+ List of confirmed tornadoes – Wednesday, May 1, 2024\n"
+           "! scope=\"col\" |[[Enhanced Fujita scale|EF#]]\n! Location\n! County / Parish\n! State\n"
+           "! Start Coord.\n! Time (UTC)\n! Path length\n! Max width\n|-\n"
+           "! scope=\"row\" rowspan=\"2\" style=\"background-color:#{{#invoke:Storm categories|color|unk}}\" | EF3\n"
+           "|S of [[Fort Stockton, Texas|Fort Stockton]]\n|[[Pecos County, Texas|Pecos]]\n|[[Texas|TX]]\n"
+           "|{{#invoke:Coordinates|coord|30.87|-102.89}}\n|18:52–18:57\n|unknown\n|unknown\n"
+           "|- class=\"expand-child\"\n| colspan=\"8\" style=\"x\" |A landspout.<ref>"
+           "{{cite report|url=https://www.ncei.noaa.gov/access/storm-events-database/event-details/1175793}}</ref>\n|}")
+    oldest = ("{| class=\"wikitable collapsible\"\n"
+              "!colspan=\"7\"|List of reported tornadoes - Saturday, July 2, 2011\n"
+              "|-\n! [[Enhanced Fujita scale|EF#]] || Location || County || Coord. || Time (UTC) "
+              "|| Path length || Comments/Damage\n|-\n|colspan=\"7\" align=center|[[Colorado]]\n|-\n"
+              "|bgcolor=#{{storm colour|storm}} | " + "'" * 3 + "EF0" + "'" * 3 + "\n"
+              "|SW of [[Akron, Colorado|Akron]]\n|[[Washington County, Colorado|Washington]]\n"
+              "|{{Coord|40.15|-103.20}}\n|2311\n|unknown\n|Brief touchdown.\n|}")
+    c, = wikipedia.list_census(oldest, 2011)
+    assert (c["rating"], c["date"], c["state"], c["county"], c["summary"], c["is_us"]) == (
+        "EF0", "2011-07-02", "Colorado", "Washington", "Brief touchdown.", True), c
+    undated = "===July 4 event===\n" + old.replace(
+        "|+ List of confirmed tornadoes – Thursday, May 2, 2013\n", "").replace("! EF#", " ! EF#")
+    d, = wikipedia.list_census(undated, 2012)
+    assert d["date"] == "2012-07-04", "date from the heading above; indented header still read"
+    a, = wikipedia.list_census(old, 2013)
+    b, = wikipedia.list_census(new, 2024)
+    assert (a["rating"], a["date"], a["county"], a["state"], a["lat"], a["path_length"],
+            a["ncei_event_ids"]) == ("EF0", "2013-05-02", "Palm Beach", "FL", 26.37, "0.4 mi", "454080"), a
+    assert (b["rating"], b["date"], b["location"], b["lon"], b["summary"], b["ncei_event_ids"],
+            b["is_us"]) == ("EF3", "2024-05-01", "S of Fort Stockton", -102.89, "A landspout.",
+                            "1175793", True), b
+
+
 def outlet_names_match_only_their_own_paper() -> None:
     import pandas as pd
 
@@ -321,6 +373,8 @@ for name, fn in [
     ("wikipedia sections are per tornado", wikipedia_sections_are_per_tornado),
     ("wikipedia pages are classified and scoped", wikipedia_pages_are_classified_and_scoped),
     ("wikipedia references keep their section", wikipedia_references_keep_their_section),
+    ("yearly sections keep US events only", yearly_sections_keep_us_events_only),
+    ("census reads all three list layouts", census_reads_all_three_list_layouts),
     ("outlet names match only their own paper", outlet_names_match_only_their_own_paper),
     ("content tier sees through a new headline", content_tier_sees_through_a_new_headline),
 ]:
