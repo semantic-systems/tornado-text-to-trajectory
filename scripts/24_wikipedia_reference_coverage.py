@@ -46,6 +46,7 @@ from tornado_dataset.text import wikipedia as wp
 from tornado_dataset.text.lexisnexis import textref_uid
 
 PAGES_CSV = config.INTERIM_DIR / "wikipedia_pages.csv"
+SECTIONS_CSV = config.INTERIM_DIR / "wikipedia_sections.csv"
 REFS_CSV = config.INTERIM_DIR / "wikipedia_refs.csv"
 ARTICLES_CSV = config.INTERIM_DIR / "wikipedia_news_articles.csv"
 MATCHES_CSV = config.INTERIM_DIR / "wikipedia_ref_matches.csv"
@@ -388,21 +389,29 @@ def write_report(articles, refs, matches, titled, content, lexis) -> None:
               "fixed list of national outlets; local broadcast = a call-sign domain.", ""]
     lines += breakdown("outlet_type", "outlet type")
 
-    # Event level: does each page / tornado section have at least one held article?
-    exploded = articles.assign(passage=articles.sections.str.split(" \\| ")).explode("passage")
-    per_page = articles.assign(page=articles.pages.str.split(" \\| ")).explode("page")
-    page_cov = per_page.groupby("page").matched_strong.any()
-    sec = exploded[exploded.passage.str.contains(" > ", na=False)]
-    sec_cov = sec.groupby("passage").matched_strong.any()
-    lines += [
-        "## Coverage per event",
-        "",
-        f"- **Pages:** {page_cov.sum()} of {len(page_cov)} pages that cite news "
-        f"({page_cov.mean():.0%}) have at least one cited article in LexisNexis.",
-        f"- **Per-tornado sections:** {sec_cov.sum()} of {len(sec_cov)} outbreak sections "
-        f"that cite news ({sec_cov.mean() if len(sec_cov) else 0:.0%}) do.",
-        "",
-    ]
+    # Event level: does each text unit have at least one held article? Read from
+    # the per-reference table, where every citation keeps its page and section.
+    news = refs[refs.ref_class == "news"].copy()
+    news["article_key"] = [rc.article_key(u, t, w) for u, t, w in
+                           zip(news.url, news.title, news.work)]
+    news["held"] = news.article_key.map(articles.set_index("article_key").matched_strong)
+    cited = news.assign(section=news.sections.str.split(" \\| ")).explode("section")
+    cited["unit"] = cited.page_title + " § " + cited.section
+    page_cov = news.groupby("page_title").held.any()
+    sections = pd.read_csv(SECTIONS_CSV, keep_default_na=False)
+    sections["unit"] = sections.page_title + " § " + sections.parent + " > " + sections.heading
+    unit_cov = cited.groupby("unit").held.any()
+    lines += ["## Coverage per event", "",
+              f"- **Pages:** {page_cov.sum()} of {len(page_cov)} pages that cite news "
+              f"({page_cov.mean():.0%}) have at least one cited article in LexisNexis."]
+    for kind, label in (("tornado", "per-tornado outbreak sections"),
+                        ("yearly_event", "yearly event sections")):
+        cov = unit_cov[unit_cov.index.isin(sections[sections.section_type == kind].unit)]
+        total = (sections.section_type == kind).sum()
+        lines.append(f"- **{label[0].upper() + label[1:]}:** {len(cov)} of {total} cite news; "
+                     f"{cov.sum()} of those ({cov.mean() if len(cov) else 0:.0%}) have at "
+                     "least one cited article in LexisNexis.")
+    lines.append("")
 
     # Is a miss the matcher's fault or the export's? If LexisNexis holds nothing
     # from that outlet within ±3 days, no matcher could have found it.
