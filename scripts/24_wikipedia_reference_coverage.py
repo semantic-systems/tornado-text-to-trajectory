@@ -227,7 +227,7 @@ def write_handcheck(articles: pd.DataFrame, matches: pd.DataFrame,
     Never overwrites a sheet that already carries labels.
     """
     if HANDCHECK_CSV.exists():
-        prior = pd.read_csv(HANDCHECK_CSV, keep_default_na=False)
+        prior = pd.read_csv(HANDCHECK_CSV, keep_default_na=False, encoding="utf-8-sig")
         if "label" in prior and (prior.label != "").any():
             print(f"  {HANDCHECK_CSV.name} already has labels — left untouched")
             return
@@ -253,8 +253,11 @@ def write_handcheck(articles: pd.DataFrame, matches: pd.DataFrame,
 
     cited = articles.set_index("article_key")
     lex = lexis.drop_duplicates("textref_uid").set_index("textref_uid")
+    # label and notes lead, so long ledes cannot spill over the cells to fill in.
     sheet = pd.DataFrame({
         "row_id": key.row_id,
+        "label": "",
+        "notes": "",
         "cited_title": key.article_key.map(cited.title),
         "cited_outlet": key.article_key.map(cited.work.where(cited.work != "", cited.domain)),
         "cited_date": key.article_key.map(cited.pub_date),
@@ -264,11 +267,11 @@ def write_handcheck(articles: pd.DataFrame, matches: pd.DataFrame,
         "lexis_source": key.textref_uid.map(lex.source),
         "lexis_date": key.textref_uid.map(lex.pub_date),
         "lexis_lede": key.textref_uid.map(lex.body).map(_lede),
-        "label": "",
-        "notes": "",
     })
     HANDCHECK_CSV.parent.mkdir(parents=True, exist_ok=True)
-    sheet.to_csv(HANDCHECK_CSV, index=False)
+    # With a byte-order mark, Excel reads the file as UTF-8; without one it
+    # guesses a legacy encoding and turns every dash and curly quote to mojibake.
+    sheet.to_csv(HANDCHECK_CSV, index=False, encoding="utf-8-sig")
     key.to_csv(HANDCHECK_KEY, index=False)
 
 
