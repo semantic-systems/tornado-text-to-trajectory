@@ -1,6 +1,6 @@
 # Wikipedia reference coverage — LexisNexis
 
-Generated 2026-10-29T22:34:21+00:00 by `scripts/24_wikipedia_reference_coverage.py match`.
+Generated 2026-10-29T22:39:18+00:00 by `scripts/24_wikipedia_reference_coverage.py match`.
 
 > **Question.** Of the news articles English Wikipedia cites about US tornadoes (2010–2025), how many are in our LexisNexis export (22,896 distinct articles)? Wikipedia's editors chose these without reference to our corpus, so the share is a recall estimate the corpus cannot give about itself — recall on *what Wikipedia cites*, which leans to national, wire and online sources.
 
@@ -177,7 +177,7 @@ Cited without a publication name on a domain that is not NWS, government, social
 |:-------------------|--------:|-------:|---------------:|------------:|---------:|:----------------------|
 | `title_outlet`     |      20 |     16 |              4 |           0 |        0 | 100.0% (83.9%–100.0%) |
 | `title_syndicated` |      20 |     17 |              3 |           0 |        0 | 100.0% (83.9%–100.0%) |
-| `content`          |      20 |     14 |              2 |           4 |        0 | 80.0% (58.4%–91.9%)   |
+| `content`          |      20 |     15 |              4 |           1 |        0 | 95.0% (76.4%–99.1%)   |
 | `title_fuzzy`      |      10 |      4 |              1 |           4 |        1 | 55.6% (26.7%–81.1%)   |
 
 Precision counts `same_article` and `same_article_edited` as correct and leaves `unsure` out. Where two articles were the same, the labeller found the difference almost always in the front matter — a dateline ("JACKSON, Miss. (AP) —"), the headline repeated as the first line, or a lead-in sentence ("The following information was released by …:"). None of that moves a match: the title tiers compare headlines, and a prefix touches only the first few of a text's hundreds of shingles.
@@ -188,13 +188,10 @@ Full-text overlap in both directions (unsampled 8-word shingles). Where both are
 
 | row   | tier          | cited text found in LexisNexis   | LexisNexis text found in cited   | both ≥ 50%   |
 |:------|:--------------|:---------------------------------|:---------------------------------|:-------------|
-| h008  | `content`     | 77%                              | 78%                              | yes          |
 | h014  | `content`     | 91%                              | 6%                               |              |
 | h019  | `title_fuzzy` | 20%                              | 36%                              |              |
-| h029  | `content`     | 74%                              | 82%                              | yes          |
 | h033  | `title_fuzzy` | 8%                               | 8%                               |              |
 | h039  | `title_fuzzy` | 36%                              | 39%                              |              |
-| h042  | `content`     | 82%                              | 80%                              | yes          |
 | h098  | `title_fuzzy` | 0%                               | 0%                               |              |
 
 ### Misses
@@ -205,8 +202,8 @@ Of 28 judgeable sampled misses, **1** was the cited article after all (3.6% (0.6
 
 | | raw (strong tiers) | adjusted for precision and misses |
 |---|---|---|
-| overall | 4.5% | 4.2% |
-| in universe | 18.1% | 17.8% |
+| overall | 4.5% | 4.5% |
+| in universe | 18.1% | 18.7% |
 
 A point estimate only: it carries the hand-check's sampling error, which at 20 pairs per tier is several points either way. `title_fuzzy` stays out of the count at a measured precision of 56%.
 
