@@ -180,7 +180,7 @@ def match(args) -> None:
     articles.to_csv(ARTICLES_CSV, index=False)
 
     write_handcheck(articles, matches, lexis, texts)
-    write_report(articles, refs, matches, titled, content, lexis)
+    write_report(articles, refs, matches, titled, content, lexis, texts)
     write_manifest(config.PROCESSED_DIR / "manifest_wikipedia_reference_coverage.json",
                    "24_wikipedia_reference_coverage",
                    counts={"references": len(refs), "news_articles": len(articles),
@@ -286,7 +286,139 @@ def _table(df: pd.DataFrame) -> str:
     return df.to_markdown(index=False)
 
 
-def write_report(articles, refs, matches, titled, content, lexis) -> None:
+CORRECT_LABELS = ("same_article", "same_article_edited")
+
+
+def _overlap(cited: str, held: str) -> tuple[float, float]:
+    """Share of each text's 8-word shingles found in the other (unsampled)."""
+    a, b = rc.shingles(cited, sample=1), rc.shingles(held, sample=1)
+    shared = len(a & b)
+    return (shared / len(a) if a else 0.0, shared / len(b) if b else 0.0)
+
+
+def validation(articles: pd.DataFrame, lexis: pd.DataFrame, texts: dict[str, str],
+               missed: pd.DataFrame) -> list[str]:
+    """The hand-check, read back: precision per tier, the miss rate, and the
+    coverage figure adjusted by both."""
+    sheet_path = (HANDCHECK_CSV.relative_to(config.REPO_ROOT)
+                  if HANDCHECK_CSV.is_relative_to(config.REPO_ROOT) else HANDCHECK_CSV)
+    lines = [
+        "## Validation",
+        "",
+        f"`{sheet_path}` is blind: each row pairs a cited article with one LexisNexis "
+        "article, and the tier that proposed the pair is in "
+        "`data/interim/wikipedia_ref_handcheck_key.csv`, not on the sheet. Up to 20 "
+        "pairs per tier measure each tier's precision; 30 pairs are a miss with its "
+        "nearest same-outlet candidate, which measures what the matcher leaves behind. "
+        "Labels: `same_article`, `same_article_edited` (the same piece in another "
+        "version — print edit, update, trimmed wire copy), `different_article`, `unsure`.",
+        "",
+    ]
+    labelled = None
+    if HANDCHECK_CSV.exists() and HANDCHECK_KEY.exists():
+        sheet = pd.read_csv(HANDCHECK_CSV, keep_default_na=False, encoding="utf-8-sig")
+        if "label" in sheet and (sheet.label != "").any():
+            labelled = pd.read_csv(HANDCHECK_KEY).merge(
+                sheet[["row_id", "label", "notes"]], on="row_id")
+    if labelled is None:
+        return lines + ["**Not yet labelled.** Until it is, the tiers' precision is "
+                        "unmeasured and the coverage figures above are unadjusted.", ""]
+    unknown = set(labelled.label) - set(CORRECT_LABELS) - {"different_article", "unsure", ""}
+    if unknown:
+        raise SystemExit(f"hand-check has unknown labels: {sorted(unknown)}")
+
+    judged = labelled[labelled.label.isin(CORRECT_LABELS + ("different_article",))]
+    judged = judged.assign(correct=judged.label.isin(CORRECT_LABELS))
+    precision = {}
+    rows = []
+    for tier in rc.TIERS:
+        t = judged[judged.tier == tier]
+        precision[tier] = t.correct.mean() if len(t) else float("nan")
+        rows.append({"tier": f"`{tier}`",
+                     "pairs": int((labelled.tier == tier).sum()),
+                     "same": int((t.label == "same_article").sum()),
+                     "same, edited": int((t.label == "same_article_edited").sum()),
+                     "different": int((t.label == "different_article").sum()),
+                     "unsure": int(((labelled.tier == tier) & (labelled.label == "unsure")).sum()),
+                     "precision": _share(int(t.correct.sum()), len(t))})
+    lines += ["### Precision per tier", "", _table(pd.DataFrame(rows)), "",
+              "Precision counts `same_article` and `same_article_edited` as correct and "
+              "leaves `unsure` out. Where two articles were the same, the labeller found "
+              "the difference almost always in the front matter — a dateline "
+              "(\"JACKSON, Miss. (AP) —\"), the headline repeated as the first line, or "
+              "a lead-in sentence (\"The following information was released by …:\"). "
+              "None of that moves a match: the title tiers compare headlines, and a "
+              "prefix touches only the first few of a text's hundreds of shingles.", ""]
+
+    # A "different" label on a pair whose full texts largely coincide is usually
+    # a rewritten top (wire write-through, live-updated page) that the 80-word
+    # lede on the sheet could not show.
+    store = articles.set_index("article_key").url
+    body = lexis.drop_duplicates("textref_uid").set_index("textref_uid").body
+    disputed = []
+    for r in judged[~judged.correct & (judged.tier != "unmatched")].itertuples():
+        fwd, rev = _overlap(texts.get(store.get(r.article_key, ""), ""),
+                            body.get(r.textref_uid, ""))
+        disputed.append({"row": r.row_id, "tier": f"`{r.tier}`",
+                         "cited text found in LexisNexis": f"{fwd:.0%}",
+                         "LexisNexis text found in cited": f"{rev:.0%}",
+                         "both ≥ 50%": "yes" if min(fwd, rev) >= 0.5 else ""})
+    if disputed:
+        lines += ["### Pairs labelled different", "",
+                  "Full-text overlap in both directions (unsampled 8-word shingles). "
+                  "Where both are high, the pair is likely one story with a rewritten "
+                  "opening — a wire write-through or a live page at another update — "
+                  "which the lede on the sheet hides; such rows are worth a second look "
+                  "at the full text.", "",
+                  _table(pd.DataFrame(disputed)), ""]
+
+    # Misses: the sample was drawn from dated in-universe misses that have a
+    # same-outlet LexisNexis article within a week — the frame counted here.
+    lex_days = lexis.assign(day=pd.to_datetime(lexis.pub_date, errors="coerce"))
+    by_source = {s: g.day.dropna().values for s, g in lex_days.groupby("source")}
+    week = pd.Timedelta(days=config.WIKI_REF_FUZZY_DATE_DAYS)
+
+    def candidate(row) -> bool:
+        day = pd.Timestamp(row.pub_date)
+        return any(((by_source[s] >= (day - week).to_datetime64())
+                    & (by_source[s] <= (day + week).to_datetime64())).any()
+                   for s in row.lexis_sources.split("|") if s in by_source)
+
+    frame = int(missed.apply(candidate, axis=1).sum()) if len(missed) else 0
+    miss = judged[judged.tier == "unmatched"]
+    miss_rate = miss.correct.mean() if len(miss) else 0.0
+    lines += ["### Misses", "",
+              f"Of {len(miss)} judgeable sampled misses, **{int(miss.correct.sum())}** "
+              f"{'was' if miss.correct.sum() == 1 else 'were'} the cited article after all ({_share(int(miss.correct.sum()), len(miss))}). "
+              f"The sample frame — dated in-universe citations with no match but a "
+              f"same-outlet LexisNexis article within ±{config.WIKI_REF_FUZZY_DATE_DAYS} "
+              f"days — holds {frame}, so about **{miss_rate * frame:.0f}** held articles "
+              "go unmatched there. Citations outside the frame have no candidate to miss.",
+              ""]
+
+    # Adjusted coverage: each strong match counts with the precision of the most
+    # precise tier that found it; the estimated misses are added back.
+    strong = [t for t in rc.STRONG_TIERS if precision.get(t) == precision.get(t)]
+    p = articles[strong].mul(pd.Series({t: precision[t] for t in strong})).max(axis=1)
+    expected = p.where(articles.matched_strong, 0.0)
+    n, uni = len(articles), articles.in_universe
+    found = miss_rate * frame
+    lines += ["### Adjusted coverage", "",
+              "| | raw (strong tiers) | adjusted for precision and misses |",
+              "|---|---|---|",
+              f"| overall | {articles.matched_strong.mean():.1%} | "
+              f"{(expected.sum() + found) / n:.1%} |",
+              f"| in universe | {articles[uni].matched_strong.mean():.1%} | "
+              f"{(expected[uni].sum() + found) / max(int(uni.sum()), 1):.1%} |",
+              "",
+              "A point estimate only: it carries the hand-check's sampling error, which "
+              "at 20 pairs per tier is several points either way. `title_fuzzy` stays "
+              f"out of the count at a measured precision of {precision['title_fuzzy']:.0%}.",
+              ""]
+    return lines
+
+
+def write_report(articles, refs, matches, titled, content, lexis, texts) -> None:
     n = len(articles)
     uni = articles[articles.in_universe]
     lines = [
@@ -341,8 +473,8 @@ def write_report(articles, refs, matches, titled, content, lexis) -> None:
         f"**The headline figure is the third row** (`title_outlet` + "
         f"`title_syndicated` + `content`): **{_share(int(articles.matched_strong.sum()), n)} "
         f"overall, {_share(int(uni.matched_strong.sum()), len(uni))} in universe.** "
-        "`title_fuzzy` is the weak tier and is reported, not counted, until the "
-        "hand-check measures its precision.",
+        "`title_fuzzy` is the weak tier and is reported, not counted; "
+        "the Validation section gives its precision and the adjusted figure.",
         "",
     ]
     retrieved = int(articles.text_retrieved.sum())
@@ -472,18 +604,8 @@ def write_report(articles, refs, matches, titled, content, lexis) -> None:
               "conservative and the denominator slightly small.", "",
               ", ".join(f"{d} ({c})" for d, c in other.domain.value_counts().head(25).items()),
               ""]
+    lines += validation(articles, lexis, texts, missed)
     lines += [
-        "## Validation",
-        "",
-        f"`{HANDCHECK_CSV.relative_to(config.REPO_ROOT) if HANDCHECK_CSV.is_relative_to(config.REPO_ROOT) else HANDCHECK_CSV}` "
-        "is blind: each row pairs a cited article with one LexisNexis article, and the "
-        "tier that proposed the pair is in `data/interim/wikipedia_ref_handcheck_key.csv`, "
-        "not on the sheet. Up to 20 pairs per tier measure each tier's precision; 30 "
-        "pairs are a miss with its nearest same-outlet candidate, which measures what "
-        "the matcher leaves behind. Labels: `same_article`, `same_article_edited` (the "
-        "same piece in another version — print edit, update, trimmed wire copy), "
-        "`different_article`, `unsure`.",
-        "",
         "## Limitations",
         "",
         "1. **Recall on what Wikipedia cites**, not on tornado news. Editors cite "
@@ -495,7 +617,8 @@ def write_report(articles, refs, matches, titled, content, lexis) -> None:
         "4. **Outlet identity is inferred** from names and domains. A Wikipedia "
         "citation of a Gannett paper may be held in LexisNexis under a different "
         "masthead; the content tier is what catches those.",
-        "5. **Nothing here is validated against humans until the hand-check is filled.**",
+        "5. **The hand-check is small** (20 pairs per tier, one labeller) and was judged "
+        "from 80-word ledes; its intervals are wide, and the adjusted figure inherits them.",
     ]
     REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

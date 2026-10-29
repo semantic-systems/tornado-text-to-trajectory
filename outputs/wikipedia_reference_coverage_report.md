@@ -1,6 +1,6 @@
 # Wikipedia reference coverage — LexisNexis
 
-Generated 2026-10-26T11:52:35+00:00 by `scripts/24_wikipedia_reference_coverage.py match`.
+Generated 2026-10-29T22:34:21+00:00 by `scripts/24_wikipedia_reference_coverage.py match`.
 
 > **Question.** Of the news articles English Wikipedia cites about US tornadoes (2010–2025), how many are in our LexisNexis export (22,896 distinct articles)? Wikipedia's editors chose these without reference to our corpus, so the share is a recall estimate the corpus cannot give about itself — recall on *what Wikipedia cites*, which leans to national, wire and online sources.
 
@@ -30,7 +30,7 @@ Only `news` enters the denominator. The 5,395 news references are **4,832 distin
 | `content`          |         192 |              105 | 4.5% (4.0%–5.1%)       | 18.1% (15.3%–21.3%)        |
 | `title_fuzzy`      |          10 |                4 | 4.6% (4.0%–5.2%)       | 18.8% (15.9%–22.0%)        |
 
-Rows are cumulative in the order shown; 95% Wilson intervals in brackets. **The headline figure is the third row** (`title_outlet` + `title_syndicated` + `content`): **4.5% (4.0%–5.1%) overall, 18.1% (15.3%–21.3%) in universe.** `title_fuzzy` is the weak tier and is reported, not counted, until the hand-check measures its precision.
+Rows are cumulative in the order shown; 95% Wilson intervals in brackets. **The headline figure is the third row** (`title_outlet` + `title_syndicated` + `content`): **4.5% (4.0%–5.1%) overall, 18.1% (15.3%–21.3%) in universe.** `title_fuzzy` is the weak tier and is reported, not counted; the Validation section gives its precision and the adjusted figure.
 
 ### The content tier
 
@@ -171,10 +171,49 @@ Cited without a publication name on a domain that is not NWS, government, social
 
 `outputs/annotation/wikipedia_ref_handcheck.csv` is blind: each row pairs a cited article with one LexisNexis article, and the tier that proposed the pair is in `data/interim/wikipedia_ref_handcheck_key.csv`, not on the sheet. Up to 20 pairs per tier measure each tier's precision; 30 pairs are a miss with its nearest same-outlet candidate, which measures what the matcher leaves behind. Labels: `same_article`, `same_article_edited` (the same piece in another version — print edit, update, trimmed wire copy), `different_article`, `unsure`.
 
+### Precision per tier
+
+| tier               |   pairs |   same |   same, edited |   different |   unsure | precision             |
+|:-------------------|--------:|-------:|---------------:|------------:|---------:|:----------------------|
+| `title_outlet`     |      20 |     16 |              4 |           0 |        0 | 100.0% (83.9%–100.0%) |
+| `title_syndicated` |      20 |     17 |              3 |           0 |        0 | 100.0% (83.9%–100.0%) |
+| `content`          |      20 |     14 |              2 |           4 |        0 | 80.0% (58.4%–91.9%)   |
+| `title_fuzzy`      |      10 |      4 |              1 |           4 |        1 | 55.6% (26.7%–81.1%)   |
+
+Precision counts `same_article` and `same_article_edited` as correct and leaves `unsure` out. Where two articles were the same, the labeller found the difference almost always in the front matter — a dateline ("JACKSON, Miss. (AP) —"), the headline repeated as the first line, or a lead-in sentence ("The following information was released by …:"). None of that moves a match: the title tiers compare headlines, and a prefix touches only the first few of a text's hundreds of shingles.
+
+### Pairs labelled different
+
+Full-text overlap in both directions (unsampled 8-word shingles). Where both are high, the pair is likely one story with a rewritten opening — a wire write-through or a live page at another update — which the lede on the sheet hides; such rows are worth a second look at the full text.
+
+| row   | tier          | cited text found in LexisNexis   | LexisNexis text found in cited   | both ≥ 50%   |
+|:------|:--------------|:---------------------------------|:---------------------------------|:-------------|
+| h008  | `content`     | 77%                              | 78%                              | yes          |
+| h014  | `content`     | 91%                              | 6%                               |              |
+| h019  | `title_fuzzy` | 20%                              | 36%                              |              |
+| h029  | `content`     | 74%                              | 82%                              | yes          |
+| h033  | `title_fuzzy` | 8%                               | 8%                               |              |
+| h039  | `title_fuzzy` | 36%                              | 39%                              |              |
+| h042  | `content`     | 82%                              | 80%                              | yes          |
+| h098  | `title_fuzzy` | 0%                               | 0%                               |              |
+
+### Misses
+
+Of 28 judgeable sampled misses, **1** was the cited article after all (3.6% (0.6%–17.7%)). The sample frame — dated in-universe citations with no match but a same-outlet LexisNexis article within ±7 days — holds 161, so about **6** held articles go unmatched there. Citations outside the frame have no candidate to miss.
+
+### Adjusted coverage
+
+| | raw (strong tiers) | adjusted for precision and misses |
+|---|---|---|
+| overall | 4.5% | 4.2% |
+| in universe | 18.1% | 17.8% |
+
+A point estimate only: it carries the hand-check's sampling error, which at 20 pairs per tier is several points either way. `title_fuzzy` stays out of the count at a measured precision of 56%.
+
 ## Limitations
 
 1. **Recall on what Wikipedia cites**, not on tornado news. Editors cite online, national and wire sources; local print is under-represented.
 2. **The universe is a proxy** (outlets present in our export), which makes in-universe recall optimistic. Overall recall is the conservative figure.
 3. **Undated citations** are matched within their outlet and event year only, and cannot reach the syndicated tier.
 4. **Outlet identity is inferred** from names and domains. A Wikipedia citation of a Gannett paper may be held in LexisNexis under a different masthead; the content tier is what catches those.
-5. **Nothing here is validated against humans until the hand-check is filled.**
+5. **The hand-check is small** (20 pairs per tier, one labeller) and was judged from 80-word ledes; its intervals are wide, and the adjusted figure inherits them.
