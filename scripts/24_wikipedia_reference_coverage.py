@@ -52,6 +52,9 @@ ARTICLES_CSV = config.INTERIM_DIR / "wikipedia_news_articles.csv"
 MATCHES_CSV = config.INTERIM_DIR / "wikipedia_ref_matches.csv"
 HANDCHECK_CSV = config.OUTPUT_DIR / "annotation" / "wikipedia_ref_handcheck.csv"
 HANDCHECK_KEY = config.INTERIM_DIR / "wikipedia_ref_handcheck_key.csv"   # tier per row
+# The labels joined to the key, without article text, so they can live in git
+# (the sheet and the key cannot: the sheet quotes the articles).
+HANDCHECK_LABELS = config.OUTPUT_DIR / "annotation" / "wikipedia_ref_handcheck_labels.csv"
 STORE = config.RAW_DIR / "wikipedia" / "ref_fulltext.jsonl"
 LEXIS_JSONL = config.OUTPUT_DIR / "lexisnexis_articles.jsonl"
 REPORT = config.OUTPUT_DIR / "wikipedia_reference_coverage_report.md"
@@ -320,6 +323,11 @@ def validation(articles: pd.DataFrame, lexis: pd.DataFrame, texts: dict[str, str
         if "label" in sheet and (sheet.label != "").any():
             labelled = pd.read_csv(HANDCHECK_KEY).merge(
                 sheet[["row_id", "label", "notes"]], on="row_id")
+            urls = articles.set_index("article_key").url
+            labelled.insert(3, "cited_url", labelled.article_key.map(urls).fillna(""))
+            labelled.to_csv(HANDCHECK_LABELS, index=False)
+    if labelled is None and HANDCHECK_LABELS.exists():
+        labelled = pd.read_csv(HANDCHECK_LABELS, keep_default_na=False)
     if labelled is None:
         return lines + ["**Not yet labelled.** Until it is, the tiers' precision is "
                         "unmeasured and the coverage figures above are unadjusted.", ""]

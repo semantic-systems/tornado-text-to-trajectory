@@ -1,6 +1,6 @@
 # Wikipedia reference coverage — LexisNexis
 
-Generated 2026-10-29T22:39:18+00:00 by `scripts/24_wikipedia_reference_coverage.py match`.
+Generated 2026-10-29T22:53:49+00:00 by `scripts/24_wikipedia_reference_coverage.py match`.
 
 > **Question.** Of the news articles English Wikipedia cites about US tornadoes (2010–2025), how many are in our LexisNexis export (22,896 distinct articles)? Wikipedia's editors chose these without reference to our corpus, so the share is a recall estimate the corpus cannot give about itself — recall on *what Wikipedia cites*, which leans to national, wire and online sources.
 

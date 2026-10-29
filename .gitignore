@@ -22,6 +22,10 @@ venv/
 # Outputs: the reports ARE the findings and belong in git; the figures do not.
 /outputs/*
 !/outputs/*.md
+# Hand-check labels (ids and labels only, no article text)
+!/outputs/annotation/
+/outputs/annotation/*
+!/outputs/annotation/*_labels.csv
 /outputs/figures/
 
 # Scratch space, never shared
