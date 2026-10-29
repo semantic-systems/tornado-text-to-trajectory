@@ -34,6 +34,9 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 | 13, 20 pairwise overlap | **retired** to `legacy/` — superseded by stage 22, which counts all three in one unit. Their unique functions (the GDELT index probe, the label-agreement crosstab) are ported |
 | 22 corpus atlas | **complete.** All three corpora as a set. Run twice: `corpus_atlas_report.md` (collected) and `corpus_atlas_events_report.md` (**the usable subset — the one to read**) |
 | 21 full text | **pilot only.** Crawl built, verified resumable, never run |
+| 23 Wikipedia discovery | **complete.** 249 in-scope pages (113 tornado, 120 outbreak, 16 yearly), pinned revisions; list census of 20,535 rows with NCEI ids |
+| 24 Wikipedia reference coverage | **complete, hand-checked.** 4,832 cited news articles; 4.5% in LexisNexis overall, ~19% in universe. Labels in `outputs/annotation/wikipedia_ref_handcheck_labels.csv` |
+| 25 Wikipedia passages | **complete.** 855 text records (349 hazard-level, 506 episode-level). **Not linked to hazards yet** — needs `data/processed` from the server |
 
 ## Traps
 

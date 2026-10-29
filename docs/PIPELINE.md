@@ -475,3 +475,40 @@ tracking keys. Dropping the query wholesale merged `ktbb.com/post/?p=…` (454
 articles) and `tulsaworld.com/…/articlepath.aspx?id=…` (2,253) into single
 identifiers that then matched indiscriminately, fabricating 6,559 of 14,018
 Media Cloud ↔ GDELT edges.
+
+### Wikipedia — `scripts/23_…`, `24_…`, `25_…`
+
+English Wikipedia enters twice: as a text source, and as an outside yardstick for
+the news corpora. US tornadoes only, inside the dataset window.
+
+- **Stage 23 (discovery).** Finds the dedicated tornado articles, outbreak
+  articles and yearly "Tornadoes of <year>" pages through six independent
+  channels, pins each page to one revision and stores its wikitext. The "List of
+  … tornadoes" pages are parsed into a **census** (one row per confirmed
+  tornado, with its NCEI event id) — lookup only, never text, since a list row
+  paraphrases the NCEI narrative it cites.
+- **Stage 24 (reference coverage).** Every news article those pages cite is
+  matched against the LexisNexis export (title, syndicated title, full text via
+  publisher or archive.org). A blind hand-check measures each match tier;
+  `outputs/wikipedia_reference_coverage_report.md` has the figures, and the
+  labels are kept in `outputs/annotation/wikipedia_ref_handcheck_labels.csv`.
+- **Stage 25 (passages).** Cuts the pinned revisions into text records:
+  `tornado_article` and `tornado_section` (one tornado → hazard level),
+  `outbreak_overview` and `yearly_event` (→ episode level). Each record keeps the
+  text, revision permalink and licence (CC BY-SA 4.0, so the text may be stored),
+  the event date, infobox facts, the NCEI event ids its own references cite, and
+  the independence axes. Wikipedia is never the surveying organisation; a
+  revision at least 90 days after the event is `post_survey`, so these are
+  `independent_retrospective`. `derived_from_oracle` flags passages whose
+  citations are mostly NWS products — a provisional rule until the text can be
+  compared with the NCEI narratives.
+
+```bash
+python scripts/23_discover_wikipedia.py
+python scripts/24_wikipedia_reference_coverage.py extract
+python scripts/24_wikipedia_reference_coverage.py fetch      # resumable, hours
+python scripts/24_wikipedia_reference_coverage.py match
+python scripts/25_wikipedia_passages.py                      # no network
+```
+
+Linking the passages to DAT hazards is not done yet; it needs the hazard tables.

@@ -326,6 +326,35 @@ def census_reads_all_three_list_layouts() -> None:
                             "1175793", True), b
 
 
+def wikipedia_prose_keeps_path_numbers() -> None:
+    text = ("[[File:Track.png|thumb|left|Map of the track]]The tornado touched down at "
+            "{{convert|1|mi|km}} west of town, moved northeast on a "
+            "{{convert|13.85|mi|km|adj=on}} path with winds of {{convert|120|-|135|mph|abbr=on}}"
+            "{{sfn|NWS|2013}}<ref>{{cite web|url=x}}</ref>.\n"
+            "{{Tornado table start}}\n|-\n| EF1 || Town || 2.1 mi\n|}\nIt lifted near Moore.")
+    plain = wikipedia.plain_text(text)
+    assert plain == ("The tornado touched down at 1 mile west of town, moved northeast on a "
+                     "13.85-mile path with winds of 120–135 mph.\n\nIt lifted near Moore."), plain
+    assert wikipedia.path_cues(plain) == ["touchdown", "motion", "dimension", "lifting"]
+    assert wikipedia.first_date("as in the May 3, 1999 tornado, on May 20 it struck", 2013,
+                                within=("2013-05-19", "2013-06-02")) == "2013-05-20"
+
+
+def wikipedia_article_prose_drops_apparatus() -> None:
+    text = ("{{Infobox weather event|formed=May 20, 2013|path-length={{convert|13.85|mi|km}}}}"
+            "Lead about the outbreak.\n== Synopsis ==\nA trough.\n"
+            "== Confirmed tornadoes ==\nThere were 50.\n=== May 20 event ===\nA busy day.\n"
+            "=== Moore, Oklahoma ===\nThe tornado touched down.\n"
+            "== References ==\n{{Reflist}}\n== See also ==\n* Other\n")
+    whole, spans, _ = wikipedia.article_prose(text)
+    assert "References" not in whole and "Other" not in whole and "touched down" in whole, whole
+    overview, _, kept = wikipedia.article_prose(text, skip_tornado_sections=True)
+    assert "touched down" not in overview and "A busy day." in overview, overview
+    assert "Confirmed tornadoes > Moore, Oklahoma" not in kept
+    assert "Confirmed tornadoes > May 20 event" in kept and "(lead)" in kept
+    assert wikipedia.infobox(text) == {"formed": "May 20, 2013", "path_length": "13.85 miles"}
+
+
 def outlet_names_match_only_their_own_paper() -> None:
     import pandas as pd
 
@@ -375,6 +404,8 @@ for name, fn in [
     ("wikipedia references keep their section", wikipedia_references_keep_their_section),
     ("yearly sections keep US events only", yearly_sections_keep_us_events_only),
     ("census reads all three list layouts", census_reads_all_three_list_layouts),
+    ("wikipedia prose keeps path numbers", wikipedia_prose_keeps_path_numbers),
+    ("wikipedia article prose drops apparatus", wikipedia_article_prose_drops_apparatus),
     ("outlet names match only their own paper", outlet_names_match_only_their_own_paper),
     ("content tier sees through a new headline", content_tier_sees_through_a_new_headline),
 ]:

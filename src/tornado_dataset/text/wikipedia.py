@@ -512,19 +512,218 @@ def yearly_sections(text: str, *, with_text: bool = False) -> list[dict[str, Any
 
 
 def plain_text(text: str) -> str:
-    """Readable prose from wikitext: no refs, templates, tables, files or markup."""
+    """Readable prose from wikitext: no refs, tables, files or markup.
+
+    Templates are dropped except the few that carry words of the sentence —
+    above all ``{{convert}}``, which is how Wikipedia writes every path length
+    and width ("travelled {{convert|80|mi|km}}"); dropping it would delete the
+    numbers a path description is made of.
+    """
     text = re.sub(r"<ref[^>]*/>", "", text)
     text = re.sub(r"<ref[^>]*>.*?</ref>", "", text, flags=re.S)
     text = re.sub(r"\{\|.*?\|\}", "", text, flags=re.S)          # tables
+    text = re.sub(r"<gallery[^>]*>.*?</gallery>", "", text, flags=re.S | re.I)
+    text = re.sub(r"</?(?:noinclude|includeonly|onlyinclude)[^>]*>", "", text, flags=re.I)
     code = mwparserfromhell.parse(text)
     for template in code.filter_templates(recursive=False):
         try:
-            code.remove(template)
+            code.replace(template, render_inline(template))
         except ValueError:
             pass
+    for link in code.filter_wikilinks(recursive=False):    # images and their captions
+        if re.match(r"\s*:?\s*(?:File|Image)\s*:", str(link.title), re.I):
+            try:
+                code.remove(link)
+            except ValueError:
+                pass
     plain = code.strip_code(normalize=True, collapse=True)
     plain = re.sub(r"^\s*(?:File|Image):.*$", "", plain, flags=re.M)
-    return re.sub(r"[ \t]+", " ", plain).strip()
+    # Rows of a table opened by a template ({{Tornado table start}} … |}) escape
+    # the {| … |} rule; their lines start with table syntax, which prose never does.
+    plain = re.sub(r"^[ \t]*(?:[|!}]|\{\|).*$\n?", "", plain, flags=re.M)
+    plain = re.sub(r"\n{3,}", "\n\n", plain)
+    return re.sub(r"[ \t\xa0]+", " ", plain).strip()
+
+
+# Range words of {{convert|120|-|135|mph}}, as they read in the sentence.
+_CONVERT_RANGE = {"-": "–", "–": "–", "to": " to ", "and": " and ", "or": " or ",
+                  "x": " by ", "by": " by ", "+/-": " ± ", "&": " and ", "to(-)": " to "}
+UNIT_WORDS = {"mi": "miles", "km": "kilometers", "yd": "yards", "m": "meters",
+              "ft": "feet", "in": "inches", "cm": "centimeters", "mm": "millimeters",
+              "mph": "mph", "km/h": "km/h", "kn": "knots", "kmh": "km/h",
+              "sqmi": "square miles", "km2": "square kilometers", "acre": "acres",
+              "ha": "hectares", "lb": "pounds", "kg": "kilograms", "F": "°F", "C": "°C"}
+_SINGULAR = {"miles": "mile", "kilometers": "kilometer", "yards": "yard", "meters": "meter",
+             "feet": "foot", "inches": "inch", "acres": "acre"}
+_INLINE_TEXT = {"nowrap": 0, "nobr": 0, "abbr": 0, "lang": 1, "small": 0, "smaller": 0}
+
+
+def _positional(template) -> list[str]:
+    return [str(p.value).strip() for p in template.params if not p.showkey]
+
+
+def render_inline(template) -> str:
+    """What a template contributes to the sentence it sits in ("" for most)."""
+    name = str(template.name).strip().lower()
+    args = _positional(template)
+    if name in {"convert", "cvt"} and args:
+        if len(args) >= 3 and args[1].lower() in _CONVERT_RANGE:
+            number, unit = args[0] + _CONVERT_RANGE[args[1].lower()] + args[2], \
+                (args[3] if len(args) > 3 else "")
+        else:
+            number, unit = args[0], (args[1] if len(args) > 1 else "")
+        word = UNIT_WORDS.get(unit, unit)
+        adjective = template.has("adj") and str(template.get("adj").value).strip() == "on"
+        if number in {"1", "1.0"} or adjective:
+            word = _SINGULAR.get(word, word)
+        return f"{number}-{word}" if adjective and word else f"{number} {word}".strip()
+    if name in {"nbsp", "spaces"}:
+        return " "
+    if name in {"ndash", "snd"}:
+        return "–"
+    if name in {"blockquote", "quote", "quotation"}:
+        body = template.get("text").value if template.has("text") else (
+            template.params[0].value if template.params else "")
+        return plain_text(str(body))
+    if name in _INLINE_TEXT and len(args) > _INLINE_TEXT[name]:
+        return plain_text(args[_INLINE_TEXT[name]])
+    return ""
+
+
+# ── passages: the text units the dataset keeps ───────────────────────────────
+# Sections that are apparatus, not prose about the event.
+BOILERPLATE_SECTIONS = {
+    "see also", "references", "notes", "external links", "further reading",
+    "sources", "bibliography", "gallery", "footnotes", "citations", "works cited",
+    "explanatory notes", "notes and references", "references and notes", "note",
+}
+_MONTH_RE = ("January|February|March|April|May|June|July|August|September|"
+             "October|November|December")
+_DATE = re.compile(rf"\b({_MONTH_RE})\s+(\d{{1,2}})(?:\s*[–-]\s*(?:(?:{_MONTH_RE})\s+)?"
+                   rf"\d{{1,2}})?(?:,?\s*((?:19|20)\d{{2}}))?")
+_MONTH_NO = {m: i + 1 for i, m in enumerate(_MONTH_RE.split("|"))}
+
+
+def first_date(text: str, year: int | None = None, *,
+               within: tuple[str, str] | None = None) -> str | None:
+    """The first "Month D[, YYYY]" in ``text`` as an ISO date (start of a range).
+
+    A date without a year takes ``year``. With ``within`` (two ISO dates), dates
+    outside that window are passed over — prose compares a tornado with earlier
+    ones ("the 1991 Andover tornado"), and those dates are not its own.
+    """
+    import datetime as _dt
+    for m in _DATE.finditer(text or ""):
+        y = int(m.group(3)) if m.group(3) else year
+        if not y:
+            continue
+        try:
+            found = _dt.date(y, _MONTH_NO[m.group(1)], int(m.group(2))).isoformat()
+        except ValueError:
+            continue
+        if within is None or within[0] <= found <= within[1]:
+            return found
+    return None
+
+
+INFOBOX_FIELDS = {           # parameter → column; the first one present wins
+    "formed": "formed", "date": "formed", "dissipated": "dissipated",
+    "duration": "duration", "fujita-scale": "rating", "fujitascale": "rating",
+    "winds": "winds", "path-length": "path_length", "path-width": "path_width",
+    "width": "path_width", "fatalities": "fatalities", "deaths": "fatalities",
+    "injuries": "injuries", "tornadoes": "n_tornadoes", "damages": "damage",
+    "damage": "damage", "areas": "areas",
+}
+
+
+def infobox(text: str) -> dict[str, str]:
+    """Facts from the ``{{Infobox weather event}}`` family, as plain text."""
+    out: dict[str, str] = {}
+    for template in mwparserfromhell.parse(text).filter_templates(recursive=False):
+        if not str(template.name).strip().lower().startswith("infobox weather event"):
+            continue
+        for param in template.params:
+            column = INFOBOX_FIELDS.get(str(param.name).strip().lower())
+            value = plain_text(str(param.value))
+            if column and value and column not in out:
+                out[column] = value
+    return out
+
+
+def _flat_sections(text: str) -> Iterator[tuple[int, str, str]]:
+    """(level, heading, body) for the lead (level 0) and every section, flat."""
+    code = mwparserfromhell.parse(text)
+    for section in code.get_sections(include_lead=True, flat=True):
+        headings = section.filter_headings(recursive=False)
+        if headings and str(section).startswith(str(headings[0])):
+            h = headings[0]
+            yield h.level, h.title.strip_code().strip(), str(section)[len(str(h)):]
+        else:
+            yield 0, "", str(section)
+
+
+def article_prose(text: str, *, skip_tornado_sections: bool = False
+                  ) -> tuple[str, list[dict[str, Any]], set[str]]:
+    """The prose of a whole article, with where each section starts and ends.
+
+    Apparatus sections (references, see also, …) and tables are dropped.
+    ``skip_tornado_sections`` leaves out the per-tornado subsections of an
+    outbreak article — they are passages of their own — so what remains is the
+    outbreak's overview: lead, synopsis, impact, aftermath. Returns the text,
+    the section spans, and the "L2 > L3" paths that were kept (to attach the
+    references cited from them).
+    """
+    parts: list[str] = []
+    spans: list[dict[str, Any]] = []
+    kept: set[str] = set()
+    pos = 0
+    l2 = l3 = ""
+    skipping = False
+    for level, heading, body in _flat_sections(text):
+        if level == 2:
+            l2, l3 = heading, ""
+            skipping = heading.lower() in BOILERPLATE_SECTIONS
+        elif level == 3:
+            l3 = heading
+        if skipping:
+            continue
+        if (skip_tornado_sections and level >= 3 and l3
+                and l2.lower() in config.WIKIPEDIA_TORNADO_SECTION_PARENTS
+                and not _DAY_HEADING.match(l3)):
+            continue
+        prose = plain_text(body)
+        kept.add("(lead)" if level == 0 else (f"{l2} > {l3}" if l3 else l2))
+        if not prose:
+            continue
+        block = f"{heading}\n{prose}" if heading else prose
+        spans.append({"heading": heading or "(lead)", "level": level,
+                      "start": pos, "end": pos + len(block)})
+        parts.append(block)
+        pos += len(block) + 2
+    return "\n\n".join(parts), spans, kept
+
+
+# Cues that a passage traces a path rather than tallying an event. A heuristic
+# for the report, not a filter: a passage is path-like with three of the four.
+PATH_CUES = {
+    "touchdown": re.compile(r"\b(?:touched down|touching down|touchdown|formed|developed)\b", re.I),
+    "motion": re.compile(r"\b(?:(?:north|south)?(?:east|west)|north|south)(?:-?(?:north|south)?"
+                         r"(?:east|west))?(?:ward)?\b.{0,40}?\b(?:mov|track|travel|continu|"
+                         r"cross|head|curv|turn)|\b(?:mov|track|travel|continu|cross|head|curv|"
+                         r"turn)\w*\b.{0,40}?\b(?:north|south|east|west)", re.I),
+    "dimension": re.compile(r"\b\d+(?:\.\d+)?(?:[–-]\d+(?:\.\d+)?)?\s*(?:miles?|yards?|"
+                            r"kilometers?|meters?|feet|foot)\b", re.I),
+    "lifting": re.compile(r"\b(?:lifted|dissipated|roped out|ended)\b", re.I),
+}
+_RATING_MENTION = re.compile(r"\b(?:EF|IF|F)-?([0-5])\b")
+
+
+def path_cues(text: str) -> list[str]:
+    return [name for name, regex in PATH_CUES.items() if regex.search(text or "")]
+
+
+def ratings_mentioned(text: str) -> list[int]:
+    return sorted({int(m) for m in _RATING_MENTION.findall(text or "")})
 
 
 # ── list census ──────────────────────────────────────────────────────────────

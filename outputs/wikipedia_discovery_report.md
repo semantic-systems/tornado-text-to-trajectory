@@ -1,6 +1,6 @@
 # Wikipedia discovery — US tornado text sources and list census
 
-Generated 2026-10-26T11:15:42+00:00. Window 2010–2025, English Wikipedia, US only. Produced by `scripts/23_discover_wikipedia.py`.
+Generated 2026-10-29T23:20:37+00:00. Window 2010–2025, English Wikipedia, US only. Produced by `scripts/23_discover_wikipedia.py`.
 
 > **Scope.** Text sources are dedicated tornado articles, the per-tornado sections of outbreak articles, and the US event sections of the yearly `Tornadoes of <year>` pages. `List of …` pages are not text — their rows paraphrase the NCEI narrative they cite — but they are parsed into a census of every listed tornado, which is what the text sources are measured against.
 
@@ -10,15 +10,15 @@ Generated 2026-10-26T11:15:42+00:00. Window 2010–2025, English Wikipedia, US o
 
 | kind     |   pages |   median_words |
 |:---------|--------:|---------------:|
-| outbreak |     120 |           1886 |
-| tornado  |     113 |           2119 |
-| yearly   |      16 |           5123 |
+| outbreak |     120 |           1832 |
+| tornado  |     113 |           2063 |
+| yearly   |      16 |           5024 |
 
-The 120 outbreak articles hold **236 per-tornado sections** with a median of 519 words, 0 of them empty apart from a `{{Main}}` pointer or a table. 86 point to a dedicated article with `{{Main}}`, so a tornado can appear both as a section and as its own article. Linking will treat those as two texts about one hazard, not as two hazards.
+The 120 outbreak articles hold **236 per-tornado sections** with a median of 515 words, 0 of them empty apart from a `{{Main}}` pointer or a table. 86 point to a dedicated article with `{{Main}}`, so a tornado can appear both as a section and as its own article. Linking will treat those as two texts about one hazard, not as two hazards.
 
-Besides these, 246 **day sections** ("April 13 event") group the confirmed-tornado tables by day. 9 of them carry prose — a narrative over several tornadoes, linkable to an episode but not to one hazard; the rest are tables only.
+Besides these, 246 **day sections** ("April 13 event") group the confirmed-tornado tables by day. 0 of them carry prose — a narrative over several tornadoes, linkable to an episode but not to one hazard; the rest are tables only.
 
-The 16 yearly pages hold **386 US event sections** (90,169 words, median 190). Each is a narrative over one episode, usually several tornadoes; 244 have no `{{Main}}` article of their own, so for those episodes this is the only Wikipedia prose there is. US membership is read from the heading's region (330), or from the prose naming a state for storm-named or region-less events (56).
+The 16 yearly pages hold **386 US event sections** (87,599 words, median 183). Each is a narrative over one episode, usually several tornadoes; 244 have no `{{Main}}` article of their own, so for those episodes this is the only Wikipedia prose there is. US membership is read from the heading's region (330), or from the prose naming a state for storm-named or region-less events (56).
 
 ### By year
 
@@ -175,13 +175,13 @@ Pages by number of the 6 search channels that found them: 1 → 2, 2 → 3, 3 �
 
 No level-2 heading matched `config.WIKIPEDIA_TORNADO_SECTION_PARENTS`. Either the article describes its tornadoes in running prose only, or it uses a heading the parser does not know; the second kind is a fixable miss.
 
-- July 2011 Midwest derecho (2011, 631 words)
-- June 2012 North American derecho (2012, 2,364 words)
-- 2020 Midwest derecho (2020, 5,807 words)
-- November 2020 North American storm complex (2020, 700 words)
-- Tornado outbreak and derecho of December 15–16, 2021 (2021, 2,131 words)
-- February 2023 North American storm complex (2023, 3,227 words)
-- January 8–10, 2024 North American storm complex (2024, 1,709 words)
+- July 2011 Midwest derecho (2011, 639 words)
+- June 2012 North American derecho (2012, 2,274 words)
+- 2020 Midwest derecho (2020, 5,526 words)
+- November 2020 North American storm complex (2020, 708 words)
+- Tornado outbreak and derecho of December 15–16, 2021 (2021, 2,147 words)
+- February 2023 North American storm complex (2023, 3,244 words)
+- January 8–10, 2024 North American storm complex (2024, 1,720 words)
 
 ## Limitations
 

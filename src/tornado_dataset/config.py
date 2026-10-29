@@ -365,3 +365,15 @@ WIKI_REF_SHINGLE_SAMPLE = 8
 WIKI_REF_MIN_SHINGLES = 8          # ≈ 70 words of text before a containment means anything
 WIKI_REF_CONTENT_CONTAINMENT = 0.5
 WIKI_REF_CONTENT_DATE_DAYS = 14
+
+# ── Stage 25: Wikipedia passages ─────────────────────────────────────────────
+# A passage counts as post-survey when its pinned revision is at least this many
+# days after the event: NWS surveys finish within days and Storm Data is final
+# about two months after the month ends, so 90 days is past both.
+WIKI_SURVEY_LAG_DAYS = 90
+# Shorter passages are headings over a table, not prose.
+WIKI_MIN_PASSAGE_WORDS = 30
+# A passage is flagged derived_from_oracle when at least this share of the
+# references cited from it are NWS/NOAA products (provisional rule; the real
+# test, text overlap with the NCEI narrative, needs the hazard tables).
+WIKI_ORACLE_REF_SHARE = 0.5
