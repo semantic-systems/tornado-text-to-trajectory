@@ -216,9 +216,10 @@ def build() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
             "retrieval_status": r.get("status", "no_url" if not a.url else "not_attempted"),
             "retrieval_via": r.get("via", "") if text else "",
             "retrieval_error": r.get("error", "") if not text else "",
-            # Requested snapshot: archive.org redirects it to the capture
-            # nearest the publication date. The capture time was not recorded.
-            "wayback_snapshot_url": fulltext.wayback_url(a.url, a.pub_date or None)
+            # The snapshot stage 24 requested: archive.org redirects it to the
+            # capture nearest that date. The capture time was not recorded.
+            "wayback_snapshot_url": fulltext.wayback_url(
+                a.url, rc.fetch_date(a.pub_date, a.page_years) or None)
             if r.get("via") == "wayback" and text else "",
             "retrieved_at": r.get("retrieved_at", ""),
             "words": len(text.split()),
@@ -337,8 +338,8 @@ def write_report(frame: pd.DataFrame, cites: pd.DataFrame, xref: pd.DataFrame) -
         "",
         _count_table(text.retrieval_via, "via"),
         "",
-        "An archive.org copy is the capture nearest the publication date, but the capture "
-        "time itself was not recorded. A live page captured later shows up as a headline "
+        "An archive.org copy is the capture nearest the publication date (mid-year of the "
+        "event year for undated citations), but the capture time itself was not recorded. A live page captured later shows up as a headline "
         "mismatch (doubtful), which is the main risk.",
         "",
         "## Stories across outlets",

@@ -159,6 +159,18 @@ class OutletIndex:
 
 
 # ── references → the news-article unit ───────────────────────────────────────
+PRECISION_RANK = {"day": 0, "month": 1, "year": 2, "none": 3}
+
+
+def fetch_date(pub_date: str, page_years: str) -> str:
+    """The date the archive copy is requested for: the citation's own date, or
+    mid-year of the citing page's event year when the citation is undated."""
+    if pub_date:
+        return pub_date
+    years = [y for y in str(page_years or "").split("|") if y]
+    return f"{years[0]}-06-01" if years else ""
+
+
 def article_key(url: str, title: str, work: str) -> str:
     """One cited news article. URL where there is one, else outlet + headline
     (print citations); a story cited from three pages is one article."""
@@ -174,7 +186,10 @@ def news_articles(refs: pd.DataFrame) -> pd.DataFrame:
     news = refs[refs.ref_class == "news"].copy()
     news["article_key"] = [article_key(u, t, w) for u, t, w in
                            zip(news.url, news.title, news.work)]
-    first = news.sort_values(["date_precision", "pageid"]).groupby("article_key").first()
+    # The most precise citation date wins ("none" would sort before "year").
+    rank = news.date_precision.map(PRECISION_RANK).fillna(len(PRECISION_RANK))
+    first = news.assign(_rank=rank).sort_values(["_rank", "pageid"]) \
+        .groupby("article_key").first()
     agg = news.groupby("article_key").agg(
         n_pages=("pageid", "nunique"),
         pages=("page_title", lambda s: " | ".join(sorted(set(s)))),

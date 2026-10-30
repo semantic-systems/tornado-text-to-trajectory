@@ -102,7 +102,7 @@ def _items() -> list[dict]:
     articles = pd.read_csv(ARTICLES_CSV, keep_default_na=False)
     articles = articles[articles.url != ""]
     return [{"url": a.url,
-             "publish_date": a.pub_date or (a.page_years.split("|")[0] + "-06-01")}
+             "publish_date": rc.fetch_date(a.pub_date, a.page_years)}
             for a in articles.itertuples()]
 
 

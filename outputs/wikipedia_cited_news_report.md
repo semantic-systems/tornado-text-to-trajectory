@@ -1,6 +1,6 @@
 # News articles cited by Wikipedia
 
-Generated 2026-10-30T12:22:33+00:00 by `scripts/26_wikipedia_cited_news.py`.
+Generated 2026-10-30T13:51:54+00:00 by `scripts/26_wikipedia_cited_news.py`.
 
 The tornado pages cite **4,832 distinct news articles**. **218** are already in LexisNexis (strong match, stage 24) and get no second copy: they are listed in `data/processed/wikipedia_cited_lexisnexis.csv` with the LexisNexis `textref_uid`. The other **4,614** are new text records (`collection = wikipedia_citations`), **3,978 with text** (2,622,547 words, median 456), and **3,697 with text that checks out as the cited article**.
 
@@ -63,7 +63,7 @@ Text bodies stay in `data/processed/wikipedia_cited_news.jsonl` (gitignored): ne
 | direct  |       2487 | 63%     |
 | wayback |       1491 | 37%     |
 
-An archive.org copy is the capture nearest the publication date, but the capture time itself was not recorded. A live page captured later shows up as a headline mismatch (doubtful), which is the main risk.
+An archive.org copy is the capture nearest the publication date (mid-year of the event year for undated citations), but the capture time itself was not recorded. A live page captured later shows up as a headline mismatch (doubtful), which is the main risk.
 
 ## Stories across outlets
 
@@ -77,7 +77,7 @@ The 3,765 usable texts form **3,701 stories**; 52 stories have more than one cop
 
 ## Citation context
 
-5,112 (article, citing passage) pairs in `data/processed/wikipedia_cited_news_citations.csv`. Every article is cited from at least one stage 25 passage (a tornado article's passage takes all the page's references).
+5,112 (article, citing passage) pairs in `data/processed/wikipedia_cited_news_citations.csv`. Every article is cited from at least one stage 25 passage.
 
 | event date taken from   |   articles |
 |:------------------------|-----------:|

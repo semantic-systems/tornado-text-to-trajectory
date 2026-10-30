@@ -385,6 +385,10 @@ def content_tier_sees_through_a_new_headline() -> None:
                           "body": [body + " Local reaction followed.", "An unrelated budget story. " * 30]})
     best = refcoverage.ShingleIndex(lexis).best(body)
     assert best["textref_uid"] == "a" and best["containment"] > 0.9, best
+    # The archive copy is requested for the citation's date, else mid-year.
+    assert refcoverage.fetch_date("2021-12-11", "2021") == "2021-12-11"
+    assert refcoverage.fetch_date("", "2013|2014") == "2013-06-01"
+    assert refcoverage.fetch_date("", "") == ""
 
 
 def wikipedia_dates_and_infobox_groups() -> None:
