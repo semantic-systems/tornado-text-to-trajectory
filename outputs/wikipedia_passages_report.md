@@ -1,6 +1,6 @@
 # Wikipedia passages
 
-Generated 2026-10-29T23:21:06+00:00 by `scripts/25_wikipedia_passages.py`.
+Generated 2026-10-30T12:20:24+00:00 by `scripts/25_wikipedia_passages.py`.
 
 **855 passages, 641,715 words** from 249 pinned revisions, each a text record in `data/processed/wikipedia_textrefs.csv` (text in `data/processed/wikipedia_passages.jsonl`). Wikipedia is CC BY-SA 4.0; every record carries its revision permalink and licence.
 

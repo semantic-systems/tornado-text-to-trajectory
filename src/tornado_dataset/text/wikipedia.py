@@ -587,6 +587,14 @@ def render_inline(template) -> str:
         return plain_text(str(body))
     if name in _INLINE_TEXT and len(args) > _INLINE_TEXT[name]:
         return plain_text(args[_INLINE_TEXT[name]])
+    if name in {"start date", "start date and age", "end date", "end date and age"} and args:
+        # {{start date|2020|8|10}} or {{start date and age|August 10, 2020}}
+        parts = [a.strip() for a in args[:3]]
+        if all(p.isdigit() for p in parts) and len(parts) == 3 and 1 <= int(parts[1]) <= 12:
+            return f"{_MONTH_RE.split('|')[int(parts[1]) - 1]} {int(parts[2])}, {parts[0]}"
+        if len(parts) == 2 and all(p.isdigit() for p in parts) and 1 <= int(parts[1]) <= 12:
+            return f"{_MONTH_RE.split('|')[int(parts[1]) - 1]} {parts[0]}"
+        return parts[0] if not parts[0].isdigit() else " ".join(parts)
     return ""
 
 
@@ -599,26 +607,39 @@ BOILERPLATE_SECTIONS = {
 }
 _MONTH_RE = ("January|February|March|April|May|June|July|August|September|"
              "October|November|December")
-_DATE = re.compile(rf"\b({_MONTH_RE})\s+(\d{{1,2}})(?:\s*[–-]\s*(?:(?:{_MONTH_RE})\s+)?"
-                   rf"\d{{1,2}})?(?:,?\s*((?:19|20)\d{{2}}))?")
+# The day is one or two digits *not followed by another*: "February 2025" is
+# a month and a year, not February 20.
+_DATE = re.compile(rf"\b({_MONTH_RE})\s+(\d{{1,2}})(?!\d)(?:\s*[–-]\s*(?:(?:{_MONTH_RE})\s+)?"
+                   rf"\d{{1,2}}(?!\d))?(?:,?\s*((?:19|20)\d{{2}}))?")
+# Day-month-year, as some articles write it: "19 December 2013", "20–23 December".
+_DATE_DMY = re.compile(rf"(?<![\d–-])\b(\d{{1,2}})(?:\s*[–-]\s*\d{{1,2}})?\s+({_MONTH_RE})\b"
+                       rf"(?:,?\s*((?:19|20)\d{{2}}))?")
 _MONTH_NO = {m: i + 1 for i, m in enumerate(_MONTH_RE.split("|"))}
+
+
+def _date_matches(text: str):
+    """``(position, month, day, year or None)`` for both date orders, in text order."""
+    found = [(m.start(), m.group(1), m.group(2), m.group(3)) for m in _DATE.finditer(text)]
+    found += [(m.start(), m.group(2), m.group(1), m.group(3)) for m in _DATE_DMY.finditer(text)]
+    return sorted(found)
 
 
 def first_date(text: str, year: int | None = None, *,
                within: tuple[str, str] | None = None) -> str | None:
-    """The first "Month D[, YYYY]" in ``text`` as an ISO date (start of a range).
+    """The first "Month D[, YYYY]" (or "D Month YYYY") in ``text`` as an ISO
+    date (start of a range).
 
     A date without a year takes ``year``. With ``within`` (two ISO dates), dates
     outside that window are passed over — prose compares a tornado with earlier
     ones ("the 1991 Andover tornado"), and those dates are not its own.
     """
     import datetime as _dt
-    for m in _DATE.finditer(text or ""):
-        y = int(m.group(3)) if m.group(3) else year
+    for _, month, day, given in _date_matches(text or ""):
+        y = int(given) if given else year
         if not y:
             continue
         try:
-            found = _dt.date(y, _MONTH_NO[m.group(1)], int(m.group(2))).isoformat()
+            found = _dt.date(y, _MONTH_NO[month], int(day)).isoformat()
         except ValueError:
             continue
         if within is None or within[0] <= found <= within[1]:
@@ -627,23 +648,47 @@ def first_date(text: str, year: int | None = None, *,
 
 
 INFOBOX_FIELDS = {           # parameter → column; the first one present wins
-    "formed": "formed", "date": "formed", "dissipated": "dissipated",
+    "formed": "formed", "date": "date", "dissipated": "dissipated",
     "duration": "duration", "fujita-scale": "rating", "fujitascale": "rating",
-    "winds": "winds", "path-length": "path_length", "path-width": "path_width",
+    "fscale": "rating", "winds": "winds", "path-length": "path_length", "path-width": "path_width",
     "width": "path_width", "fatalities": "fatalities", "deaths": "fatalities",
     "injuries": "injuries", "tornadoes": "n_tornadoes", "damages": "damage",
     "damage": "damage", "areas": "areas",
 }
 
 
-def infobox(text: str) -> dict[str, str]:
-    """Facts from the ``{{Infobox weather event}}`` family, as plain text."""
-    out: dict[str, str] = {}
-    for template in mwparserfromhell.parse(text).filter_templates(recursive=False):
-        if not str(template.name).strip().lower().startswith("infobox weather event"):
+def infobox(text: str, prefer: str | None = None) -> dict[str, str]:
+    """Facts from the ``{{Infobox weather event}}`` family (and ``{{Infobox
+    derecho}}``), as plain text; the first box to give a field wins.
+
+    Boxes come in groups: a main box and the sub-boxes after it
+    (``…/Tornado``, ``…/Effects``). ``prefer`` (e.g. ``"/tornado"``) reads the
+    one group that holds such a sub-box first: a storm page about one tornado
+    has a group for the storm and one for the tornado, and its "formed" is the
+    tornado's. A main box's ``width`` is the image's, never the path's.
+    """
+    groups: list[list] = []
+    for t in mwparserfromhell.parse(text).filter_templates(recursive=False):
+        name = str(t.name).strip().lower()
+        if not name.startswith(("infobox weather event", "infobox derecho")):
             continue
+        if "/" not in name or not groups:
+            groups.append([])
+        groups[-1].append(t)
+    def _has(g):
+        return any(str(t.name).strip().lower().endswith(prefer) for t in g)
+    # Only a single such group is "the" tornado; with several (a tornado
+    # family), the page-level box summarises them and stays first.
+    if prefer and sum(map(_has, groups)) == 1:
+        groups.sort(key=lambda g: not _has(g))
+    out: dict[str, str] = {}
+    for template in (t for g in groups for t in g):
+        main = "/" not in str(template.name)
         for param in template.params:
-            column = INFOBOX_FIELDS.get(str(param.name).strip().lower())
+            key = str(param.name).strip().lower()
+            column = INFOBOX_FIELDS.get(key)
+            if main and key == "width":
+                continue
             value = plain_text(str(param.value))
             if column and value and column not in out:
                 out[column] = value

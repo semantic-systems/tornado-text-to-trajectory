@@ -47,6 +47,7 @@ import _bootstrap  # noqa: F401
 
 from tornado_dataset import config
 from tornado_dataset.ids import uid, write_manifest
+from tornado_dataset.text import refcoverage as rc
 from tornado_dataset.text import tiering
 from tornado_dataset.text import wikipedia as wp
 
@@ -81,8 +82,11 @@ def units(page, wikitext: str) -> list[dict]:
     out = []
     if page.kind == "tornado":
         text, spans, _ = wp.article_prose(wikitext)
-        box = wp.infobox(wikitext)
-        date, basis = wp.first_date(box.get("formed", ""), year), "infobox"
+        box = wp.infobox(wikitext, prefer="/tornado")
+        # The tornado's own "formed" before the page's "date", which on a storm
+        # page with a tornado sub-box is the storm's start.
+        date, basis = (wp.first_date(box.get("formed", ""), year)
+                       or wp.first_date(box.get("date", ""), year)), "infobox"
         if not date:
             date, basis = wp.first_date(page.title, year), "title"
         if not date and year:
@@ -94,6 +98,7 @@ def units(page, wikitext: str) -> list[dict]:
         text, spans, kept = wp.article_prose(wikitext, skip_tornado_sections=True)
         box = wp.infobox(wikitext)
         start = (wp.first_date(box.get("duration", ""), year)
+                 or wp.first_date(box.get("date", ""), year)
                  or wp.first_date(box.get("formed", ""), year))
         basis = "infobox"
         if not start:
@@ -199,6 +204,11 @@ def record(page, rev: dict, unit: dict, refs: pd.DataFrame) -> dict:
         "words": len(text.split()),
         "n_refs": len(refs), "n_nws_refs": int(nws.sum()),
         "n_news_refs": int(refs.ref_class.eq("news").sum()),
+        # The cited news articles, keyed as stage 24 keys them (stage 26 reads
+        # this back to know which passage cites which article).
+        "cited_article_keys": sorted({rc.article_key(u, t, w) for u, t, w, c in
+                                      zip(refs.url, refs.title, refs.work, refs.ref_class)
+                                      if c == "news"}),
         "ncei_event_ids": "|".join(ids), "n_ncei_ids": len(ids),
         "nws_ref_share": share,
         "derived_from_oracle": bool(share is not None and share >= config.WIKI_ORACLE_REF_SHARE),
@@ -348,7 +358,7 @@ def main() -> None:
     with PASSAGES_JSONL.open("w", encoding="utf-8") as fh:
         for row in frame.to_dict("records"):
             fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
-    frame.drop(columns=["text", "section_spans"]).to_csv(TEXTREFS_CSV, index=False)
+    frame.drop(columns=["text", "section_spans", "cited_article_keys"]).to_csv(TEXTREFS_CSV, index=False)
     write_report(frame, dropped)
     write_manifest(config.PROCESSED_DIR / "manifest_wikipedia_passages.json",
                    "25_wikipedia_passages",
