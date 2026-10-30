@@ -45,7 +45,7 @@ MODULES = [
     "tornado_dataset.text.linking", "tornado_dataset.text.matching",
     "tornado_dataset.text.corpora",
     "tornado_dataset.text.overlap", "tornado_dataset.text.wikipedia",
-    "tornado_dataset.text.refcoverage",
+    "tornado_dataset.text.refcoverage", "tornado_dataset.text.citednews",
 ]
 
 failures: list[str] = []
@@ -387,6 +387,59 @@ def content_tier_sees_through_a_new_headline() -> None:
     assert best["textref_uid"] == "a" and best["containment"] > 0.9, best
 
 
+def wikipedia_dates_and_infobox_groups() -> None:
+    assert wikipedia.first_date("February 2025 North American storm complex", 2025) is None
+    assert wikipedia.first_date("from 19 December 2013") == "2013-12-19"
+    assert wikipedia.first_date("May 20–23, 2019") == "2019-05-20"
+    assert wikipedia.plain_text("{{start date|2020|8|10}}") == "August 10, 2020"
+    storm = ("{{Infobox weather event|image=x.png|width=300|formed={{start date|2021|2|13}}}}"
+             "{{Infobox weather event/Winter storm|winds=65}}"
+             "{{Infobox weather event|name=Tornado|formed=February 15, 2021}}"
+             "{{Infobox weather event/Tornado|fujita-scale=EF3|width=880 yards}}")
+    assert wikipedia.infobox(storm)["formed"] == "February 13, 2021"
+    box = wikipedia.infobox(storm, prefer="/tornado")
+    assert box["formed"] == "February 15, 2021" and box["path_width"] == "880 yards", box
+    assert "path_width" not in wikipedia.infobox(storm.split("{{Infobox weather event/Tornado")[0])
+
+
+def cited_news_quality_flags() -> None:
+    from tornado_dataset.text import citednews as cn
+
+    body = ("Tornado rips through Pilger, killing one\nPILGER, Neb. - A tornado destroyed "
+            "much of the small town on Monday, officials said, as storms swept the state.")
+    assert cn.assess("Tornado rips through Pilger, killing one", "", body,
+                     "omaha.com")["text_quality"] == "good"
+    later = cn.assess("Two dead as storms hit Nebraska", "Pilger cleans up", body, "omaha.com")
+    assert later["text_quality"] == "doubtful" and "title_not_found" in later["quality_reasons"]
+    other = cn.assess("Tornado hits Pilger", "Car prices",
+                      "Why are car prices still so high? Dealers say supply is short.", "x.com")
+    assert other["text_quality"] == "unusable" and "different_article" in other["quality_reasons"]
+    wall = cn.assess("Tornado hits Pilger", "", "Before you continue to YouTube\nWe use "
+                     "cookies", "youtube.com")
+    assert wall["text_quality"] == "unusable" and "video_page" in wall["quality_reasons"]
+    victims = "Names of the victims\n" + "\n".join(f"- Person {i}" for i in range(20))
+    assert cn.assess("Names of the victims", "", victims, "x.com")["text_quality"] == "good"
+    assert cn.assess("Tornado hits Pilger", "", "", "x.com")["text_quality"] == "none"
+
+
+def cited_news_story_groups() -> None:
+    from tornado_dataset.text import citednews as cn
+
+    wire = ("A powerful tornado tore through the town late Wednesday destroying dozens of "
+            "homes along Main Street and injuring at least twelve people officials said "
+            "while crews searched the rubble overnight for anyone still trapped inside")
+    texts = {"a": wire, "b": "Local station adds a line. " + wire, "c": "Unrelated " * 40,
+             "d": wire}
+    pairs = cn.overlaps(texts)
+    assert pairs[("a", "b")][0] == 1.0
+    dates = {"a": "2014-06-16", "b": "2014-06-17", "c": "2014-06-16", "d": "2015-06-16"}
+    groups = cn.story_groups(list(texts), {k: "" for k in texts}, dates, pairs)
+    assert groups["a"][0] == groups["b"][0] != groups["c"][0], groups
+    assert groups["d"][0] != groups["a"][0], "a year apart is another story"
+    walls = cn.story_groups(list(texts), {k: "" for k in texts}, dates, pairs, exclude={"b"})
+    assert walls["a"][0] != walls["b"][0]
+
+
 for name, fn in [
     ("evidence windows reach late mentions", evidence_windows_reach_late_mentions),
     ("paywall stub is a failure, not an article", paywall_stub_is_a_failure_not_an_article),
@@ -408,6 +461,9 @@ for name, fn in [
     ("wikipedia article prose drops apparatus", wikipedia_article_prose_drops_apparatus),
     ("outlet names match only their own paper", outlet_names_match_only_their_own_paper),
     ("content tier sees through a new headline", content_tier_sees_through_a_new_headline),
+    ("wikipedia dates and infobox groups", wikipedia_dates_and_infobox_groups),
+    ("cited news quality flags", cited_news_quality_flags),
+    ("cited news story groups", cited_news_story_groups),
 ]:
     check(name, fn)
 

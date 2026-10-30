@@ -476,7 +476,7 @@ articles) and `tulsaworld.com/…/articlepath.aspx?id=…` (2,253) into single
 identifiers that then matched indiscriminately, fabricating 6,559 of 14,018
 Media Cloud ↔ GDELT edges.
 
-### Wikipedia — `scripts/23_…`, `24_…`, `25_…`
+### Wikipedia — `scripts/23_…` to `26_…`
 
 English Wikipedia enters twice: as a text source, and as an outside yardstick for
 the news corpora. US tornadoes only, inside the dataset window.
@@ -502,6 +502,16 @@ the news corpora. US tornadoes only, inside the dataset window.
   `independent_retrospective`. `derived_from_oracle` flags passages whose
   citations are mostly NWS products — a provisional rule until the text can be
   compared with the NCEI narratives.
+- **Stage 26 (cited news).** The cited news articles LexisNexis does not hold
+  become text records of their own (`collection = wikipedia_citations`), with
+  or without text; the ones it holds go to a cross-reference table with the
+  LexisNexis `textref_uid`. Each fetched text gets a `text_quality` (good ·
+  doubtful · unusable · none) from the cited headline and the known failure
+  pages (consent walls, site fronts, the same text back for different
+  citations, another article altogether); syndicated copies share a
+  `story_id`; the citing passages are written out as a long table, each with
+  its event date and NCEI ids, as link hints. Bodies stay in `data/`
+  (copyright); the timing axis is provisional until linking.
 
 ```bash
 python scripts/23_discover_wikipedia.py
@@ -509,6 +519,8 @@ python scripts/24_wikipedia_reference_coverage.py extract
 python scripts/24_wikipedia_reference_coverage.py fetch      # resumable, hours
 python scripts/24_wikipedia_reference_coverage.py match
 python scripts/25_wikipedia_passages.py                      # no network
+python scripts/26_wikipedia_cited_news.py                    # no network
 ```
 
-Linking the passages to DAT hazards is not done yet; it needs the hazard tables.
+Linking the passages and cited articles to DAT hazards is not done yet; it needs
+the hazard tables.

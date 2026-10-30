@@ -37,6 +37,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 | 23 Wikipedia discovery | **complete.** 249 in-scope pages (113 tornado, 120 outbreak, 16 yearly), pinned revisions; list census of 20,535 rows with NCEI ids |
 | 24 Wikipedia reference coverage | **complete, hand-checked.** 4,832 cited news articles; 4.5% in LexisNexis overall, ~19% in universe. Labels in `outputs/annotation/wikipedia_ref_handcheck_labels.csv` |
 | 25 Wikipedia passages | **complete.** 855 text records (349 hazard-level, 506 episode-level). **Not linked to hazards yet** — needs `data/processed` from the server |
+| 26 Wikipedia cited news | **complete.** 4,614 text records for cited articles not in LexisNexis (3,978 with text, 3,697 checked as the cited article); 218 cross-referenced to LexisNexis. Relevance labels and hazard links not done yet |
 
 ## Traps
 

@@ -84,6 +84,7 @@ python scripts/22_corpus_atlas.py --events-only  # all three corpora as a set
 python scripts/23_discover_wikipedia.py  # Wikipedia tornado pages + list census
 python scripts/24_wikipedia_reference_coverage.py match  # cited news vs LexisNexis (after extract, fetch)
 python scripts/25_wikipedia_passages.py  # Wikipedia passages as text records
+python scripts/26_wikipedia_cited_news.py  # news cited by Wikipedia, not in LexisNexis, as text records
 ```
 
 Stages 13 and 20 are retired — the three-way atlas (stage 22) replaces both;
