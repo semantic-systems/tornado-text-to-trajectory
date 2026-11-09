@@ -22,9 +22,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 
 | stage | state |
 |---|---|
-| 10–12, 16–17 DAT (fetch, link, hazards, geography, QA) | **complete.** 11,520 lines + 9,989 polygons → 11,316 hazards (1,475 from polygons alone; 300 lines and 1,076 polygons rated `TSTM/Wind` left out) in 3,172 episodes. Stages after 17 (geography, NWS text, GDELT, linking) still
-hold the 9,982 hazards from before polygon-only hazards and the wind rule until
-rerun — planned together with the episode switch. Geometry linker validated at 99.3% precision / 96.2% recall on the 289-polygon `path_guid` gold set |
+| 10–12, 16–17 DAT (fetch, link, hazards, geography, QA) | **complete.** 11,520 lines + 9,989 polygons → 11,316 hazards (1,475 from polygons alone; 300 lines and 1,076 polygons rated `TSTM/Wind` left out) in 2,585 episodes (stage 15: space-time 400 km / 6 h on SPC tracks, carried to DAT; 455 hazards with no SPC track stand alone). Stages from 16 on (geography, NWS text, GDELT, linking) were built on the 9,982 hazards and convective-day episodes from before, until rerun. Geometry linker validated at 99.3% precision / 96.2% recall on the 289-polygon `path_guid` gold set |
 | 13–14 Storm Events + SPC | **run, 2010–2025.** SPC's reviewed whole-track tornado file matched to DAT as the tornado-level reference (98.3% of Storm Events chains match one SPC track); NCEI Storm Events tornado rows chained into whole tornadoes through `TOR_OTHER_*` and cross-checked against SPC, matched to DAT hazards by space and time, episodes linked across offices where a tornado crossed between them; DAT completeness rises from 1% of tornadoes (2010) to 85% (2025) |
 | 35, 18–19 QA, analysis, map | 35 refreshed 12 Aug against the rebuilt GDELT tables; 18–19 read DAT tables that have not changed |
 | 20 NWS text (IEM) | **complete.** 15,687 LSRs + 14,956 survey products; 7,314 hazards (73.3%) have survey text |
@@ -58,7 +56,7 @@ and notes use the old numbers:
 | 08 | 35_qa_text | | 17 | 22_fetch_media_cloud | | 26 | 50_watch_systems |
 
 Old 13 and 20 (pairwise overlap) are `legacy/overlap_report.py` and
-`legacy/corpus_overlap.py`. Free number 15 is a planned stage (SPC-built episodes); 23 imports the
+`legacy/corpus_overlap.py`. 15 builds the episodes, which stage 12 built before; 23 imports the
 LexisNexis exports (was `python -m tornado_dataset.text.lexisnexis`). Old 24 is now split: 13 downloads,
 14 matches, and its report is part of 17's `events_qa_report.md`, which replaces
 `dat_qa_report.md` and `storm_events_report.md`.
@@ -87,8 +85,9 @@ gap, which is why 73% of 2012 was unmatched), daylight saving (±1 h) or the
 wrong date (±24 h). Stage 14's second pass links them (`link_method =
 time_repaired`, offset and cause on each link); ratings agree on 97% of them,
 as on the first pass, against 38% by chance. **DAT's `time_begin_utc` itself is
-not corrected** — anything that reads DAT times directly (stage 12's convective
-day, the news-timing analysis) still sees the wrong hour for these hazards.
+not corrected** — anything that reads DAT times directly (a hazard's own convective
+day, the news-timing analysis) still sees the wrong hour for these hazards;
+episodes, built on SPC times, are not affected.
 
 **DAT end times are often wrong — 561 of 9,982 hazards.** `time_end_utc` in the
 stage 12 tables is hand-entered and frequently carries a mistyped *date* with a
@@ -327,9 +326,10 @@ has to be recorded in the codebook version line and in the datasheet.
 
 ### 6. Episode definition
 
-Stage 12 groups tornadoes by SPC's convective day (1200–1159 UTC) and joins those
-within 200 km. The 12 UTC cut splits overnight outbreaks, and 200 km is a choice,
-not a measurement. Stage 51 compares the alternatives from the literature on the
+**Decided and built (stage 15):** space-time 400 km / 6 h on SPC tracks, carried to
+DAT hazards. What follows is the evidence. Episodes were first grouped by SPC's
+convective day (1200–1159 UTC), joining those within 200 km. The 12 UTC cut splits
+overnight outbreaks, and 200 km is a choice, not a measurement. Stage 51 compares the alternatives from the literature on the
 same hazards, scored against NCEI Storm Events episodes:
 
 ```bash
@@ -350,17 +350,15 @@ the overlapping-window KDE over-merge (episodes up to ~4,000 km and 226 h).
 which is what the watch reference is for.
 
 Grouping SPC's complete tornado list instead (`--anchor spc`) gives the same
-ranking: stage 12's rule 0.94–0.95 in every period. The low early recall on DAT
+ranking: the former convective-day rule 0.94–0.95 in every period. The low early recall on DAT
 (0.80 in 2010–2015) is therefore *not* missing tornadoes breaking outbreaks up:
 DAT's early sample is small (922 scored hazards) and dominated by three office
 episodes of 27 April 2011 (HUN, JAN, BMX) that run from the morning squall line
 before 12 UTC into the afternoon supercells, which the day rule cuts in two.
-Carried to DAT hazards, SPC-built episodes match stage 12's closely (ARI 0.95 for
-the same rule); 11% of DAT hazards have no SPC track and stand alone.
-**No change to
-stage 12 has been made**: the decision depends on what an episode is for, and
-changing it invalidates every `episode_uid` downstream (stage 31 links,
-annotation sheets).
+Carried to DAT hazards, SPC-built episodes matched the convective-day episodes
+closely (ARI 0.95 for the same rule). Switching invalidated every `episode_uid`
+downstream (stage 31 links, annotation sheets), which is why stages from 16 on
+need a rerun.
 
 Storm Events episodes cannot judge over-merging across offices. The planned
 next reference is SPC watch systems, built from county-level watch records:
@@ -374,13 +372,13 @@ Watch results (stage 50, 2010–2025): 10,040 watches; rules 1 and 3 reproduce
 98.9% of SPC's own "replaces" links; 74% of SPC tornadoes were in a watch
 (85–95% of EF2+). Watch systems are coarser than every grouping method and watch
 sequences finer, so stage 51 reads them as bounds. Against them (DAT anchor):
-stage 12 stays within systems (1.00) but keeps only 0.91 of sequence pairs
+the former rule stays within systems (1.00) but keeps only 0.91 of sequence pairs
 (0.81 on SPC tracks) — it cuts watch chains, mostly at 12 UTC; space-time
 400 km / 6 h scores 0.99 and 0.99; the overlapping-window KDE merges beyond
-systems (0.75). This agrees with the Storm Events result: the day boundary is
-stage 12's weakness. Still open: the hand checks (`python scripts/50_watch_systems.py sheets`, fill in
-`outputs/annotation/watch_*_sheet.csv`, then `check`) and the decision whether
-to change stage 12. `python scripts/50_watch_systems.py review` opens both
+systems (0.75). This agrees with the Storm Events result: the day boundary was
+the former rule's weakness. The outbreak hand checks are done (space-time 400/6
+and the time-only rule match 8 of 10); the watch-pair review stopped after 21
+pairs. `python scripts/50_watch_systems.py review` opens both
 worksheets on a map (http://127.0.0.1:8800) and saves the labels into them.
 The time-repaired DAT ↔ SPC pass (stage 14, built, tested on the real data in
 a scratch copy, not run by you) raises DAT hazards with an SPC track from 88.8%
@@ -391,7 +389,7 @@ hazards against a Storm Events reference extended through their SPC track
 (+687 hazards, the time-repaired ones; `--dat-reference direct` for the old
 reference): episodes built on SPC and carried to DAT keep their recall
 (space-time 400 km / 6 h 0.97), episodes built on DAT's own times lose it
-(0.97 → 0.95; stage 12's rule 0.92 → 0.90) — the cost of DAT's clock errors.
+(0.97 → 0.95; the former convective-day rule 0.92 → 0.90) — the cost of DAT's clock errors.
 
 ## If you change the pipeline
 

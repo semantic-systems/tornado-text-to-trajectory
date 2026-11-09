@@ -38,6 +38,7 @@ MODULES = [
     "tornado_dataset.dat.link", "tornado_dataset.dat.evaluate",
     "tornado_dataset.dat.hazards", "tornado_dataset.dat.storm_events",
     "tornado_dataset.dat.episodes", "tornado_dataset.dat.spc_tornadoes",
+    "tornado_dataset.dat.episode_table", "tornado_dataset.dat.references",
     "tornado_dataset.dat.spc_watches",
     "tornado_dataset.geo.gazetteer", "tornado_dataset.geo.pixels",
     "tornado_dataset.text.tiering", "tornado_dataset.text.iem",
@@ -82,11 +83,11 @@ scripts = sorted(p for p in (REPO / "scripts").glob("*.py")
                  if p.name[0].isdigit() or p.stem in ("_bootstrap", "viewer"))
 for path in scripts:
     check(path.name, lambda p=path: py_compile.compile(str(p), doraise=True))
-if len(scripts) < 28:
-    failures.append(f"only {len(scripts)} stage scripts found — expected 28 "
-                    "(00, 10-14, 16-23, 30-35, 40-43, 50-51, viewer, _bootstrap). "
+if len(scripts) < 29:
+    failures.append(f"only {len(scripts)} stage scripts found — expected 29 "
+                    "(00, 10-23, 30-35, 40-43, 50-51, viewer, _bootstrap). "
                     "Some are probably untracked.")
-    print(f"  FAIL  expected 28 stage scripts, found {len(scripts)}")
+    print(f"  FAIL  expected 29 stage scripts, found {len(scripts)}")
 
 # ── 2. configuration ────────────────────────────────────────────────────────
 print("\nconfiguration")
@@ -475,6 +476,39 @@ def episode_counts_cover_all_spc_tornadoes() -> None:
     assert c.n_spc_unrated.tolist() == [1, 0] and c.n_dat.tolist() == [1, 2], c
 
 
+def episodes_come_from_spc_and_keep_every_hazard() -> None:
+    """SPC groups carried to DAT; an unmatched hazard stands alone; no-DAT groups unpublished."""
+    import pandas as pd
+    from tornado_dataset.dat import episode_table as et
+    t = pd.to_datetime(["2020-04-12T11:00", "2020-04-12T13:00", "2020-05-01T20:00"], utc=True)
+    frame = pd.DataFrame({"hazard_uid": ["s1", "s2", "s3"], "t0": t, "t1": t,
+                          "convective_day": ["2020-04-11", "2020-04-12", "2020-05-01"],
+                          "mag": [1, -9, 2]})
+    tracks = pd.DataFrame({"spc_id": ["s1", "s2", "s3"], "fat": [1, 0, 0], "inj": [2, 0, 5]})
+    labels = pd.Series([0, 0, 1])                    # s1 + s2 one episode across 12 UTC
+    hazards = pd.DataFrame({"hazard_uid": ["h1", "h2", "h3"], "convective_day": ["2020-04-11"] * 3,
+                            "time_begin_utc": ["2020-04-12T11:00+00:00"] * 3,
+                            "time_end_utc": [None] * 3, "efscale": ["EF1", "EF2", "EF0"],
+                            "fatalities": [1, 0, 0], "injuries": [0, 0, 0],
+                            "wfo_all": ["OUN", "OUN;TSA", None]})
+    links = pd.DataFrame({"hazard_uid": ["h1", "h2"], "spc_id": ["s1", "s1"],
+                          "rank_for_hazard": [1, 1], "link_method": ["spatial_temporal_join",
+                                                                     "time_repaired"]})
+    episodes, member, grouping = et.build(frame, labels, tracks, hazards, links)
+    assert len(episodes) == 2 and member.hazard_uid.tolist() == ["h1", "h2", "h3"]
+    big = episodes[episodes.in_spc].iloc[0]
+    assert (big.n_dat, big.n_spc, big.n_spc_ef1plus, big.n_spc_unrated) == (2, 2, 1, 1), big
+    assert big.convective_days == "2020-04-11;2020-04-12" and big.max_efscale == "EF2"
+    assert big.wfos == "OUN;TSA" and big.spc_fatalities == 1
+    alone = episodes[~episodes.in_spc].iloc[0]
+    assert alone.hazard_uids == "h3" and alone.n_spc == 0
+    assert member.set_index("hazard_uid").spc_link_method.to_dict() == {
+        "h1": "spatial_temporal_join", "h2": "time_repaired", "h3": "none"}
+    assert grouping.set_index("spc_id").has_dat.to_dict() == {"s1": True, "s2": True, "s3": False}
+    again, _, _ = et.build(frame, labels, tracks, hazards.iloc[:2], links)
+    assert big.episode_uid in set(again.episode_uid), "episode ids rest on SPC tracks only"
+
+
 def accents_do_not_make_duplicates() -> None:
     """Bodies differing only in an accented letter are not verbatim duplicates."""
     import pandas as pd
@@ -704,6 +738,7 @@ for name, fn in [
     ("DAT reference extends through SPC", dat_reference_extends_through_spc),
     ("spc episodes carry to DAT hazards", spc_episodes_carry_to_dat_hazards),
     ("episode counts cover all SPC tornadoes", episode_counts_cover_all_spc_tornadoes),
+    ("episodes come from SPC and keep every hazard", episodes_come_from_spc_and_keep_every_hazard),
     ("accents do not make duplicates", accents_do_not_make_duplicates),
     ("wind features are not tornadoes", wind_features_are_not_tornadoes),
     ("unclaimed polygons become hazards", unclaimed_polygons_become_hazards),

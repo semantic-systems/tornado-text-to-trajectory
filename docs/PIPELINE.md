@@ -629,10 +629,29 @@ is: above 1, one tornado is in DAT more than once — typically a polygon-only
 hazard beside the line hazard of the same tornado, or a track drawn in separated
 pieces. They are flagged, not merged; stage 17 counts them.
 
+### Episodes — `scripts/15_build_episodes.py`
+
+Offline. Groups SPC's complete tornado list (stage 14's `spc_tornadoes.csv`) by
+single linkage within `config.EPISODE_MAX_DISTANCE_M` (400 km, closest points of
+the straight tracks) and `EPISODE_MAX_GAP_H` (6 h, end of one tornado to start of
+the next), with no day boundary — the rule stage 51 compared with the
+alternatives — and gives each DAT hazard the episode of its closest SPC track
+(stage 14's links, time-repaired and date-only ones included). A hazard with no
+SPC track is an episode of its own (`in_spc` false; 455 of 11,316). Only episodes
+holding a DAT hazard are published: `data/processed/episodes_<tag>.csv` (first
+and all convective days, SPC start and end, `n_dat`, `n_spc`, `n_spc_ef1plus`,
+`n_spc_unrated`, SPC and DAT casualties, offices, member IDs) and
+`hazard_episodes_<tag>.csv` (hazard → episode, its SPC track and how it was
+matched). `data/interim/spc_episodes_<tag>.csv` keeps the grouping of every SPC
+track. Episode IDs hash the method and the member SPC tracks, so they are stable
+across reruns. The hazards table carries no episode; stages read it through
+`episode_table.hazards_with_episodes` or `episode_of`. Stops if stage 14's
+outputs are missing rather than grouping DAT alone. Stage 17 reports the result.
+
 ### Comparing episode definitions — `scripts/51_compare_episodes.py`
 
-Offline and read-only towards the pipeline. Runs stage 12's rule (re-implemented
-and checked to reproduce its episodes exactly) and the alternatives in
+Offline and read-only towards the pipeline. Runs the former convective-day rule
+(200 km, `convective_day 200km`) and the alternatives in
 `tornado_dataset.dat.episodes` on the same hazards: space-time single linkage
 (no day boundary; with unlimited distance and a 6 h gap, a variant of the
 outbreak-sequence rule of Fuhrmann et al. 2014 — all ratings chain, the gap runs
@@ -651,7 +670,8 @@ DAT hazards — the complete, reviewed tornado list, so tornadoes DAT lacks cann
 cut an outbreak — scored against each track's closest Storm Events row. Its
 episodes are then carried to DAT hazards (each takes its closest SPC track's
 episode; a hazard without an SPC match is its own) and scored against the DAT
-reference, with the ARI against stage 12's published episodes. Outputs carry an
+reference, with the ARI against stage 15's published episodes — exactly 1 for
+`space_time 400km 6h`, the check that stage 15 publishes that rule. Outputs carry an
 `_spc` suffix. SPC geometry is a straight start→end line, so distances between
 long curved tracks are approximate.
 
@@ -661,8 +681,8 @@ No grouping applies a minimum size. `--anchor spc` therefore also writes
 and the DAT hazards carried into it (`n_dat`). These are the counts a dataset user
 cannot recompute from DAT, which lacks many SPC tornadoes; an outbreak threshold
 such as ≥6 EF1+ (Fuhrmann et al.) is a filter on them. The report shows what that
-threshold keeps per method. They become episode columns when stage 12 switches to
-SPC-built episodes.
+threshold keeps per method. For the published rule they are stage 15's episode
+columns.
 
 The DAT hazards' reference is their own Storm Events match, **extended through
 SPC** where they have none: DAT hazard → closest SPC track (including stage 14's
@@ -742,7 +762,7 @@ motion check.
 `sheets` writes the two hand checks to `outputs/annotation/` (instructions in
 `HOW_TO_ANNOTATE_watches.txt`): `watch_outbreak_sheet.csv` — each of the 10 named
 outbreaks (`NAMED_OUTBREAKS`) grouped nine ways on SPC tracks (watch systems and
-sequences, stage 12's rule, convective day 400 km, the 6 h time-gap rule (Fuhrmann variant),
+sequences, the former convective-day rule, convective day 400 km, the 6 h time-gap rule (Fuhrmann variant),
 space-time 400 km / 6 h, KDE per day 100 km and the overlapping-window KDE at
 50 and 100 km; `OUTBREAK_GROUPINGS`), blinded as groupings A–I — 90 labels —
 each to be labelled

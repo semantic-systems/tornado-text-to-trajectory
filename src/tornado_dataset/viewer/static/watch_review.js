@@ -201,7 +201,7 @@ function drawTimelineInto(svg, rows, maxH, L0) {
     out += `<line x1="${x(t)}" x2="${x(t)}" y1="14" y2="${Ht}"/><text x="${x(t) + 2}" y="11">${lab}</text>`;
   }
   if (S.mode !== 'review') {
-    // 12 UTC: where a convective day — and stage 12's rule — cuts.
+    // 12 UTC: where a convective day — and the former episode rule — cuts.
     for (let t = Math.ceil((lo - 12 * H) / (24 * H)) * 24 * H + 12 * H; t <= hi; t += 24 * H) {
       if (t < lo) continue;
       out += `<line class="cday" x1="${x(t)}" x2="${x(t)}" y1="14" y2="${Ht}"><title>12Z: convective-day boundary</title></line>`;

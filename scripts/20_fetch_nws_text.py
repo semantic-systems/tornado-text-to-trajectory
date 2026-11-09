@@ -32,6 +32,7 @@ from shapely import STRtree
 from shapely.geometry import LineString, Point
 
 from tornado_dataset import config
+from tornado_dataset.dat import episode_table
 from tornado_dataset.dat.geometry import to_equal_area, to_shapely
 from tornado_dataset.ids import uid, write_manifest
 from tornado_dataset.text import iem, tiering
@@ -41,6 +42,7 @@ def load_hazards(tag: str) -> list[dict]:
     """Hazards with geometry, projected geometry and their geography row."""
     path = config.PROCESSED_DIR / f"hazards_{tag}.geojson"
     features = json.loads(path.read_text(encoding="utf-8"))["features"]
+    episode_of = episode_table.episode_of(tag)
     geography_path = config.PROCESSED_DIR / f"hazard_geography_{tag}.csv"
     geography = {}
     if geography_path.exists():
@@ -60,7 +62,7 @@ def load_hazards(tag: str) -> list[dict]:
                   if len(c.split(",")[0].strip()) > 3}
         hazards.append({
             "uid": props["hazard_uid"],
-            "episode_uid": props.get("episode_uid"),
+            "episode_uid": episode_of.get(props["hazard_uid"]),
             "day": props.get("convective_day"),
             "begin": props.get("time_begin_utc"),
             "efscale": props.get("efscale"),

@@ -29,8 +29,8 @@ touch forming one hazard. Features whose rating says they are not a tornado
 both sides before any of this, so a wind polygon lying on a tornado track is not
 taken for that tornado's damage.
 
-Episodes group hazards by convective day (12Z-12Z, the NWS convention that keeps
-a night-time outbreak on one date) and spatial proximity.
+Episodes are not built here: stage 15 groups SPC's complete tornado list and
+carries the groups to these hazards (:mod:`.episode_table`).
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Iterable
 
-from shapely import STRtree, unary_union
+from shapely import STRtree
 from shapely.geometry import MultiPoint
 
 from .. import config
@@ -398,53 +398,3 @@ def build_polygon_hazards(polygons: list[dict[str, Any]], links: list[dict[str, 
     stats = {"polygons_without_link": len(free), "polygon_hazards": len(hazards),
              "polygon_hazards_date_only": sum(1 for h in hazards if not h["time_begin_utc"])}
     return hazards, stats
-
-
-# ── episode assembly ─────────────────────────────────────────────────────────
-def build_episodes(hazards: list[dict[str, Any]], *,
-                   link_distance_m: float = config.EPISODE_LINK_DISTANCE_M
-                   ) -> list[dict[str, Any]]:
-    """Cluster hazards of one convective day into spatially coherent outbreaks."""
-    by_day: dict[str, list[int]] = {}
-    for i, hazard in enumerate(hazards):
-        if hazard["convective_day"]:
-            by_day.setdefault(hazard["convective_day"], []).append(i)
-
-    episodes = []
-    for day, indices in sorted(by_day.items()):
-        geoms = []
-        for i in indices:
-            parts = hazards[i]["_proj"]
-            # Several parts: their convex hull (for lines, that of all vertices).
-            geoms.append(parts[0] if len(parts) == 1 else unary_union(parts).convex_hull)
-        uf = UnionFind(len(indices))
-        tree = STRtree(geoms)
-        for a, geom in enumerate(geoms):
-            for b in tree.query(geom.buffer(link_distance_m)):
-                if a != b and geom.distance(geoms[b]) <= link_distance_m:
-                    uf.union(a, b, "same_day_proximity")
-
-        for members in uf.groups().values():
-            member_hazards = [hazards[indices[m]] for m in members]
-            episode_uid = uid("episode", day, *[h["hazard_uid"] for h in member_hazards])
-            starts = [h["time_begin_utc"] for h in member_hazards if h["time_begin_utc"]]
-            ends = [h["time_end_utc"] for h in member_hazards if h["time_end_utc"]]
-            wfos = sorted({w for h in member_hazards for w in (h["wfo_all"] or "").split(";") if w})
-            for hazard in member_hazards:
-                hazard["episode_uid"] = episode_uid
-            episodes.append({
-                "episode_uid": episode_uid,
-                "hazard_family": "tornado",
-                "convective_day": day,
-                "time_begin_utc": min(starts) if starts else None,
-                "time_end_utc": max(ends) if ends else None,
-                "n_hazards": len(member_hazards),
-                "max_efscale": max((h["efscale"] for h in member_hazards if h["efscale"]),
-                                   key=ef_rank, default=None),
-                "fatalities": sum(h["fatalities"] or 0 for h in member_hazards),
-                "injuries": sum(h["injuries"] or 0 for h in member_hazards),
-                "wfos": ";".join(wfos),
-                "episode_method": "convective_day+spatial_proximity",
-                "hazard_uids": ";".join(h["hazard_uid"] for h in member_hazards),
-            })
-    return episodes

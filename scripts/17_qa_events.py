@@ -2,8 +2,8 @@
 
 Produces ``outputs/events_qa_report.md`` plus figures: what was downloaded from
 DAT, how lines and polygons were linked and how well (against the ``path_guid``
-gold set), the hazards and episodes built from them, and — once stages 13–14
-have run — how DAT compares with NCEI Storm Events and SPC's tornado database
+gold set), the hazards built from them and their episodes (stage 15), and — once
+stages 13–14 have run — how DAT compares with NCEI Storm Events and SPC's tornado database
 (completeness per year, episodes, the time-repaired matches). The report is
 written to be read by someone deciding whether to trust the dataset: every
 headline number is accompanied by its denominator, its confidence interval where
@@ -46,6 +46,32 @@ def ci(bounds: tuple[float, float]) -> str:
     return f"[{bounds[0]:.1%}, {bounds[1]:.1%}]"
 
 
+def episode_lines(episodes: pd.DataFrame | None) -> str:
+    """The episodes stage 15 built, for section 5."""
+    if episodes is None or "n_spc" not in episodes.columns:
+        return ("### Episodes\n\nNot available: run `scripts/15_build_episodes.py`, then "
+                "this stage again.\n")
+    spc = episodes[episodes.in_spc.astype(bool)]
+    days = episodes.convective_days.fillna("").str.count(";") + 1
+    sizes = spc.n_dat.describe(percentiles=[.5, .9])
+    return f"""### Episodes (stage 15)
+
+Stage 15 groups SPC's complete tornado list by single linkage within
+{config.EPISODE_MAX_DISTANCE_M / 1000:g} km and {config.EPISODE_MAX_GAP_H:g} h (no day boundary)
+and carries the groups to these hazards: **{len(episodes):,} episodes**,
+{len(spc):,} built from SPC tracks and {len(episodes) - len(spc):,} single hazards with no
+SPC track (`in_spc` false).
+
+| | value |
+|---|---:|
+| hazards per SPC-built episode, median / p90 / max | {sizes['50%']:.0f} / {sizes['90%']:.0f} / {sizes['max']:.0f} |
+| SPC tornadoes per SPC-built episode, max | {int(spc.n_spc.max()):,} |
+| episodes spanning several convective days | {int((days > 1).sum()):,} |
+| episodes with ≥6 EF1+ SPC tornadoes (Fuhrmann et al.'s threshold) | {int((spc.n_spc_ef1plus >= 6).sum()):,} |
+| SPC tornadoes / DAT hazards in the SPC-built episodes | {int(spc.n_spc.sum()):,} / {int(spc.n_dat.sum()):,} |
+"""
+
+
 def main() -> None:
     default_tag = f"{config.WINDOW_START.isoformat()}_{config.WINDOW_END.isoformat()}"
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -61,7 +87,8 @@ def main() -> None:
     candidates = pd.read_csv(config.INTERIM_DIR / f"dat_links_{tag}.csv")
     best = pd.read_csv(config.INTERIM_DIR / f"dat_links_best_{tag}.csv")
     hazards = pd.read_csv(config.PROCESSED_DIR / f"hazards_{tag}.csv")
-    episodes = pd.read_csv(config.PROCESSED_DIR / f"episodes_{tag}.csv")
+    episodes_csv = config.PROCESSED_DIR / f"episodes_{tag}.csv"
+    episodes = pd.read_csv(episodes_csv) if episodes_csv.exists() else None
     fetch_manifest = json.loads((config.INTERIM_DIR / f"manifest_fetch_{tag}.json").read_text())
     link_manifest = json.loads((config.INTERIM_DIR / f"manifest_link_{tag}.json").read_text())
     hazard_counts = json.loads((config.PROCESSED_DIR / f"manifest_hazards_{tag}.json")
@@ -187,6 +214,7 @@ used nowhere. {hazard_counts.get('polygons_in_polygon_hazards', 0):,} polygons w
 line form the {int(by_source.get('polygon', 0)):,} polygon-only hazards
 ({hazard_counts.get('polygon_hazards_date_only', 0):,} of them with a date but no time).
 """)
+    episodes_md = episode_lines(episodes)
     reference_lines = refs.report_lines(tag)
     references_md = "\n".join(reference_lines) if reference_lines is not None else (
         "Not available: run `scripts/13_fetch_references.py` and "
@@ -326,8 +354,7 @@ which is exactly why these metrics are not extrapolated to the full dataset.
 ## 5. Hazards and episodes
 
 {len(lines)} usable lines and {len(polygons)} usable polygons were assembled into
-**{len(hazards)} hazards** (one tornado each) grouped into **{len(episodes)} episodes**
-(convective day + spatial proximity).
+**{len(hazards)} hazards** (one tornado each).
 
 {sources_md}
 
@@ -343,6 +370,7 @@ Merge evidence for multi-line hazards (why segments were joined):
 
 {hazards[hazards.n_lines > 1].merge_evidence.fillna('(none recorded)').value_counts().rename_axis('evidence').reset_index(name='hazards').to_markdown(index=False)}
 
+{episodes_md}
 Hazards per year and polygon-field population: `figures/dat_coverage.png`.
 Calibration and operating points: `figures/dat_linker_evaluation.png`.
 

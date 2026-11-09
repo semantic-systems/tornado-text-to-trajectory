@@ -223,8 +223,7 @@ which is exactly why these metrics are not extrapolated to the full dataset.
 ## 5. Hazards and episodes
 
 11499 usable lines and 9815 usable polygons were assembled into
-**11316 hazards** (one tornado each) grouped into **3172 episodes**
-(convective day + spatial proximity).
+**11316 hazards** (one tornado each).
 
 | geometry | hazards | what it rests on |
 |---|---:|---|
@@ -264,6 +263,22 @@ Merge evidence for multi-line hazards (why segments were joined):
 | endpoint_gap;event_id+date;spatial_link |         3 |
 | path_guid                               |         2 |
 | event_id+date;spatial_link              |         2 |
+
+### Episodes (stage 15)
+
+Stage 15 groups SPC's complete tornado list by single linkage within
+400 km and 6 h (no day boundary)
+and carries the groups to these hazards: **2,585 episodes**,
+2,130 built from SPC tracks and 455 single hazards with no
+SPC track (`in_spc` false).
+
+| | value |
+|---|---:|
+| hazards per SPC-built episode, median / p90 / max | 2 / 12 / 130 |
+| SPC tornadoes per SPC-built episode, max | 297 |
+| episodes spanning several convective days | 145 |
+| episodes with ≥6 EF1+ SPC tornadoes (Fuhrmann et al.'s threshold) | 347 |
+| SPC tornadoes / DAT hazards in the SPC-built episodes | 15,338 / 10,861 |
 
 Hazards per year and polygon-field population: `figures/dat_coverage.png`.
 Calibration and operating points: `figures/dat_linker_evaluation.png`.

@@ -29,6 +29,7 @@ import _bootstrap  # noqa: F401
 import pandas as pd
 
 from tornado_dataset import config
+from tornado_dataset.dat import episode_table
 from tornado_dataset.dat.hazards import ef_rank
 from tornado_dataset.ids import uid, write_manifest
 from tornado_dataset.text import lexisnexis, linking, tiering
@@ -95,7 +96,7 @@ def ef_numbers(values) -> set[int]:
 
 def load_events(tag: str):
     """Episode and hazard records, indexed by convective day."""
-    hazards = pd.read_csv(config.PROCESSED_DIR / f"hazards_{tag}.csv")
+    hazards = episode_table.hazards_with_episodes(tag)
     episodes = pd.read_csv(config.PROCESSED_DIR / f"episodes_{tag}.csv")
     geography = pd.read_csv(config.PROCESSED_DIR / f"hazard_geography_{tag}.csv")
 

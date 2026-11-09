@@ -25,6 +25,7 @@ import _bootstrap  # noqa: F401
 import pandas as pd
 
 from tornado_dataset import config
+from tornado_dataset.dat import episode_table
 from tornado_dataset.ids import uid, write_manifest
 from tornado_dataset.text import gdelt, tiering
 
@@ -38,7 +39,7 @@ def survey_times(tag: str) -> dict[str, dt.datetime]:
         return {}
     refs = pd.read_csv(refs_path)
     links = pd.read_csv(links_path)
-    hazards = pd.read_csv(hazards_path)[["hazard_uid", "episode_uid"]]
+    hazards = episode_table.hazards_with_episodes(tag, ["hazard_uid", "episode_uid"])
     surveys = (links[links.link_relation == "primary_survey_of"]
                .merge(refs[["textref_uid", "published_at", "source_type"]], on="textref_uid")
                .merge(hazards, left_on="target_uid", right_on="hazard_uid"))
@@ -71,7 +72,7 @@ def main() -> None:
 
     episodes = pd.read_csv(config.PROCESSED_DIR / f"episodes_{args.tag}.csv")
     geography = pd.read_csv(config.PROCESSED_DIR / f"hazard_geography_{args.tag}.csv")
-    hazards = pd.read_csv(config.PROCESSED_DIR / f"hazards_{args.tag}.csv")
+    hazards = episode_table.hazards_with_episodes(args.tag)
 
     # Toponyms are ranked by the severity of the tornado that passed them: an
     # outbreak's news coverage names the places its strongest tornadoes hit, and

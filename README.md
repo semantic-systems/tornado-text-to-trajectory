@@ -69,9 +69,10 @@ python scripts/00_selftest.py          # no network, no data — check the envir
 # 1x  events
 python scripts/10_fetch_dat.py         # DAT lines+polygons for the configured window
 python scripts/11_link_geometry.py     # candidate + accepted line<->polygon links
-python scripts/12_build_hazards.py     # hazards (tornadoes) and episodes (outbreaks)
+python scripts/12_build_hazards.py     # hazards (tornadoes): lines, polygons, attributes
 python scripts/13_fetch_references.py  # NCEI Storm Events + SPC tornado files
 python scripts/14_match_references.py  # ...matched to DAT hazards
+python scripts/15_build_episodes.py    # episodes (outbreaks) on SPC tracks, carried to DAT
 python scripts/16_enrich_geography.py  # counties, states, WFO backfill, place names
 python scripts/17_qa_events.py         # outputs/events_qa_report.md
 python scripts/18_analyze_events.py    # descriptive report + figures
@@ -110,9 +111,8 @@ python scripts/viewer.py               # browse the corpus at localhost:8799
 python scripts/viewer.py --corpus mediacloud  # inspect retrieved full texts
 ```
 
-Numbers are not contiguous: gaps leave room for stages to come (15 is
-planned). The pairwise overlap stages of the old numbering (13 and 20) are
-retired — the three-way atlas (stage 43) replaces both; see
+Numbers are not contiguous: gaps leave room for stages to come. The
+pairwise overlap stages of the old numbering (13 and 20) are retired — the three-way atlas (stage 43) replaces both; see
 [legacy/README.md](legacy/README.md). [HANDOVER.md](HANDOVER.md) has the
 per-stage status table and the old → new numbering.
 
@@ -123,7 +123,7 @@ where it stopped and a rerun needs no network: IEM ~26k requests (~3.5 h), GDELT
 Scope and every threshold live in [`config.py`](src/tornado_dataset/config.py); a
 run is described by that file plus the git SHA recorded in each manifest. The
 default window is 2010-01-01 – 2025-12-31, which yields **11,520 damage lines and
-9,989 damage polygons → 11,316 hazards in 3,172 episodes**, 1,475 of them
+9,989 damage polygons → 11,316 hazards in 2,585 episodes**, 1,475 of them
 from damage polygons alone; features rated thunderstorm wind are left out.
 
 Three design decisions worth knowing before using the outputs:

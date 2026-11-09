@@ -163,10 +163,14 @@ NON_TORNADO_RATINGS = frozenset({"TSTM/WIND"})
 # Convective day boundary (UTC hour). NWS convention runs 12Z-12Z so that a
 # night-time outbreak is not split across two calendar dates.
 CONVECTIVE_DAY_START_HOUR = 12
-# Hazards on the same convective day join one episode when their tracks are
-# within this distance — an outbreak is a spatially coherent cluster, not every
-# tornado in the country that day.
-EPISODE_LINK_DISTANCE_M = 200_000.0
+# Episodes (stage 15): SPC tornadoes join one episode by single linkage when
+# their straight tracks come within this distance and one starts within this
+# many hours of the previous one's end. No day boundary, so overnight outbreaks
+# are not cut at 12 UTC. Chosen in stage 51 against Storm Events episodes, SPC
+# watch sequences and hand checks of ten named outbreaks
+# (outputs/episode_comparison_spc_report.md, watch_hand_checks_report.md).
+EPISODE_MAX_DISTANCE_M = 400_000.0
+EPISODE_MAX_GAP_H = 6.0
 
 # ── geography ────────────────────────────────────────────────────────────────
 # Populated places within this distance of a track are treated as its toponyms.

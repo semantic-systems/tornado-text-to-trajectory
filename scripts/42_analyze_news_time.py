@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 
 from tornado_dataset import config, viz
+from tornado_dataset.dat import episode_table
 from tornado_dataset.text import tiering
 
 plt.rcParams.update(viz.matplotlib_style())
@@ -59,7 +60,7 @@ def survey_times(tag: str) -> dict[str, dt.datetime]:
         return {}
     refs = pd.read_csv(refs_path, usecols=["textref_uid", "published_at"])
     links = pd.read_csv(links_path, usecols=["textref_uid", "target_uid", "link_relation"])
-    hazards = pd.read_csv(hazards_path, usecols=["hazard_uid", "episode_uid"])
+    hazards = episode_table.hazards_with_episodes(tag, ["hazard_uid", "episode_uid"])
     surveys = (links[links.link_relation == "primary_survey_of"]
                .merge(refs, on="textref_uid")
                .merge(hazards, left_on="target_uid", right_on="hazard_uid"))

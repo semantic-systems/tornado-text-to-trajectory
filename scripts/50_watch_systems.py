@@ -645,13 +645,13 @@ REVIEW_SAMPLE = 50
 OUTBREAK_LABELS = ("matches", "too_coarse", "too_fine", "cannot_tell")
 REVIEW_LABELS = ("separate_systems", "should_link", "cannot_tell")
 # Groupings compared on the named outbreaks, all on SPC tracks: SPC's own watch
-# systems and sequences (stage 50), and from stage 51 --anchor spc stage 12's rule
+# systems and sequences (stage 50), and from stage 51 --anchor spc the former convective-day rule
 # and its 400 km variant, the time-only outbreak sequence, the recommended
 # space-time setting, and the three density variants.
 OUTBREAK_GROUPINGS = {"watch systems": ("watch", "system_id"),
                       "watch sequences": ("watch", "sequence_id")}
 OUTBREAK_GROUPINGS |= {name: ("method", name) for name in (
-    "convective_day 200km (stage 3)",
+    ep.BASELINE,
     "convective_day 400km",
     ep.FUHRMANN_VARIANT,
     "space_time 400km 6h",

@@ -20,6 +20,7 @@ import _bootstrap  # noqa: F401
 import pandas as pd
 
 from tornado_dataset import config
+from tornado_dataset.dat import episode_table
 from tornado_dataset.dat.geometry import to_equal_area, to_shapely
 from tornado_dataset.geo.gazetteer import CountyIndex, PlaceIndex
 from tornado_dataset.ids import write_manifest
@@ -49,6 +50,7 @@ def main() -> None:
     if not hazards_path.exists():
         raise SystemExit(f"missing {hazards_path} — run scripts/12_build_hazards.py first")
     features = json.loads(hazards_path.read_text(encoding="utf-8"))["features"]
+    episode_of = episode_table.episode_of(args.tag)
 
     years = {hazard_year(f["properties"]) for f in features} - {None}
     print(f"loading NWS county polygons for {len(years)} snapshot years …")
@@ -97,7 +99,7 @@ def main() -> None:
 
         rows.append({
             "hazard_uid": props["hazard_uid"],
-            "episode_uid": props.get("episode_uid"),
+            "episode_uid": episode_of.get(props["hazard_uid"]),
             "convective_day": props.get("convective_day"),
             "wfo": wfo,
             "wfo_source": source,

@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 """Stage 51 — compare ways of grouping tornadoes into episodes.
 
-Runs stage 12's convective-day rule and the space-time alternatives from the
+Runs the former convective-day rule and the space-time alternatives from the
 literature on the same tornadoes, and scores each against NCEI Storm Events
-episodes (stage 14). Read-only with respect to the pipeline: stage 12's episodes
-are not changed; this produces the evidence for deciding whether they should be.
+episodes (stage 14). Read-only with respect to the pipeline: this is the
+evidence behind the rule stage 15 publishes (space-time 400 km / 6 h on SPC
+tracks), and the check that stage 15 publishes exactly that rule.
 
     python scripts/51_compare_episodes.py                 # group DAT hazards
     python scripts/51_compare_episodes.py --anchor spc    # group SPC whole tracks
@@ -39,13 +40,14 @@ import _bootstrap  # noqa: F401
 import pandas as pd
 
 from tornado_dataset import config
+from tornado_dataset.dat import episode_table
 from tornado_dataset.dat import episodes as ep
 from tornado_dataset.dat import storm_events as se
 from tornado_dataset.http import utcnow_iso
 
 SPC_TRACKS = config.INTERIM_DIR / "spc_tornadoes.csv"
 PERIODS = [(2010, 2015), (2016, 2020), (2021, 2025)]
-STAGE3 = "convective_day 200km (stage 3)"
+BASELINE = ep.BASELINE      # the former rule; always runs
 
 REFERENCES = [
     "SPC storm reports, organised 1200–1159 UTC: "
@@ -165,11 +167,11 @@ class Projection:
     """SPC-built episodes carried to DAT hazards, and the DAT-side references."""
 
     def __init__(self, tag: str, via_spc: bool = True):
-        hz = pd.read_csv(config.PROCESSED_DIR / f"hazards_{tag}.csv",
-                         usecols=["hazard_uid", "episode_uid", "time_begin_utc"])
+        hz = episode_table.hazards_with_episodes(
+            tag, ["hazard_uid", "episode_uid", "time_begin_utc"])
         self.dat = hz
         self.year = pd.to_datetime(hz.time_begin_utc, utc=True, errors="coerce").dt.year
-        self.stage3 = pd.Series(pd.factorize(hz.episode_uid)[0], index=hz.index)
+        self.published = pd.Series(pd.factorize(hz.episode_uid)[0], index=hz.index)
         path = config.PROCESSED_DIR / f"spc_tornado_links_{tag}.csv"
         if not path.exists():
             raise SystemExit(f"no {path.name} — run scripts/14_match_references.py")
@@ -184,7 +186,7 @@ class Projection:
                                          self.links)
         out = {"dat_matched_share": float(matched.mean()),
                "dat_episodes": int(lab.nunique()),
-               "dat_ari_vs_stage3": ep.adjusted_rand(lab, self.stage3)}
+               "dat_ari_vs_published": ep.adjusted_rand(lab, self.published)}
         if self.reference is not None:
             s = ep.score(lab, self.reference)
             out |= {"dat_recall": s["recall"], "dat_office_precision": s["office_precision"],
@@ -223,7 +225,7 @@ def main() -> None:
                         "(default: no-motion, from link --no-motion-check; '' for none)")
     p.add_argument("--methods", nargs="*", default=None,
                    help="run only methods whose name contains one of these strings "
-                        "(stage 12's rule always runs, as the baseline)")
+                        "(the former convective-day rule always runs, as the baseline)")
     args = p.parse_args()
 
     metrics_path, assignments_path, report_path, counts_path = outputs(args.anchor)
@@ -241,7 +243,7 @@ def main() -> None:
     grid = ep.method_grid()
     if args.methods:
         grid = {k: f for k, f in grid.items()
-                if k == STAGE3 or any(m in k for m in args.methods)}
+                if k == BASELINE or any(m in k for m in args.methods)}
 
     rows, labels, counts = [], {}, []
     for name, fn in grid.items():
@@ -275,12 +277,13 @@ def main() -> None:
                  f"{row['seq_recall']:.3f}" if "watch_precision" in row else "")
               + f"  ({row['seconds']}s)")
 
-    # Stage 12 must be reproduced exactly, or the comparison is not like for like.
+    # Stage 15 must publish exactly this rule, carried to DAT hazards.
     agreement = None
-    if args.anchor == "dat":
-        stage3 = pd.Series(pd.factorize(frame.episode_uid)[0], index=frame.index)
-        agreement = ep.adjusted_rand(labels[STAGE3], stage3)
-        print(f"\nre-implementation vs stage 12's episodes: ARI {agreement:.4f}")
+    if projection is not None and ep.PUBLISHED in labels:
+        lab, _ = ep.project_labels(labels[ep.PUBLISHED], frame.hazard_uid,
+                                   projection.dat.hazard_uid, projection.links)
+        agreement = ep.adjusted_rand(lab, projection.published)
+        print(f"\n{ep.PUBLISHED} carried to DAT vs stage 15's episodes: ARI {agreement:.4f}")
 
     metrics = pd.DataFrame(rows)
     config.INTERIM_DIR.mkdir(parents=True, exist_ok=True)
@@ -333,14 +336,14 @@ def write_report(path, m: pd.DataFrame, reference, agreement: float | None,
     n_ref = int(reference.EPISODE_ID.notna().sum()) if scored else 0
     unit = "DAT hazards" if anchor == "dat" else "SPC whole tracks"
     if agreement is None:
-        check = ("Stage 12's rule is applied here to SPC tracks, so its row is the "
-                 "convective-day rule on the complete tornado list, not stage 12's "
-                 "episodes; the projection table compares it with those.")
+        check = ("The published episodes (stage 15) are built on SPC tracks; "
+                 + ("this run groups DAT hazards, for comparison." if anchor == "dat" else
+                    f"run with `{ep.PUBLISHED}` among the methods to check them."))
     else:
-        check = (f"Stage 12's rule re-implemented here reproduces its episodes with ARI "
-                 f"{agreement:.4f}"
-                 + (" (exact)." if agreement > 0.9999 else " — **not exact; check before "
-                    "reading the comparison as like for like.**"))
+        check = (f"`{ep.PUBLISHED}`, carried to DAT hazards, reproduces stage 15's "
+                 f"published episodes with ARI {agreement:.4f}"
+                 + (" (exact)." if agreement > 0.9999 else " — **not exact: stage 15 and "
+                    "this comparison disagree; check before reading on.**"))
     lines = [
         "# Episode definitions compared — Stage 51"
         + ("" if anchor == "dat" else " (SPC tracks)"), "",
@@ -349,8 +352,7 @@ def write_report(path, m: pd.DataFrame, reference, agreement: float | None,
            "(stage 14), whose `EPISODE_ID` is the reference." if scored else
            "No Storm Events reference was available, so only the descriptive "
            "columns are filled.")
-        + " Stage 12's episodes are unchanged; this is evidence for deciding whether "
-        "they should be.", "",
+        + " This is the evidence behind the rule stage 15 publishes.", "",
         f"Generated {utcnow_iso()}. {check}",
     ] + (sources_note(sources) if anchor == "dat" else []) + [
         "", "## How to read the scores", "",
@@ -400,12 +402,12 @@ def write_report(path, m: pd.DataFrame, reference, agreement: float | None,
         lines += variant_section(m, variant)
     if "episodes_6plus_ef1" in m.columns:
         lines += counts_section(m)
-    if "dat_ari_vs_stage3" in m.columns:
+    if "dat_ari_vs_published" in m.columns:
         lines += projection_section(m, sources)
     lines += [
         "", "## Methods", "",
-        "- **convective_day** — stage 12: same 1200–1159 UTC day, single linkage on "
-        "track distance.",
+        "- **convective_day** — the former episode rule (200 km): same 1200–1159 UTC "
+        "day, single linkage on track distance.",
         "- **space_time** — single linkage on track distance and the gap between time "
         "intervals; no day boundary.",
         "- **time-gap 6h, all ratings (Fuhrmann variant)** — after the outbreak-sequence "
@@ -544,11 +546,11 @@ def projection_section(m: pd.DataFrame, sources: dict | None = None) -> list[str
         f"{share:.1%} have one. The other {1 - share:.1%} become their own episode, "
         "which costs recall where such a hazard belongs to an outbreak. Scores use the "
         "DAT hazards' own Storm Events reference, so they compare directly with "
-        "`episode_comparison_report.md`; **ARI vs stage 12** says how far each "
-        "SPC-built grouping is from the episodes the dataset publishes now.",
+        "`episode_comparison_report.md`; **ARI vs published** says how far each "
+        "SPC-built grouping is from the episodes stage 15 publishes.",
     ] + sources_note(sources) + ["",
         "| method | DAT episodes | recall | recall linked | office precision | "
-        "SE split | ARI vs stage 12 | " + " | ".join(f"{lo}–{hi}" for lo, hi in PERIODS)
+        "SE split | ARI vs published | " + " | ".join(f"{lo}–{hi}" for lo, hi in PERIODS)
         + " |", "|---|---:|---:|---:|---:|---:|---:|" + "---:|" * len(PERIODS)]
     for r in m.itertuples():
         lines.append(
@@ -556,7 +558,7 @@ def projection_section(m: pd.DataFrame, sources: dict | None = None) -> list[str
             f"{fmt(getattr(r, 'dat_recall_linked', None), 'f2')} | "
             f"{fmt(getattr(r, 'dat_office_precision', None), 'f2')} | "
             f"{fmt(getattr(r, 'dat_se_split', None), 'pct')} | "
-            f"{fmt(r.dat_ari_vs_stage3, 'f2')} | " + " | ".join(
+            f"{fmt(r.dat_ari_vs_published, 'f2')} | " + " | ".join(
                 fmt(getattr(r, f"dat_recall_{lo}_{hi}", None), "f2") for lo, hi in PERIODS)
             + " |")
     if "dat_watch_precision" in m.columns:

@@ -1,13 +1,14 @@
 """Alternative ways to group tornadoes into episodes, and how to score them.
 
-Stage 12 groups hazards by **convective day** (SPC's 1200–1159 UTC reporting
-day) and joins those within 200 km by single linkage. Both choices are
-conventions rather than findings, and the fixed day cuts overnight outbreaks
-in two. This module implements the alternatives from the literature so they can
-be compared on the same hazards, against the same reference:
+The dataset's episodes were first built by **convective day** (SPC's
+1200–1159 UTC reporting day), joining hazards within 200 km by single linkage.
+Both choices are conventions rather than findings, and the fixed day cuts
+overnight outbreaks in two. This module implements the alternatives from the
+literature so they can be compared on the same hazards, against the same
+reference; stage 15 now publishes one of them (``PUBLISHED``, space-time on SPC
+tracks — :mod:`.episode_table`):
 
-``convective_day``   stage 12's rule, re-implemented so the comparison is like
-                     for like (a check asserts it reproduces stage 12 exactly).
+``convective_day``   the former rule (``BASELINE``), kept as the baseline.
 ``space_time``       single linkage on distance *and* time gap, with no day
                      boundary. With an unlimited distance and a 6 h gap this is
                      a variant of the outbreak-sequence rule of Fuhrmann et al.
@@ -72,7 +73,7 @@ def _seconds(ts: pd.Series) -> np.ndarray:
 def load_hazard_frame(tag: str) -> pd.DataFrame:
     """Hazards with projected track geometry, UTC interval and a representative point.
 
-    ``geom`` is the geometry stage 12 measures episode distance on: the single
+    ``geom`` is the geometry the convective-day rule measures distance on: the single
     track line, or the convex hull of all vertices when a hazard has several.
     ``track`` is the actual line(s), for matching against other records;
     ``point`` is the track midpoint, used by the density methods. A hazard with
@@ -134,7 +135,7 @@ def load_spc_frame(tracks_csv, se_links_csv=None) -> pd.DataFrame:
     The methods then run on the complete, reviewed tornado list instead of the
     surveyed subset in DAT. ``hazard_uid`` holds the ``spc_id`` so every method
     and score works unchanged. The geometry is SPC's straight start→end line;
-    ``convective_day`` follows stage 12's rule on the start time; ``wfo_all``
+    ``convective_day`` is the 12 UTC convective day of the start time; ``wfo_all``
     comes from the matched Storm Events rows, since SPC records no office.
     """
     from pyproj import Transformer
@@ -313,9 +314,8 @@ def _labels_from_unions(h: pd.DataFrame, unions) -> pd.Series:
 
 
 # ── methods ─────────────────────────────────────────────────────────────────
-def convective_day(h: pd.DataFrame, distance_m: float = config.EPISODE_LINK_DISTANCE_M
-                   ) -> pd.Series:
-    """Stage 12: same convective day, single linkage within ``distance_m``."""
+def convective_day(h: pd.DataFrame, distance_m: float = 200_000.0) -> pd.Series:
+    """The former episode rule: same convective day, single linkage within ``distance_m``."""
     from shapely import STRtree
 
     unions = []
@@ -582,15 +582,21 @@ MethodFn = Callable[[pd.DataFrame], pd.Series]
 
 # The time-only rule; see the module docstring for how it differs from Fuhrmann's.
 FUHRMANN_VARIANT = "time-gap 6h, all ratings (Fuhrmann variant)"
+# The former episode rule, kept as the baseline every comparison includes.
+BASELINE = "convective_day 200km"
+# The rule stage 15 publishes (config), under its name in the grid below.
+PUBLISHED = (f"space_time {config.EPISODE_MAX_DISTANCE_M / 1000:g}km "
+             f"{config.EPISODE_MAX_GAP_H:g}h")
 # Earlier names of methods, for outputs written before a rename.
-LEGACY_NAMES = {"time-gap 6h, no distance (Fuhrmann-style)": FUHRMANN_VARIANT}
+LEGACY_NAMES = {"time-gap 6h, no distance (Fuhrmann-style)": FUHRMANN_VARIANT,
+                "convective_day 200km (stage 3)": BASELINE}
 
 
 def method_grid() -> dict[str, MethodFn]:
     """The configurations the comparison runs, keyed by a readable name."""
     km = 1000.0
     grid: dict[str, MethodFn] = {
-        "convective_day 200km (stage 3)": lambda h: convective_day(h, 200 * km),
+        BASELINE: lambda h: convective_day(h, 200 * km),
         "convective_day 100km": lambda h: convective_day(h, 100 * km),
         "convective_day 400km": lambda h: convective_day(h, 400 * km),
         FUHRMANN_VARIANT: lambda h: space_time(h, None, 6 * HOUR),

@@ -28,6 +28,16 @@ Key fields: `episode_uid`, `title`, `hazard_family` (tornado|flood|wildfire|trop
 `time_begin_utc`, `time_end_utc`, `country`, `admin_regions[]`, external IDs
 (`ncei_episode_id`, `fema_disaster_no`, `wikipedia_title`), `source_refs[]`.
 
+As built (stage 15, `dat/episode_table.py`): SPC's complete tornado list grouped by
+single linkage within 400 km and 6 h (closest points of the tracks; end of one
+tornado to start of the next; no day boundary), and each DAT hazard given the
+episode of its closest SPC track. A hazard with no SPC track is an episode of its
+own (`in_spc` false). Counts cover every SPC tornado in the episode, in DAT or not
+(`n_spc`, `n_spc_ef1plus`, `n_spc_unrated`, beside `n_dat`), so a minimum size such
+as ≥6 EF1+ is a filter on them; `convective_days` lists every 12 UTC day the
+episode touches. Membership lives in `hazard_episodes_<tag>.csv`, not on the
+hazards.
+
 ### 2. Hazard
 One authoritative sub-event with its own geometry — one tornado track, one flood extent,
 one burn scar. 

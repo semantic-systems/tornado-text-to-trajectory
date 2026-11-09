@@ -1,4 +1,4 @@
-"""Stage 12 — assemble hazards (tornado tracks) and episodes (outbreaks).
+"""Stage 12 — assemble hazards (tornado tracks) from the linked DAT features.
 
 Turns the linked DAT features into the dataset's unit of analysis: one hazard per
 tornado, carrying its track line(s), damage polygon(s), attributes, the DAT survey
@@ -9,6 +9,8 @@ thunderstorm wind) are left out first. A hazard is then built from each group of
 track lines, with the polygons linked to them; polygons no line claims become
 hazards of their own. ``geometry_source`` says which: ``line``,
 ``line+polygon`` or ``polygon``.
+
+Episodes are built in stage 15, after stage 14 has matched these hazards to SPC.
 
     python scripts/12_build_hazards.py
     python scripts/12_build_hazards.py --tag march2025
@@ -80,10 +82,8 @@ def main() -> None:
                              min_link_confidence=args.min_link_confidence)
     polygon_hazards, polygon_stats = hz.build_polygon_hazards(polygons, links)
     built += polygon_hazards
-    episodes = hz.build_episodes(built)
     print(f"{len(lines)} lines + {len(polygons)} polygons -> "
-          f"{len(built)} hazards ({len(polygon_hazards)} from polygons alone) "
-          f"in {len(episodes)} episodes")
+          f"{len(built)} hazards ({len(polygon_hazards)} from polygons alone)")
 
     gdelt_start = config.GDELT_COVERAGE_START.isoformat()
     features, geometry_rows = [], []
@@ -103,14 +103,12 @@ def main() -> None:
     config.PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     hazards_path = config.PROCESSED_DIR / f"hazards_{args.tag}.geojson"
     hazards_table = config.PROCESSED_DIR / f"hazards_{args.tag}.csv"
-    episodes_path = config.PROCESSED_DIR / f"episodes_{args.tag}.csv"
     geometries_path = config.PROCESSED_DIR / f"geometries_{args.tag}.csv"
 
     hazards_path.write_text(json.dumps({"type": "FeatureCollection", "features": features}),
                             encoding="utf-8")
     table = pd.DataFrame([f["properties"] for f in features])
     table.to_csv(hazards_table, index=False)
-    pd.DataFrame(episodes).to_csv(episodes_path, index=False)
     pd.DataFrame(geometry_rows).to_csv(geometries_path, index=False)
 
     # Polygons linked in stage 11 but below the hazard confidence floor are left
@@ -118,7 +116,6 @@ def main() -> None:
     # that floor and belongs in the record.
     counts = {
         "hazards": len(built),
-        "episodes": len(episodes),
         "geometries": len(geometry_rows),
         "polygons_linked_stage2": len({r["polygon_oid"] for r in all_links}),
         "polygons_linked_to_tornado_lines": len({r["polygon_oid"] for r in links}),
@@ -140,7 +137,7 @@ def main() -> None:
     }
     write_manifest(config.PROCESSED_DIR / f"manifest_hazards_{args.tag}.json",
                    "12_build_hazards", counts=counts,
-                   outputs=[hazards_path, hazards_table, episodes_path, geometries_path])
+                   outputs=[hazards_path, hazards_table, geometries_path])
 
     print(f"  with a damage polygon: {counts['hazards_with_polygon']} "
           f"({counts['hazards_with_polygon'] / max(1, len(built)):.1%})")
@@ -150,7 +147,7 @@ def main() -> None:
           f"({counts['hazards_in_gdelt_window'] / max(1, len(built)):.1%})")
     print(f"  assembled from >1 line: {counts['multi_line_hazards']}")
     print(f"wrote {hazards_path.name}, {hazards_table.name}, "
-          f"{episodes_path.name}, {geometries_path.name}")
+          f"{geometries_path.name}")
 
 
 if __name__ == "__main__":
