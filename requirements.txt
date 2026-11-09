@@ -29,4 +29,6 @@ pyproj
 shapely
 # Kernel-density episodes (scripts/25_compare_episodes.py)
 scipy~=1.18
+# County boundaries for watch distances (scripts/26_watch_systems.py)
+pyogrio~=0.13
 mediacloud

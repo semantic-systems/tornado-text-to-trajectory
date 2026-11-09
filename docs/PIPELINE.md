@@ -659,3 +659,87 @@ side by side, with the largest change and Kendall's τ of the method order per
 score: whether a conclusion depends on the motion check. `--watch-variant`
 names another variant, `''` turns this off.
 
+### Watch systems — `scripts/26_watch_systems.py`
+
+The watch reference from `docs/plan_watch_linking.md`, steps 0–4.
+`probe` makes about 25 cached requests to the IEM archives
+(`data/raw/spc_watches/probe/`) — county-level watch records (VTEC TO.A/SV.A,
+the official area), the SPC watch polygons with their attributes, and the SEL
+watch texts — and writes `outputs/watch_probe_report.md` and
+`data/interim/watch_probe.json`: from which year county records are complete
+(one April per year, default 2004–2012), how often counties end before their
+watch expires, whether counties and polygons place stage 24's SPC tornadoes in
+the same watches (one season, default spring 2011), and how often the texts
+state "replaces watch N" (that season by month, plus April 2024 for the newer
+mixed-case format). A tornado's county is SPC's `st` + `C` + `f1` (UGC code),
+so no county shapes are needed. The "CONTINUE…WW" list in a watch text names
+watches in effect elsewhere and is counted apart: it is concurrency, not
+succession.
+
+`fetch` caches, per year 2010–2025, the county records, the polygons and twelve
+months of SEL texts under `data/raw/spc_watches/<year>/` (~225 requests, 2 s
+apart), plus the Census 2020 county boundary file (1:500,000, ~12 MB) under
+`data/raw/census/`, read with `pyogrio` and simplified to 500 m. `link` is offline. It first
+drops county records that do not belong to an SPC watch, and counts them: marine
+zones listed with the counties (~22,000), Honolulu's own watches, which are
+numbered from 1 like SPC's and collide with them, and records starting before
+SPC issued the watch of that number or after it expired (mistyped numbers, ~180).
+A "replaces watch N" statement is matched to the watch of that number that ended
+within a day before — last year's, for a watch in early January. It then builds one row per watch (year +
+number; tornado and severe thunderstorm watches share the numbering) with
+times from the county records and motion/PDS from the polygons, links watches
+by the plan's three rules — same county at the same time; "replaces watch N";
+inferred succession within `--gap-h` (3) and `--edge-km` (50, county edge to
+county edge) and not upstream of the storm motion beyond a tolerance
+calibrated on the "replaces" links (`--motion-slack-km` sets it,
+`--no-motion-check` switches it off and writes a variant, below) — and takes
+connected components as systems (`ws_<year>_<number>` of the earliest watch),
+and, keeping only hand-overs in time, as sequences (`wq_…`).
+Each SPC tornado takes the system of the watch its county (SPC's `st` + `f1`)
+was under at its start, by polygon only where SPC records no county. Outputs:
+`data/processed/spc_watch_systems_<tag>.csv` (per tornado: watches, method,
+system, margins), `data/interim/spc_watches_<tag>.csv`,
+`..._watch_links_<tag>.csv` (rule per link), `..._watch_review_<tag>.csv`
+(candidates rejected only as upstream), `..._watch_sensitivity_<tag>.csv`
+(Δt × d × motion check), and `outputs/watch_systems_report.md`: links by rule,
+system sizes, share of SPC's "replaces" links that rules 1 and 3 reproduce,
+the tolerance calibration, the speed-limit diagnostic,
+watched share by year and rating, agreement with Storm Events episodes,
+sensitivity, and the named outbreaks for a hand check.
+
+`link --variant NAME` writes all of these with a `_NAME` suffix
+(`spc_watch_systems_<tag>_NAME.csv`, `outputs/watch_systems_NAME_report.md`, …)
+and leaves the main ones alone; `--no-motion-check` implies `--variant
+no-motion`, which stage 25 picks up to test whether its conclusions depend on the
+motion check.
+
+`sheets` writes the two hand checks to `outputs/annotation/` (instructions in
+`HOW_TO_ANNOTATE_watches.txt`): `watch_outbreak_sheet.csv` — each of the 10 named
+outbreaks (`NAMED_OUTBREAKS`) grouped nine ways on SPC tracks (watch systems and
+sequences, stage 3's rule, convective day 400 km, the 6 h time-gap rule (Fuhrmann variant),
+space-time 400 km / 6 h, KDE per day 100 km and the overlapping-window KDE at
+50 and 100 km; `OUTBREAK_GROUPINGS`), blinded as groupings A–I — 90 labels —
+each to be labelled
+`matches` / `too_coarse` / `too_fine` / `cannot_tell` against the official
+summaries — and `watch_review_sheet.csv`, a seeded sample of 50 motion-check
+rejections with links to both SPC watch pages, labelled `separate_systems` /
+`should_link` / `cannot_tell`. The `*_key.csv` files hold what the sheets hide.
+It refuses to overwrite sheets that already hold labels. `review` opens a
+local map app on both sheets (`tornado_dataset.viewer.watch_review`,
+http://127.0.0.1:8800): for an outbreak, every SPC track coloured by group under
+the chosen grouping (keys a–i), a timeline of the groups with the 12Z
+convective-day boundaries, a time slider and
+window, optional watch outlines and the SPC report pages; for a pair, both
+watch polygons, the counties each covered and when, both storm-motion vectors,
+the other watches in effect nearby, the period's tornadoes and both SEL texts.
+The browser gets only letters and per-outbreak group numbers — never the
+method, raw group ids or the rejection distances — and labels are written back
+into the sheets' `label` and `notes` columns. Once every outbreak row is
+labelled, a read-only Compare tab shows one outbreak under the groupings in
+`COMPARE_GROUPINGS` (space-time 400 km/6 h, the 6 h time gap, watch systems and
+sequences), unblinded, on four synced maps with one time slider and each
+grouping's blind label; colours follow a chosen reference grouping (each group
+takes the colour of the reference group it shares most tracks with), so splits
+and merges show as colour changes, and a toggle fades every track that agrees
+with the reference. `check` scores them
+into `outputs/watch_hand_checks_report.md`.

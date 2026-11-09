@@ -36,6 +36,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 | 21 full text | **crawled 7 Oct.** 78% of the 48,741 `EVENT` stories retrieved; `report` and `quality` run offline over the store |
 | 23 full-text labels | **built, not run.** Stage 19's prompt over the retrieved bodies, compared with stage 18's headline labels |
 | 24 Storm Events + SPC | **run, 2010–2025.** SPC's reviewed whole-track tornado file matched to DAT as the tornado-level reference (98.3% of Storm Events chains match one SPC track); NCEI Storm Events tornado rows chained into whole tornadoes through `TOR_OTHER_*` and cross-checked against SPC, matched to DAT hazards by space and time, episodes linked across offices where a tornado crossed between them; DAT completeness rises from 1% of tornadoes (2010) to 85% (2025) |
+| 26 watch systems | **`probe` run (results in `docs/plan_watch_linking.md`, step 0); `fetch` and `link` run on 2010–2025; watch systems (connected coverage) and sequences (hand-over chains) written per SPC tornado; scored in stage 25 as upper and lower bounds. Rerun `link` after the sequence change, then stage 25.** Feasibility check for the watch reference (plan step 0): county-record coverage per year, county vs polygon timing and placement of SPC tornadoes, "replaces" statements in watch texts. County records complete from 2006; ~20% of tornadoes placed differently by polygons |
 | 25 episode comparison | **run on DAT; `--anchor spc` built, tested on the real data in a scratch copy, not run by you.** Stage 3's convective-day rule against space-time, ST-DBSCAN and kernel-density alternatives, scored on Storm Events episodes; `--anchor spc` groups SPC's complete tornado list and carries the episodes to DAT hazards |
 
 ## Traps
@@ -299,6 +300,72 @@ on a subset for κ. **The codebook needs a v2**: it currently instructs the
 annotator not to open the full article, but the viewer now shows the body — the
 same evidence the linker used. That changes what the precision figure means and
 has to be recorded in the codebook version line and in the datasheet.
+
+### 6. Episode definition
+
+Stage 3 groups tornadoes by SPC's convective day (1200–1159 UTC) and joins those
+within 200 km. The 12 UTC cut splits overnight outbreaks, and 200 km is a choice,
+not a measurement. Stage 25 compares the alternatives from the literature on the
+same hazards, scored against NCEI Storm Events episodes:
+
+```bash
+python scripts/24_storm_events.py run       # download (~16 files), join, coverage report
+python scripts/25_compare_episodes.py       # ~1 min; outputs/episode_comparison_report.md
+python scripts/25_compare_episodes.py --anchor spc   # ~5 min; ..._spc_report.md
+```
+
+Full run, 2010–2025. On DAT hazards the current rule keeps 92% of
+forecaster-grouped pairs together and splits 7.7% of Storm Events episodes;
+widening it to 400 km changes nothing (0.92). Dropping the day boundary does:
+space-time 200 km / 6 h reaches 0.96 and 5.9% at almost the same extent (p95 644
+against 624 km), with 78 multi-day episodes. The time-only rule (Fuhrmann variant) and
+the overlapping-window KDE over-merge (episodes up to ~4,000 km and 226 h).
+"Office precision" is ~0.79 for every method — it cannot see over-merging,
+which is what the watch reference is for.
+
+Grouping SPC's complete tornado list instead (`--anchor spc`) gives the same
+ranking: stage 3's rule 0.94–0.95 in every period. The low early recall on DAT
+(0.80 in 2010–2015) is therefore *not* missing tornadoes breaking outbreaks up:
+DAT's early sample is small (922 scored hazards) and dominated by three office
+episodes of 27 April 2011 (HUN, JAN, BMX) that run from the morning squall line
+before 12 UTC into the afternoon supercells, which the day rule cuts in two.
+Carried to DAT hazards, SPC-built episodes match stage 3's closely (ARI 0.95 for
+the same rule); 11% of DAT hazards have no SPC track and stand alone.
+**No change to
+stage 3 has been made**: the decision depends on what an episode is for, and
+changing it invalidates every `episode_uid` downstream (stage 11 links,
+annotation sheets).
+
+Storm Events episodes cannot judge over-merging across offices. The planned
+next reference is SPC watch systems, built from county-level watch records:
+a forecaster-made grouping that does cross offices, and the unit in which the
+threat was communicated to the public and the press — see
+[docs/plan_watch_linking.md](docs/plan_watch_linking.md). Physical references
+(radar storm tracks, cyclone attribution) were considered and deliberately left
+out of scope; the plan says why.
+
+Watch results (stage 26, 2010–2025): 10,040 watches; rules 1 and 3 reproduce
+98.9% of SPC's own "replaces" links; 74% of SPC tornadoes were in a watch
+(85–95% of EF2+). Watch systems are coarser than every grouping method and watch
+sequences finer, so stage 25 reads them as bounds. Against them (DAT anchor):
+stage 3 stays within systems (1.00) but keeps only 0.91 of sequence pairs
+(0.81 on SPC tracks) — it cuts watch chains, mostly at 12 UTC; space-time
+400 km / 6 h scores 0.99 and 0.99; the overlapping-window KDE merges beyond
+systems (0.75). This agrees with the Storm Events result: the day boundary is
+stage 3's weakness. Still open: the hand checks (`python scripts/26_watch_systems.py sheets`, fill in
+`outputs/annotation/watch_*_sheet.csv`, then `check`) and the decision whether
+to change stage 3. `python scripts/26_watch_systems.py review` opens both
+worksheets on a map (http://127.0.0.1:8800) and saves the labels into them.
+The time-repaired DAT ↔ SPC pass (stage 24, built, tested on the real data in
+a scratch copy, not run by you) raises DAT hazards with an SPC track from 88.8%
+to 95.8%; rerun stage 24 `join` + `report`, then stage 25, to use it. The 237
+hazards with no SPC track within 20 km and 72 h are listed in
+`data/interim/spc_unmatched_dat_<tag>.csv` for a hand check. Stage 25 now scores DAT
+hazards against a Storm Events reference extended through their SPC track
+(+687 hazards, the time-repaired ones; `--dat-reference direct` for the old
+reference): episodes built on SPC and carried to DAT keep their recall
+(space-time 400 km / 6 h 0.97), episodes built on DAT's own times lose it
+(0.97 → 0.95; stage 3's rule 0.92 → 0.90) — the cost of DAT's clock errors.
 
 ## If you change the pipeline
 

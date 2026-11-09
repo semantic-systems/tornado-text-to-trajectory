@@ -38,6 +38,7 @@ MODULES = [
     "tornado_dataset.dat.link", "tornado_dataset.dat.evaluate",
     "tornado_dataset.dat.hazards", "tornado_dataset.dat.storm_events",
     "tornado_dataset.dat.episodes", "tornado_dataset.dat.spc_tornadoes",
+    "tornado_dataset.dat.spc_watches",
     "tornado_dataset.geo.gazetteer", "tornado_dataset.geo.pixels",
     "tornado_dataset.text.tiering", "tornado_dataset.text.iem",
     "tornado_dataset.text.gdelt", "tornado_dataset.text.lexisnexis",
@@ -83,7 +84,7 @@ for path in scripts:
     check(path.name, lambda p=path: py_compile.compile(str(p), doraise=True))
 if len(scripts) < 20:
     failures.append(f"only {len(scripts)} stage scripts found — expected ~21 "
-                    "(00, 01-12, 14-19, 21-22). Some are probably untracked.")
+                    "(00, 01-12, 14-19, 21-26). Some are probably untracked.")
     print(f"  FAIL  expected ~21 stage scripts, found {len(scripts)}")
 
 # ── 2. configuration ────────────────────────────────────────────────────────
@@ -473,6 +474,139 @@ def episode_counts_cover_all_spc_tornadoes() -> None:
     assert c.n_spc_unrated.tolist() == [1, 0] and c.n_dat.tolist() == [1, 2], c
 
 
+def watch_records_and_texts_parse() -> None:
+    """County records place a tornado by its own county's times; texts give relations."""
+    import pandas as pd
+    from tornado_dataset.dat import spc_watches as sw
+    csv = ("wfo,utc_issue,utc_expire,utc_prodissue,utc_init_expire,phenomena,gtype,"
+           "significance,eventid,status,ugc,vtec_year\n"
+           "HUN,2011-04-27 13:10,2011-04-27 18:45,2011-04-27 13:08,201104271900,TO,C,A,"
+           "230,CAN,ALC089,2011\n"
+           "HUN,2011-04-27 13:10,2011-04-27 15:00,2011-04-27 13:08,201104271900,TO,C,A,"
+           "230,CAN,ALC083,2011\n"
+           "MOB,2011-04-27 13:10,2011-04-27 18:45,2011-04-27 13:08,201104271900,TO,Z,A,"
+           "230,CAN,GMZ650,2011\n")
+    rec = sw.parse_county_records(csv)
+    assert len(rec) == 2 and set(rec.type) == {"TOR"} and rec.num.iloc[0] == 230
+    tracks = pd.DataFrame({"spc_id": ["a", "b", "c"], "st": ["AL", "AL", "AL"],
+                           "f1": [89, 83, 0],
+                           "begin_utc": ["2011-04-27T16:00Z"] * 3})
+    ugc = sw.tornado_ugc(tracks)
+    assert ugc[:2].tolist() == ["ALC089", "ALC083"] and pd.isna(ugc[2]), ugc.tolist()
+    hits = sw.county_hits(tracks, rec)
+    assert hits.spc_id.tolist() == ["a"], "county ALC083 was cleared at 15:00"
+    text = ("\x01\n265\nWWUS20 KWNS 271310\nSEL0\nURGENT\nTORNADO WATCH NUMBER 231\n"
+            "THIS TORNADO WATCH REPLACES TORNADO WATCH NUMBER 225. WATCH NUMBER 225 WILL "
+            "NOT BE IN EFFECT AFTER 900 AM CDT.\nOTHER WATCH INFORMATION...CONTINUE..."
+            "WW 226...WW 227...\n\x03\x01\n300\nWWUS20 KWNS 271330\nSEL8\n"
+            "SEVERE THUNDERSTORM WATCH NUMBER 38\nOTHER WATCH INFORMATION...THIS SEVERE "
+            "THUNDERSTORM WATCH REPLACES SEVERE THUNDERSTORM WATCH NUMBER 36...TORNADO WATCH "
+            "NUMBER 37. WATCH NUMBER 36 37 WILL NOT BE IN EFFECT AFTER 650 PM CDT.\n"
+            "\x03\x01\n808\nWWUS20 KWNS 271400\nSEL5\n"
+            "The NWS Storm Prediction Center has cancelled Severe Thunderstorm Watch 228\n\x03")
+    t = sw.parse_watch_texts(text)
+    assert len(t) == 3
+    assert t.replaces[1] == [36, 37] and t.not_in_effect[1] == [36, 37], t.loc[1].to_dict()
+    assert t.num[0] == 231 and t.type[0] == "TOR" and t.replaces[0] == [225]
+    assert t.not_in_effect[0] == [225] and t.continues[0] == [226, 227]
+    assert t.cancellation[2] and t.num[2] == 228 and t.type[2] == "SVR"
+    no_soh = text.replace("\x01", "").replace("\x03", "")
+    assert len(sw.split_products(no_soh)) == 3, "header split without control characters"
+
+
+def watch_systems_follow_the_three_rules() -> None:
+    """Concurrent county links; downstream successors link, upstream ones are held for review."""
+    import pandas as pd
+    from tornado_dataset.dat import spc_watches as sw
+    T = lambda s: pd.Timestamp(s, tz="UTC")
+    # Watch 1 over county A then B (moving east); watch 2 takes over east of B;
+    # watch 3 starts west of A (upstream) right after; watch 4 shares county B with 1.
+    rec = pd.DataFrame({
+        "year": [2011] * 6, "num": [1, 1, 2, 3, 4, 5], "type": ["TOR"] * 6,
+        "ugc": ["XXC001", "XXC002", "XXC003", "XXC000", "XXC002", "XXC009"],
+        "wfo": ["AAA"] * 6, "status": ["EXP"] * 6,
+        "start": [T("2011-04-27 12:00"), T("2011-04-27 12:00"), T("2011-04-27 17:30"),
+                  T("2011-04-27 17:30"), T("2011-04-27 14:00"), T("2011-04-28 12:00")],
+        "end": [T("2011-04-27 15:00"), T("2011-04-27 18:00"), T("2011-04-27 22:00"),
+                T("2011-04-27 22:00"), T("2011-04-27 16:00"), T("2011-04-28 15:00")]})
+    poly = pd.DataFrame({"year": [2011] * 5, "num": [1, 2, 3, 4, 5], "type": ["TOR"] * 5,
+                         "issue": [T("2011-04-27 12:00")] * 4 + [T("2011-04-28 12:00")],
+                         "expire": [T("2011-04-28 00:00")] * 4 + [T("2011-04-28 18:00")],
+                         "is_pds": [0] * 5, "mv_drct": [270.0] * 5, "mv_sknt": [40.0] * 5,
+                         "geometry": [None] * 5})
+    texts = sw.parse_watch_texts("")
+    texts["year"] = 2011
+    from shapely.geometry import box
+    xs = [-40e3, 0, 40e3, 80e3, 3000e3]      # 40 km squares: neighbours touch
+    geo = pd.DataFrame({"ugc": ["XXC000", "XXC001", "XXC002", "XXC003", "XXC009"],
+                        "geometry": [box(x - 20e3, -20e3, x + 20e3, 20e3) for x in xs],
+                        "x": xs, "y": [0.0] * 5, "reach": [20e3 * 2 ** .5] * 5})
+    hfo = rec.iloc[[0]].assign(ugc="HIC007", start=T("2011-12-19 10:00"), end=T("2011-12-19 18:00"))
+    typo = rec.iloc[[0]].assign(ugc="XXC001", start=T("2011-08-01 10:00"), end=T("2011-08-01 12:00"))
+    cleaned, notes = sw.clean_county_records(pd.concat([rec, hfo, typo], ignore_index=True), poly)
+    assert len(cleaned) == len(rec) and notes["dropped_outside_spc_area"] == 1 \
+        and notes["dropped_after_expiry"] == 1, notes
+    w, c = sw.build_watches(cleaned, poly, texts)
+    l1 = sw.concurrent_links(c)
+    assert {tuple(sorted(x)) for x in zip(l1.a, l1.b)} == {("2011_0001", "2011_0004")}
+    # "Replaces watch 765" on 1 January means last year's 765, not this year's.
+    ny = pd.DataFrame({"wid": ["2010_0765", "2011_0001", "2011_0765"],
+                       "first_start": [T("2010-12-31 20:00"), T("2011-01-01 02:00"), T("2011-08-01 12:00")],
+                       "last_end": [T("2011-01-01 03:00"), T("2011-01-01 09:00"), T("2011-08-01 18:00")],
+                       "replaces": ["", "2011_0765", ""]})
+    l2 = sw.explicit_links(ny)
+    assert list(zip(l2.a, l2.b)) == [("2010_0765", "2011_0001")], l2.to_dict("records")
+    fp = sw.Footprints(w, c, geo)
+    cand = sw.succession_candidates(w, fp)
+    one_two = cand[(cand.a == "2011_0001") & (cand.b == "2011_0002")]
+    assert one_two.edge_m.iloc[0] == 0.0, "touching counties are 0 km apart"
+    l3, rej = sw.inferred_links(cand, motion_slack_m=50e3)
+    pairs3 = set(zip(l3.a, l3.b))
+    assert ("2011_0001", "2011_0002") in pairs3, cand.to_dict("records")
+    assert set(zip(rej.a, rej.b)) >= {("2011_0001", "2011_0003")}, "upstream must be held"
+    # The pruned search must return the exact minimum distance.
+    import numpy as np
+    import shapely
+    rng = np.random.default_rng(0)
+    ga = np.array([box(x, y, x + 5e3, y + 5e3) for x, y in rng.uniform(0, 3e5, (30, 2))])
+    gb = np.array([box(x, y, x + 5e3, y + 5e3) for x, y in rng.uniform(4e5, 7e5, (30, 2))])
+    ca = np.array([[g.centroid.x, g.centroid.y] for g in ga])
+    cb = np.array([[g.centroid.x, g.centroid.y] for g in gb])
+    lower = np.hypot(*(ca[:, None, :] - cb[None, :, :]).transpose(2, 0, 1)) - 2 * 2.5e3 * 2 ** .5
+    exact = shapely.distance(ga[:, None], gb[None, :]).min()
+    assert abs(sw._min_distance(ga, gb, lower, chunk=8) - exact) < 1e-6
+    w["system_id"] = sw.systems(w, pd.concat([l1, l3]))
+    sid = dict(zip(w.wid, w.system_id))
+    assert sid["2011_0001"] == sid["2011_0002"] == sid["2011_0004"] != sid["2011_0005"]
+    # Watch 2 begins while watch 1 still runs next door: a side-by-side link, not
+    # a hand-over; watch 4 had ended before watch 2 began, so that one is a hand-over.
+    seq = set(zip(*[sw.sequence_links(pd.concat([l1, l3]))[c] for c in ("a", "b")]))
+    assert ("2011_0001", "2011_0002") not in seq and ("2011_0004", "2011_0002") in seq, seq
+    tracks = pd.DataFrame({"spc_id": ["t1", "t2"], "yr": [2011, 2011], "mag": [1, 2],
+                           "st": ["XX", "XX"], "f1": [2, 9], "slat": [0, 0], "slon": [0, 0],
+                           "begin_utc": ["2011-04-27T14:30Z", "2011-04-28T09:00Z"]})
+    a = sw.assign_tornadoes(tracks, c, poly, sid)
+    assert a.system_id[0] == sid["2011_0001"] and a.n_systems[0] == 1, a.to_dict("records")
+    assert a.method[1] == "none", "t2 starts before its county's watch"
+
+
+def watch_scores_see_merging_across_offices() -> None:
+    """Merging two watch systems costs precision; the cross-office part isolates it."""
+    import pandas as pd
+    from tornado_dataset.dat import episodes
+    system = pd.Series(["s1", "s1", "s2", "s2", None])
+    wfo = pd.Series(["OUN", "TSA", "OUN", "TSA", "OUN"])
+    exact = episodes.score_watch(pd.Series([0, 0, 1, 1, 2]), system, wfo)
+    assert exact["recall"] == exact["precision"] == exact["f1"] == 1.0, exact
+    merged = episodes.score_watch(pd.Series([0, 0, 0, 0, 0]), system, wfo)
+    assert merged["recall"] == 1.0 and abs(merged["precision"] - 2 / 6) < 1e-9, merged
+    # Grouped cross-office pairs: (1,2) (1,4) (2,3) (3,4) — two within a system.
+    assert abs(merged["cross_office_precision"] - 0.5) < 1e-9, merged
+    assert merged["scored"] == 4, "the unwatched tornado is left out"
+    split = episodes.score_watch(pd.Series([0, 1, 2, 3, 4]), system, wfo)
+    assert split["recall"] == 0.0 and split["systems_split"] == 1.0
+
+
 for name, fn in [
     ("evidence windows reach late mentions", evidence_windows_reach_late_mentions),
     ("paywall stub is a failure, not an article", paywall_stub_is_a_failure_not_an_article),
@@ -502,6 +636,9 @@ for name, fn in [
     ("DAT reference extends through SPC", dat_reference_extends_through_spc),
     ("spc episodes carry to DAT hazards", spc_episodes_carry_to_dat_hazards),
     ("episode counts cover all SPC tornadoes", episode_counts_cover_all_spc_tornadoes),
+    ("watch records and texts parse", watch_records_and_texts_parse),
+    ("watch systems follow the three rules", watch_systems_follow_the_three_rules),
+    ("watch scores see merging across offices", watch_scores_see_merging_across_offices),
 ]:
     check(name, fn)
 

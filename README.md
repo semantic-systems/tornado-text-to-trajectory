@@ -87,6 +87,10 @@ python scripts/23_label_fulltext.py run        # label bodies, compare with head
 python scripts/24_storm_events.py run         # NCEI Storm Events, matched to DAT
 python scripts/25_compare_episodes.py         # episode definitions compared
 python scripts/25_compare_episodes.py --anchor spc  # ...grouping SPC's complete tornado list
+python scripts/26_watch_systems.py probe      # SPC watch archive: feasibility check
+python scripts/26_watch_systems.py run        # SPC watch systems (fetch + link)
+python scripts/26_watch_systems.py sheets     # hand-check worksheets
+python scripts/26_watch_systems.py review     # label them on a map (then: check)
 python scripts/22_corpus_atlas.py --events-only  # all three corpora as a set
 ```
 

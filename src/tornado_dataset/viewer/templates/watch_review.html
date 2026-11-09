@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Watch hand checks</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='watch_review.css') }}">
+</head>
+<body>
+<header>
+  <h1>Watch hand checks</h1>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-mode="outbreak" aria-selected="true">Outbreaks <span id="prog-outbreak" class="prog"></span></button>
+    <button role="tab" data-mode="review" aria-selected="false">Watch pairs <span id="prog-review" class="prog"></span></button>
+    <button role="tab" data-mode="compare" aria-selected="false" title="named groupings side by side, after the outbreak labels">Compare <span id="prog-compare" class="prog"></span></button>
+  </nav>
+  <span class="tag">{{ tag }}</span>
+  <button id="guide-btn" class="ghost" title="How to review (shift+G)">Guide</button>
+  <button id="help-btn" class="ghost" title="Keyboard shortcuts (?)">?</button>
+</header>
+
+<div class="app">
+  <aside id="list" aria-label="items"></aside>
+
+  <section class="center">
+    <div id="map"></div>
+    <div id="compare" hidden></div>
+    <div class="timebar">
+      <button id="play" class="ghost" title="Play / pause (space)">▶</button>
+      <input type="range" id="time" min="0" max="1000" value="1000" aria-label="time">
+      <span id="time-label" class="time-label">—</span>
+      <select id="window" title="Which items are drawn at the selected time">
+        <option value="all">show all</option>
+        <option value="cum">up to this time</option>
+        <option value="1">±1 h</option>
+        <option value="3">±3 h</option>
+        <option value="6">±6 h</option>
+        <option value="12">±12 h</option>
+      </select>
+      <label class="check" title="Hide what is outside the time window instead of fading it"><input type="checkbox" id="hide"> hide</label>
+      <button id="fit" class="ghost" title="Zoom to the item (z)">fit</button>
+    </div>
+    <svg id="timeline" role="img" aria-label="timeline"></svg>
+  </section>
+
+  <aside id="panel"><p class="empty">Loading…</p></aside>
+</div>
+
+<div id="help" hidden>
+  <div class="help-card">
+    <h2>Keys</h2>
+    <dl>
+      <dt><kbd>1</kbd>–<kbd>4</kbd></dt><dd>set the label (press again to clear)</dd>
+      <dt><kbd>a</kbd>–<kbd>i</kbd></dt><dd>switch grouping (outbreaks)</dd>
+      <dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>next / previous item</dd>
+      <dt><kbd>n</kbd></dt><dd>next unlabelled</dd>
+      <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>move the time by 30 min (<kbd>shift</kbd>: 3 h)</dd>
+      <dt><kbd>space</kbd></dt><dd>play / pause</dd>
+      <dt><kbd>w</kbd></dt><dd>watches layer on / off (outbreaks)</dd>
+      <dt><kbd>z</kbd></dt><dd>zoom to the item</dd>
+      <dt><kbd>r</kbd> <kbd>d</kbd></dt><dd>compare: next reference grouping · fade tracks that agree with it</dd>
+      <dt><kbd>shift</kbd>+<kbd>G</kbd></dt><dd>the review guide</dd>
+      <dt><kbd>?</kbd></dt><dd>this help</dd>
+    </dl>
+    <p>Labels are saved to the worksheet CSVs as you set them. Notes save when you
+      stop typing. Keep the CSVs closed in other programs while you work here.</p>
+    <button class="ghost" id="help-close">close</button>
+  </div>
+</div>
+
+<div id="guide" hidden>
+  <div class="guide-card">
+    <h2>How to review</h2>
+    <p class="lede">Labels save as you set them into <code>outputs/annotation/watch_*_sheet.csv</code>;
+      afterwards run <code>python scripts/26_watch_systems.py check</code>. The tabs count labels:
+      <span id="guide-counts">one per grouping of each outbreak, one per watch pair</span>.</p>
+
+    <h3>A · Outbreaks — does each grouping <span class="guide-letters">A–I</span> cut the outbreak into the events the record describes?</h3>
+    <ol>
+      <li><b>First, your event list — before looking at any grouping.</b> Open the SPC report pages and
+        the Wikipedia search (panel links) and note each separate event with region and time, e.g.
+        “E1 26 Apr TX–AR evening · E2 27 Apr morning line MS–AL · E3 27 Apr afternoon supercells AL–GA–TN”.
+        Put it in the notes of grouping A. <i>An event</i> = tornadoes from one storm system in one
+        continuous period; two parts are separate if the summaries say so, or if activity stops for
+        several hours and restarts with new storms elsewhere.</li>
+      <li><b>Then each grouping</b> (keys <span class="guide-keys">a–i</span>): compare the coloured groups with your list.
+        Grey (groups with fewer than 3 tornadoes in the window, ungrouped tornadoes) does not count;
+        dashed tracks lie outside the window — ignore them unless they make a group span two events.</li>
+      <li><b>Label</b>:
+        <table>
+          <tr><td><kbd>1</kbd> matches</td><td>each event is mainly one coloured group, and no coloured group holds most of two events</td></tr>
+          <tr><td><kbd>2</kbd> too coarse</td><td>at least one coloured group holds two events of your list</td></tr>
+          <tr><td><kbd>3</kbd> too fine</td><td>at least one event is split over two or more coloured groups (typical: at a dashed 12Z line, or along the path)</td></tr>
+          <tr><td><kbd>4</kbd> cannot tell</td><td>the summaries do not say whether the parts are one event</td></tr>
+        </table>
+        Both errors at once: label the one affecting more tornadoes and note the other.</li>
+      <li><b>Helpers</b>: the timeline has one row per group and dashed orange lines at 12Z (the
+        convective-day boundary); hover a row or a group to highlight it, drag on the timeline to move in
+        time. A time window (±3 h) with ▶ shows whether activity is continuous or stops and restarts.</li>
+    </ol>
+
+    <h3>B · Watch pairs — does watch B cover the same storms as watch A?</h3>
+    <p>The linking kept B apart because B lies upstream of (behind) A's storm motion.</p>
+    <ol>
+      <li>The time starts at B's issue time. Filled counties are in effect at the selected time
+        (blue A, orange B); outlines are the polygons, arrows two hours of storm motion; grey = other watches.</li>
+      <li>Play through with a ±1 h window: do A's storms move into B, or do B's storms form separately behind or beside A's?</li>
+      <li>Read both SEL texts in the panel: “replaces watch …” or “continues” points to the same threat;
+        “new development”, a second line or another region to a separate one.</li>
+      <li><b>Label</b>:
+        <table>
+          <tr><td><kbd>1</kbd> separate systems</td><td>B covers other storms — the rejection was right</td></tr>
+          <tr><td><kbd>2</kbd> should link</td><td>B covers A's storms, taken over or replaced — the rejection was wrong</td></tr>
+          <tr><td><kbd>3</kbd> cannot tell</td><td>map and texts do not settle it</td></tr>
+        </table></li>
+    </ol>
+    <h3>C · Compare — after the outbreak labels</h3>
+    <p>Read-only. Four named groupings of one outbreak on synced maps with one time slider, each with
+      your blind label. Colours follow the reference grouping (<kbd>r</kbd> to change it): same colour =
+      same tornadoes together, a new colour = a split, a reference colour gone = a merge.
+      <kbd>d</kbd> fades every track that agrees with the reference, leaving only the differences.</p>
+    <p>Keys: <kbd>n</kbd> next unlabelled · <kbd>j</kbd>/<kbd>k</kbd> next/previous · <kbd>space</kbd> play ·
+      <kbd>←</kbd>/<kbd>→</kbd> ±30 min · <kbd>w</kbd> watch outlines · <kbd>z</kbd> zoom · <kbd>?</kbd> all keys.</p>
+    <button class="ghost" id="guide-close">close</button>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='vendor/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='watch_review.js') }}"></script>
+</body>
+</html>
