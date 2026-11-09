@@ -4,6 +4,12 @@ Turns the linked DAT features into the dataset's unit of analysis: one hazard pe
 tornado, carrying its track line(s), damage polygon(s), attributes, the DAT survey
 ``comments`` as oracle text, and flags describing what evidence it rests on.
 
+Lines and polygons rated as not a tornado (``config.NON_TORNADO_RATINGS``:
+thunderstorm wind) are left out first. A hazard is then built from each group of
+track lines, with the polygons linked to them; polygons no line claims become
+hazards of their own. ``geometry_source`` says which: ``line``,
+``line+polygon`` or ``polygon``.
+
     python scripts/12_build_hazards.py
     python scripts/12_build_hazards.py --tag march2025
 """
@@ -59,13 +65,25 @@ def main() -> None:
 
     lines = link.prepare(json.loads(lines_path.read_text(encoding="utf-8"))["features"])
     polygons = link.prepare(json.loads(polygons_path.read_text(encoding="utf-8"))["features"])
-    links = link.accepted(pd.read_csv(links_path).to_dict("records"))
+    lines, wind_lines = hz.split_by_rating(lines)
+    polygons, wind_polygons = hz.split_by_rating(polygons)
+    kept_lines = {line["globalid"] for line in lines}
+    kept_polygons = {polygon["objectid"] for polygon in polygons}
+    all_links = link.accepted(pd.read_csv(links_path).to_dict("records"))
+    links = [r for r in all_links
+             if str(r.get("line_globalid") or "").upper() in kept_lines
+             and r["polygon_oid"] in kept_polygons]
+    print(f"left out as not a tornado: {len(wind_lines)} lines, {len(wind_polygons)} polygons "
+          f"({', '.join(sorted(config.NON_TORNADO_RATINGS))})")
 
     built = hz.build_hazards(lines, polygons, links,
                              min_link_confidence=args.min_link_confidence)
+    polygon_hazards, polygon_stats = hz.build_polygon_hazards(polygons, links)
+    built += polygon_hazards
     episodes = hz.build_episodes(built)
     print(f"{len(lines)} lines + {len(polygons)} polygons -> "
-          f"{len(built)} hazards in {len(episodes)} episodes")
+          f"{len(built)} hazards ({len(polygon_hazards)} from polygons alone) "
+          f"in {len(episodes)} episodes")
 
     gdelt_start = config.GDELT_COVERAGE_START.isoformat()
     features, geometry_rows = [], []
@@ -102,8 +120,15 @@ def main() -> None:
         "hazards": len(built),
         "episodes": len(episodes),
         "geometries": len(geometry_rows),
-        "polygons_linked_stage2": len({r["polygon_oid"] for r in links}),
-        "polygons_attached_to_hazards": int(table.n_polygons.sum()),
+        "polygons_linked_stage2": len({r["polygon_oid"] for r in all_links}),
+        "polygons_linked_to_tornado_lines": len({r["polygon_oid"] for r in links}),
+        "polygons_attached_to_hazards": int(table.n_polygons[table.n_lines > 0].sum()),
+        "lines_excluded_not_tornado": len(wind_lines),
+        "polygons_excluded_not_tornado": len(wind_polygons),
+        "non_tornado_ratings": sorted(config.NON_TORNADO_RATINGS),
+        "polygons_in_polygon_hazards": int(table.n_polygons[table.n_lines == 0].sum()),
+        **polygon_stats,
+        "hazards_by_geometry_source": table.geometry_source.value_counts().to_dict(),
         "hazards_with_polygon": int(table.has_polygon.sum()),
         "hazards_with_oracle_text": int(table.has_oracle_text.sum()),
         "hazards_with_wfo": int(table.wfo_known.sum()),

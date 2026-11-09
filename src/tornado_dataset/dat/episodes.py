@@ -75,25 +75,37 @@ def load_hazard_frame(tag: str) -> pd.DataFrame:
     ``geom`` is the geometry stage 12 measures episode distance on: the single
     track line, or the convex hull of all vertices when a hazard has several.
     ``track`` is the actual line(s), for matching against other records;
-    ``point`` is the track midpoint, used by the density methods.
+    ``point`` is the track midpoint, used by the density methods. A hazard with
+    no track line (``geometry_source == "polygon"``) takes its damage
+    polygon(s) for both, and a point inside the largest. ``date`` is the
+    convective day, for hazards whose DAT time is only a date.
     """
     from pyproj import Transformer
-    from shapely import line_interpolate_point
+    from shapely import line_interpolate_point, unary_union
     from shapely.geometry import MultiLineString, MultiPoint, shape
     from shapely.ops import transform
 
     hazards = pd.read_csv(config.PROCESSED_DIR / f"hazards_{tag}.csv", low_memory=False)
     geoms = pd.read_csv(config.PROCESSED_DIR / f"geometries_{tag}.csv")
-    geoms = geoms[geoms.geom_role == "track_line"]
     to_m = Transformer.from_crs(config.CRS_WGS84, config.CRS_EQUAL_AREA, always_xy=True)
     lines: dict[str, list] = {}
-    for uid, gj in zip(geoms.hazard_uid, geoms.geojson):
-        lines.setdefault(uid, []).append(transform(to_m.transform, shape(json.loads(gj))))
+    polygons: dict[str, list] = {}
+    for uid, role, gj in zip(geoms.hazard_uid, geoms.geom_role, geoms.geojson):
+        into = lines if role == "track_line" else polygons if role == "damage_polygon" else None
+        if into is not None:
+            into.setdefault(uid, []).append(transform(to_m.transform, shape(json.loads(gj))))
 
     geom, point, tracks = [], [], []
     for uid in hazards.hazard_uid:
         parts = lines.get(uid, [])
         flat = [p for g in parts for p in (g.geoms if hasattr(g, "geoms") else [g])]
+        if not flat and polygons.get(uid):
+            shapes = polygons[uid]
+            area = unary_union(shapes)
+            geom.append(shapes[0] if len(shapes) == 1 else area.convex_hull)
+            tracks.append(area)
+            point.append(max(shapes, key=lambda g: g.area).representative_point())
+            continue
         if not flat:
             geom.append(None)
             point.append(None)
@@ -112,6 +124,7 @@ def load_hazard_frame(tag: str) -> pd.DataFrame:
     hazards["t0"] = pd.to_datetime(hazards.time_begin_utc, utc=True, errors="coerce")
     end = pd.to_datetime(hazards.time_end_utc, utc=True, errors="coerce")
     hazards["t1"], hazards["end_repaired"] = repair_end_times(hazards.t0, end)
+    hazards["date"] = pd.to_datetime(hazards.convective_day, errors="coerce").dt.date
     return hazards
 
 

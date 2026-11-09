@@ -64,6 +64,8 @@ def main() -> None:
     episodes = pd.read_csv(config.PROCESSED_DIR / f"episodes_{tag}.csv")
     fetch_manifest = json.loads((config.INTERIM_DIR / f"manifest_fetch_{tag}.json").read_text())
     link_manifest = json.loads((config.INTERIM_DIR / f"manifest_link_{tag}.json").read_text())
+    hazard_counts = json.loads((config.PROCESSED_DIR / f"manifest_hazards_{tag}.json")
+                               .read_text())["counts"]
 
     lines = link.prepare(lines_raw)
     polygons = link.prepare(polys_raw)
@@ -164,6 +166,27 @@ def main() -> None:
                                    ("> 100 km", 100_000, float("inf"))]],
     ])
 
+    by_source = hazards.geometry_source.value_counts() if "geometry_source" in hazards else None
+    sources_md = "" if by_source is None else (
+        "| geometry | hazards | what it rests on |\n|---|---:|---|\n"
+        + "\n".join(f"| `{k}` | {int(by_source.get(k, 0)):,} | {v} |" for k, v in (
+            ("line", "track line(s) only"),
+            ("line+polygon", "track line(s) and the damage polygon(s) linked to them"),
+            ("polygon", "damage polygon(s) no line claims: a tornado surveyed without a "
+                        "drawn track")))
+        + f"""
+
+Left out before assembly as not a tornado (rated {', '.join(hazard_counts.get('non_tornado_ratings', []))}):
+**{hazard_counts.get('lines_excluded_not_tornado', 0):,} lines** and
+**{hazard_counts.get('polygons_excluded_not_tornado', 0):,} polygons**. Thunderstorm-wind
+features matched an SPC tornado 7% of the time; a wind polygon lying on a tornado
+track is therefore not taken for that tornado's damage. Of the polygons linked to a
+tornado line, {hazard_counts.get('polygons_linked_to_tornado_lines', 0) - hazard_counts.get('polygons_attached_to_hazards', 0):,}
+fall below the link-confidence floor ({hazard_counts.get('min_link_confidence')}) and are
+used nowhere. {hazard_counts.get('polygons_in_polygon_hazards', 0):,} polygons without a
+line form the {int(by_source.get('polygon', 0)):,} polygon-only hazards
+({hazard_counts.get('polygon_hazards_date_only', 0):,} of them with a date but no time).
+""")
     reference_lines = refs.report_lines(tag)
     references_md = "\n".join(reference_lines) if reference_lines is not None else (
         "Not available: run `scripts/13_fetch_references.py` and "
@@ -228,7 +251,9 @@ disagrees with the geometry on more than half the polygons.
 The median unlinked polygon is **{distances.median() / 1000:.0f} km** from the nearest line surveyed the
 same day, so these are overwhelmingly damage areas recorded without any track
 line rather than links the threshold missed — only {int((distances <= 1000).sum())} sit within 1 km of a
-same-day line. Widening the gap threshold cannot recover them.
+same-day line. Widening the gap threshold cannot recover them. Those rated as a
+tornado become hazards of their own in stage 12 (section 5), and most match an
+SPC tornado (section 6).
 
 ## 4. Linker evaluation against the `path_guid` gold set
 
@@ -303,6 +328,8 @@ which is exactly why these metrics are not extrapolated to the full dataset.
 {len(lines)} usable lines and {len(polygons)} usable polygons were assembled into
 **{len(hazards)} hazards** (one tornado each) grouped into **{len(episodes)} episodes**
 (convective day + spatial proximity).
+
+{sources_md}
 
 | property | n | share |
 |---|---|---|

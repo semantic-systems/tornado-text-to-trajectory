@@ -152,6 +152,12 @@ LINK_MAX_DATE_DELTA_DAYS = 1
 HAZARD_ENDPOINT_GAP_M = 3000.0
 # Minimum geometric link confidence for a polygon to be merged into a hazard.
 HAZARD_MIN_LINK_CONFIDENCE = 0.5
+# DAT ratings that say a feature is *not* a tornado. Lines and polygons rated
+# so are left out of the hazards, on both sides alike: the 193 hazards rated
+# TSTM/Wind (2010-2025) matched an SPC tornado 7% of the time, against 95-99%
+# for every other rating, unrated ones included. Everything else stays in;
+# stage 14's SPC match is what confirms it. Compared upper-case.
+NON_TORNADO_RATINGS = frozenset({"TSTM/WIND"})
 # Convective day boundary (UTC hour). NWS convention runs 12Z-12Z so that a
 # night-time outbreak is not split across two calendar dates.
 CONVECTIVE_DAY_START_HOUR = 12

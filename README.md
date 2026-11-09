@@ -123,7 +123,8 @@ where it stopped and a rerun needs no network: IEM ~26k requests (~3.5 h), GDELT
 Scope and every threshold live in [`config.py`](src/tornado_dataset/config.py); a
 run is described by that file plus the git SHA recorded in each manifest. The
 default window is 2010-01-01 – 2025-12-31, which yields **11,520 damage lines and
-9,989 damage polygons → 9,982 hazards in 2,795 episodes**.
+9,989 damage polygons → 11,316 hazards in 3,172 episodes**, 1,475 of them
+from damage polygons alone; features rated thunderstorm wind are left out.
 
 Three design decisions worth knowing before using the outputs:
 

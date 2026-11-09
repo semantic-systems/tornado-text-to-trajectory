@@ -151,15 +151,17 @@ def spc_section(tag: str, hazards: pd.DataFrame, ci) -> list[str]:
     links = pd.read_csv(spc_links_path(tag))
     check = json.loads(crosscheck_path(tag).read_text()) \
         if crosscheck_path(tag).exists() else {}
-    hz_year = hazards.t0.dt.year
+    hz_year = hazards.t0.dt.year.fillna(
+        pd.to_datetime(hazards.convective_day, errors="coerce").dt.year)
     method = links.get("link_method", pd.Series("spatial_temporal_join", index=links.index))
     strict = links[method == "spatial_temporal_join"]
     lines = ["### SPC whole tracks", "",
              "SPC's database holds one reviewed record per tornado — the official "
              "version of the chaining above. Same matching rule; the last column adds "
-             "the time-repaired second pass (next section).", "",
+             "the time-repaired second pass (next section) and, for hazards whose DAT "
+             "survey gives only a date, a match by date within a day.", "",
              "| year | SPC tornadoes | DAT hazards | SPC tornadoes found in DAT | "
-             "DAT hazards found in SPC | … with time repair |", "|---|---:|---:|---|---|---|"]
+             "DAT hazards found in SPC | … all passes |", "|---|---:|---:|---|---|---|"]
     found_spc, found_hz = set(strict.spc_id), set(strict.hazard_uid)
     found_all = set(links.hazard_uid)
     for y in sorted(tracks.yr.unique()):
@@ -181,7 +183,43 @@ def spc_section(tag: str, hazards: pd.DataFrame, ci) -> list[str]:
                   f"- Records dropped on loading: {check.get('dropped_not_whole_track', 0):,} "
                   f"not whole-track, {check.get('dropped_unknown_tz', 0):,} with an unknown "
                   "time zone."]
+    lines += [""] + geometry_source_lines(links, hazards)
     return lines + [""] + repair_section(tag, links, hazards, check.get("time_repair", {}))
+
+
+def geometry_source_lines(links: pd.DataFrame, hazards: pd.DataFrame) -> list[str]:
+    """SPC match by what a hazard's geometry rests on, and SPC tracks DAT holds twice."""
+    if "geometry_source" not in hazards.columns:
+        return []
+    best = links[links.rank_for_hazard == 1].drop_duplicates("hazard_uid").set_index("hazard_uid")
+    how = hazards.hazard_uid.map(best.link_method).fillna("none")
+    t = pd.crosstab(hazards.geometry_source, how)
+    cols = [c for c in ("spatial_temporal_join", "time_repaired", "date_only", "none") if c in t]
+    names = {"spatial_temporal_join": "strict", "time_repaired": "time repaired",
+             "date_only": "by date", "none": "no SPC track"}
+    lines = ["#### By geometry source", "",
+             "Hazards from damage polygons alone (stage 12: tornadoes DAT surveyed "
+             "without drawing a track) are matched by their polygons; most carry a time, "
+             "those with only a date are matched by date.", "",
+             "| geometry | hazards | " + " | ".join(names[c] for c in cols) + " |",
+             "|---|---:|" + "---:|" * len(cols)]
+    for src, row in t.iterrows():
+        n = int(row.sum())
+        lines.append(f"| {src} | {n:,} | " + " | ".join(
+            f"{int(row[c]):,} ({row[c] / n:.0%})" for c in cols) + " |")
+    if "hazards_on_track" in best.columns:
+        shared = best[best.hazards_on_track > 1]
+        src = hazards.set_index("hazard_uid").geometry_source
+        kinds = shared.assign(s=shared.index.map(src)).groupby("spc_id").s.agg(
+            lambda s: "with a polygon-only hazard" if (s == "polygon").any() else "lines only")
+        lines += ["", f"- **{shared.spc_id.nunique():,} SPC tracks are the closest of more than "
+                  f"one DAT hazard** ({shared.index.nunique():,} hazards; "
+                  f"{int((kinds != 'lines only').sum()):,} involve a polygon-only hazard). One "
+                  "tornado in DAT twice: a polygon beyond stage 11's linking distance from its "
+                  "own line, pieces of one track drawn apart, or a second survey. Kept as they "
+                  "are and flagged on the links (`hazards_on_track`): merging them needs the "
+                  "SPC track, which stage 12, building hazards from DAT alone, does not use."]
+    return lines
 
 
 def implied_false(first: pd.DataFrame, fixed: pd.DataFrame, chance) -> str:

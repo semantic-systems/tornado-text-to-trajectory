@@ -59,6 +59,9 @@ CONTINUATION_GAP_S = 1_800.0
 # minutes apart; the tolerances absorb rounding of coordinates and times.
 MATCH_DISTANCE_M = 5_000.0
 MATCH_GAP_S = 1_800.0
+# For DAT hazards with a date but no time (damage polygons surveyed without one):
+# the official record's UTC start date within this many days of it.
+MATCH_DATE_DAYS = 1
 
 KEEP = ["EVENT_ID", "EPISODE_ID", "WFO", "STATE", "CZ_FIPS", "CZ_NAME",
         "BEGIN_DATE_TIME",
@@ -248,13 +251,20 @@ def row_geometries(tornadoes: pd.DataFrame, project) -> list:
 # ── join to DAT hazards ─────────────────────────────────────────────────────
 def match_pairs(begin: pd.Series, end: pd.Series, geoms: list, targets: pd.DataFrame, *,
                 max_distance_m: float = MATCH_DISTANCE_M,
-                max_gap_s: float = MATCH_GAP_S) -> pd.DataFrame:
+                max_gap_s: float = MATCH_GAP_S,
+                max_days: int = MATCH_DATE_DAYS) -> pd.DataFrame:
     """Every (record, target) pair within a distance and a time gap.
 
     ``targets`` needs ``geom`` (projected, metres), ``t0`` and ``t1`` (UTC).
     Returns positional ``row`` and ``hz`` indices with ``distance_m`` and
     ``gap_s``. Shared by every source matched against DAT, so they are matched
     by the same rule.
+
+    A target with no time but a ``date`` (a DAT damage polygon whose survey
+    gives only the date) is matched by the same distance and a date within
+    ``max_days`` of the record's UTC start date instead; its ``gap_s`` is
+    missing and ``by_date`` true. It ranks after timed pairs at the same
+    distance.
     """
     from shapely import STRtree
 
@@ -262,6 +272,7 @@ def match_pairs(begin: pd.Series, end: pd.Series, geoms: list, targets: pd.DataF
     tree = STRtree([targets.geom.iloc[i] for i in valid])
     t0 = targets.t0.to_numpy()
     t1 = targets.t1.to_numpy()
+    dates = targets["date"].to_numpy() if "date" in targets.columns else [None] * len(targets)
     rows = []
     for k, geom in enumerate(geoms):
         if geom is None:
@@ -274,11 +285,17 @@ def match_pairs(begin: pd.Series, end: pd.Series, geoms: list, targets: pd.DataF
             dist = geom.distance(targets.geom.iloc[j])
             if dist > max_distance_m:
                 continue
+            if pd.isna(t0[j]):
+                day = dates[j]
+                if day is not None and not pd.isna(day) \
+                        and abs((b.date() - day).days) <= max_days:
+                    rows.append((k, j, dist, np.nan, True))
+                continue
             gap = max((b - pd.Timestamp(t1[j])).total_seconds(),
                       (pd.Timestamp(t0[j]) - e).total_seconds(), 0.0)
             if gap <= max_gap_s:
-                rows.append((k, j, dist, gap))
-    pairs = pd.DataFrame(rows, columns=["row", "hz", "distance_m", "gap_s"])
+                rows.append((k, j, dist, gap, False))
+    pairs = pd.DataFrame(rows, columns=["row", "hz", "distance_m", "gap_s", "by_date"])
     order = ["distance_m", "gap_s"]
     if len(pairs):
         pairs["rank_for_event"] = pairs.sort_values(order).groupby("row").cumcount() + 1
@@ -311,8 +328,9 @@ def join_hazards(tornadoes: pd.DataFrame, se_geoms: list, hazards: pd.DataFrame,
         if col in tornadoes.columns:
             pairs[col] = tornadoes[col].to_numpy()[pairs.row]
     pairs["hazard_uid"] = hazards.hazard_uid.to_numpy()[pairs.hz]
-    pairs["link_method"] = "spatial_temporal_join"
-    return pairs.drop(columns=["row", "hz"]).sort_values(["hazard_uid", "rank_for_hazard"])
+    pairs["link_method"] = np.where(pairs.by_date, "date_only", "spatial_temporal_join")
+    return pairs.drop(columns=["row", "hz", "by_date"]).sort_values(
+        ["hazard_uid", "rank_for_hazard"])
 
 
 def hazard_episode_reference(links: pd.DataFrame) -> pd.DataFrame:
@@ -328,6 +346,8 @@ def coverage_by_year(tornadoes: pd.DataFrame, hazards: pd.DataFrame,
     """Both directions of the match, per year — DAT completeness in one table."""
     se_year = tornadoes.begin_utc.dt.year
     hz_year = hazards.t0.dt.year
+    if "convective_day" in hazards.columns:    # hazards with a date but no time
+        hz_year = hz_year.fillna(pd.to_datetime(hazards.convective_day, errors="coerce").dt.year)
     matched_rows = set(links.EVENT_ID)
     matched_hz = set(links.hazard_uid)
     years = sorted(set(se_year.dropna().astype(int)) | set(hz_year.dropna().astype(int)))

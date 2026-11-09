@@ -603,6 +603,16 @@ SPC's `om` is a per-year number up to September 2007 and a text identifier
 (`YYMMDDHHMM-NN`, start time in CST plus a sequence) after; `spc_id` keeps it as text.
 `--spc-file` uses a file from elsewhere; without one, the SPC part is skipped.
 
+Hazards built from damage polygons alone (stage 12, `geometry_source = polygon`)
+are matched by their polygons. Most carry a time and go through both passes like
+any hazard; those whose DAT survey gives only a date are matched by the same
+distance and an official start date within a day (`link_method = date_only`,
+`storm_events.MATCH_DATE_DAYS`), for Storm Events and SPC alike. Every SPC link
+carries `hazards_on_track`, the number of DAT hazards whose closest SPC track it
+is: above 1, one tornado is in DAT more than once — typically a polygon-only
+hazard beside the line hazard of the same tornado, or a track drawn in separated
+pieces. They are flagged, not merged; stage 17 counts them.
+
 ### Comparing episode definitions — `scripts/51_compare_episodes.py`
 
 Offline and read-only towards the pipeline. Runs stage 12's rule (re-implemented

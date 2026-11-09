@@ -101,7 +101,8 @@ def join_spc(args, se_rows, se_geoms, hazards, project) -> None:
     geoms = spc.track_geometries(tracks, project)
     links = spc.join_hazards(tracks, geoms, hazards, max_distance_m=args.max_distance_m,
                              max_gap_s=args.max_gap_s)
-    strict_hz = links.hazard_uid.nunique()
+    strict_hz = links[links.link_method == "spatial_temporal_join"].hazard_uid.nunique()
+    dated_hz = links[links.link_method == "date_only"].hazard_uid.nunique()
     links = spc.with_first_pass_columns(links, tracks, hazards)
     repair = {"enabled": not args.no_time_repair,
               "ef_chance": spc.chance_ef_agreement(tracks, hazards)}
@@ -116,6 +117,7 @@ def join_spc(args, se_rows, se_geoms, hazards, project) -> None:
               f"(whole-hour offsets 1–{args.repair_max_offset_h} h, ±"
               f"{args.repair_max_residual_min:g} min, ≤{args.max_distance_m/1000:g} km)")
     links["id_date"] = spc.event_id_date_check(links, tracks, hazards)
+    links["hazards_on_track"] = spc.hazards_per_track(links)
     unmatched = spc.nearest_unlinked(tracks, geoms, hazards, links)
     se_links = spc.join_storm_events(se_rows, se_geoms, tracks, geoms,
                                      max_distance_m=args.max_distance_m,
@@ -129,7 +131,9 @@ def join_spc(args, se_rows, se_geoms, hazards, project) -> None:
         {**notes, **check, "time_repair": repair}, indent=2, default=float))
     print(f"matched: {links.spc_id.nunique():,}/{len(tracks):,} SPC tornadoes, "
           f"{links.hazard_uid.nunique():,}/{len(hazards):,} DAT hazards "
-          f"({strict_hz:,} by the strict rule)")
+          f"({strict_hz:,} by the strict rule, {dated_hz:,} by date for hazards with no "
+          f"time); {links[links.hazards_on_track > 1].spc_id.nunique():,} SPC tracks are the "
+          "closest of more than one DAT hazard")
     print(f"Storm Events chains agreeing 1:1 with an SPC track: "
           f"{check['chains_one_to_one']:,}/{check['se_chains_matched']:,} "
           f"({check['share_one_to_one']:.1%}); split over several SPC tracks "

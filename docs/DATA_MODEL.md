@@ -56,6 +56,15 @@ Because DAT `event_id` is free text and unreliable, link is stored explicitly, n
 A line and polygon are candidate-linked when geometries are proximate/overlapping, dates
 coincide, and rating/attributes agree — recorded so the join is auditable and reproducible.
 
+#### What a hazard rests on (`geometry_source`)
+DAT features rated as not a tornado (`TSTM/Wind`, `config.NON_TORNADO_RATINGS`) are
+left out, lines and polygons alike; every other rating, unrated included, stays in.
+A hazard is then `line` (track line(s) only), `line+polygon` (with the polygons linked
+to its lines) or `polygon` (polygons no line claims: a tornado surveyed without a
+drawn track; touching polygons of one day and within an hour form one hazard). A
+`polygon` hazard has no path length, no WFO until stage 16 backfills it, no end time,
+and — where DAT gives only a date — no start time either.
+
 ### 4. TextRef
 A single natural-language artifact **stored by reference, not by body** (copyright-safe).
 

@@ -21,6 +21,14 @@ distinguish two parallel tornadoes in the same outbreak from one interrupted
 track. Where evidence is weak the features stay separate — an over-merged hazard
 silently corrupts the ground truth, a split one is visible in the counts.
 
+A damage polygon joins the hazard of the line it is linked to. Polygons with no
+accepted link are surveyed tornadoes whose track DAT never drew; they become
+hazards of their own (``geometry_source = polygon``), polygons of one day that
+touch forming one hazard. Features whose rating says they are not a tornado
+(:data:`config.NON_TORNADO_RATINGS`, i.e. thunderstorm wind) are left out on
+both sides before any of this, so a wind polygon lying on a tornado track is not
+taken for that tornado's damage.
+
 Episodes group hazards by convective day (12Z-12Z, the NWS convention that keeps
 a night-time outbreak on one date) and spatial proximity.
 """
@@ -30,7 +38,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Iterable
 
-from shapely import STRtree
+from shapely import STRtree, unary_union
 from shapely.geometry import MultiPoint
 
 from .. import config
@@ -69,6 +77,20 @@ class UnionFind:
 
 # ── attribute helpers ────────────────────────────────────────────────────────
 _EF_ORDER = {f"EF{d}": d for d in range(6)}
+
+
+def is_tornado_rating(value: Any) -> bool:
+    """False only where DAT says explicitly that a feature is not a tornado."""
+    return str(value or "").strip().upper() not in config.NON_TORNADO_RATINGS
+
+
+def split_by_rating(features: list[dict[str, Any]]
+                    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Prepared DAT features as (tornado, explicitly not a tornado)."""
+    kept, excluded = [], []
+    for f in features:
+        (kept if is_tornado_rating(f["properties"].get("efscale")) else excluded).append(f)
+    return kept, excluded
 
 
 def ef_rank(value: Any) -> float:
@@ -277,6 +299,7 @@ def build_hazards(lines: list[dict[str, Any]], polygons: list[dict[str, Any]],
             "polygon_objectids": ";".join(str(p["objectid"]) for p, _ in attached),
             "line_globalids": ";".join(line["globalid"] for line in member_lines),
             "merge_evidence": ";".join(merge_reasons),
+            "geometry_source": "line+polygon" if attached else "line",
             "max_link_confidence": max((r["link_confidence"] for _, r in attached), default=None),
             "min_link_confidence": min((r["link_confidence"] for _, r in attached), default=None),
             "_line_geoms": [line["geom"] for line in member_lines],
@@ -284,6 +307,97 @@ def build_hazards(lines: list[dict[str, Any]], polygons: list[dict[str, Any]],
             "_proj": [line["proj"] for line in member_lines],
         })
     return hazards
+
+
+def polygon_time(polygon: dict[str, Any]) -> dt.datetime | None:
+    """A polygon's time, or None where ``stormdate`` holds only a date.
+
+    DAT stores the date of a date-only entry as midnight UTC; a real time of
+    exactly 00:00:00 is rare enough to be treated the same way.
+    """
+    moment = parse_datetime(polygon["properties"].get("stormdate"))
+    if moment is None or (moment.hour, moment.minute, moment.second) == (0, 0, 0):
+        return None
+    return moment
+
+
+def build_polygon_hazards(polygons: list[dict[str, Any]], links: list[dict[str, Any]], *,
+                          touch_m: float = config.LINK_GAP_THRESHOLD_M,
+                          max_time_gap_s: float = 3600.0
+                          ) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Hazards from damage polygons that no line claims.
+
+    ``polygons`` and ``links`` are the tornado-rated ones that entered
+    :func:`build_hazards`. A polygon with any accepted link to a line is that
+    line's (attached, or left out below the confidence floor), so only polygons
+    without one become hazards here. Polygons of the same day within
+    ``touch_m`` of each other — nested intensity contours, a track drawn in
+    pieces — form one hazard, unless both carry a time and the times are more
+    than ``max_time_gap_s`` apart (a second tornado over the same ground). The
+    day is the convective day of the polygon's time, or its date where DAT
+    gives only a date; the hazard's start is the earliest time, and its end is
+    unknown.
+    """
+    linked = {record["polygon_oid"] for record in links}
+    free = [p for p in polygons if p["objectid"] not in linked]
+    times = [polygon_time(p) for p in free]
+    days = [convective_day(t) if t else p["date"] for p, t in zip(free, times)]
+
+    uf = UnionFind(len(free))
+    if free:
+        tree = STRtree([p["proj"] for p in free])
+        for a, polygon in enumerate(free):
+            for b in tree.query(polygon["proj"].buffer(touch_m)):
+                b = int(b)
+                apart = (abs((times[a] - times[b]).total_seconds())
+                         if times[a] and times[b] else 0.0)
+                if a < b and days[a] and days[a] == days[b] and apart <= max_time_gap_s \
+                        and polygon["proj"].distance(free[b]["proj"]) <= touch_m:
+                    uf.union(a, b, "polygon_adjacent")
+
+    hazards = []
+    for members in uf.groups().values():
+        member = [free[i] for i in members]
+        props = [p["properties"] for p in member]
+        timed = sorted(times[i] for i in members if times[i])
+        comments = []
+        for p in props:
+            comment = clean_text(p.get("comments"))
+            if comment and comment not in comments:
+                comments.append(comment)
+        ef_values = [p.get("efscale") for p in props if p.get("efscale")]
+        event_ids = sorted({str(p["event_id"]).strip() for p in props
+                            if clean_text(p.get("event_id"))})
+        day = min((days[i] for i in members if days[i]), default=None)
+        hazards.append({
+            "hazard_uid": uid("hazard", *[f"polygon:{p['globalid'] or p['objectid']}"
+                                          for p in member]),
+            "hazard_type": "tornado",
+            "convective_day": day.isoformat() if day else None,
+            "time_begin_utc": timed[0].isoformat() if timed else None,
+            "time_end_utc": None,
+            "efscale": max(ef_values, key=ef_rank) if ef_values else None,
+            "peak_wind_mph": None, "path_length_mi": None,
+            "path_width_yd": _max("width", props),
+            "injuries": _max("injuries", props), "fatalities": _max("fatalities", props),
+            "propdamage": None, "cropdamage": None,
+            "wfo": None, "wfo_all": "",
+            "dat_event_ids": ";".join(event_ids),
+            "oracle_text": " | ".join(comments) if comments else None,
+            "has_oracle_text": bool(comments),
+            "n_lines": 0, "n_polygons": len(member),
+            "line_objectids": "",
+            "polygon_objectids": ";".join(str(p["objectid"]) for p in member),
+            "line_globalids": "",
+            "merge_evidence": "polygon_adjacent" if len(member) > 1 else "",
+            "geometry_source": "polygon",
+            "max_link_confidence": None, "min_link_confidence": None,
+            "_line_geoms": [], "_polygon_geoms": [p["geom"] for p in member],
+            "_proj": [p["proj"] for p in member],
+        })
+    stats = {"polygons_without_link": len(free), "polygon_hazards": len(hazards),
+             "polygon_hazards_date_only": sum(1 for h in hazards if not h["time_begin_utc"])}
+    return hazards, stats
 
 
 # ── episode assembly ─────────────────────────────────────────────────────────
@@ -301,8 +415,8 @@ def build_episodes(hazards: list[dict[str, Any]], *,
         geoms = []
         for i in indices:
             parts = hazards[i]["_proj"]
-            geoms.append(parts[0] if len(parts) == 1 else MultiPoint(
-                [c for part in parts for c in part.coords]).convex_hull)
+            # Several parts: their convex hull (for lines, that of all vertices).
+            geoms.append(parts[0] if len(parts) == 1 else unary_union(parts).convex_hull)
         uf = UnionFind(len(indices))
         tree = STRtree(geoms)
         for a, geom in enumerate(geoms):

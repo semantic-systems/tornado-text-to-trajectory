@@ -475,6 +475,62 @@ def episode_counts_cover_all_spc_tornadoes() -> None:
     assert c.n_spc_unrated.tolist() == [1, 0] and c.n_dat.tolist() == [1, 2], c
 
 
+def wind_features_are_not_tornadoes() -> None:
+    """Only an explicit non-tornado rating keeps a DAT feature out; unrated ones stay."""
+    from tornado_dataset.dat import hazards as hz
+    assert not hz.is_tornado_rating("TSTM/Wind") and not hz.is_tornado_rating(" tstm/wind ")
+    for rating in ("EF1", "EFU", "UNKNOWN", "N/A", None, "Tropical"):
+        assert hz.is_tornado_rating(rating), rating
+    kept, out = hz.split_by_rating([{"properties": {"efscale": "EF0"}},
+                                    {"properties": {"efscale": "TSTM/Wind"}}])
+    assert len(kept) == len(out) == 1
+
+
+def unclaimed_polygons_become_hazards() -> None:
+    """Touching polygons of one tornado form a hazard; a linked one, or one hours later, does not."""
+    import datetime as dt
+    from shapely.geometry import box
+    from tornado_dataset.dat import hazards as hz
+
+    def polygon(oid, x, when, ef="EF1"):          # shaped as link.prepare leaves it
+        g = box(x, 0, x + 1000, 1000)
+        return {"objectid": oid, "globalid": f"G{oid}", "geom": g, "proj": g,
+                "date": dt.datetime.fromisoformat(when).date(),
+                "properties": {"stormdate": when, "efscale": ef,
+                                             "comments": f"survey {oid}"}}
+    ps = [polygon(1, 0, "2020-04-12T20:00:00+00:00"),            # nested contours …
+          polygon(2, 500, "2020-04-12T20:30:00+00:00", "EF2"),   # … of one tornado
+          polygon(3, 1100, "2020-04-12T23:30:00+00:00"),         # 100 m on, 3 h later
+          polygon(4, 50_000, "2020-04-13T00:00:00+00:00"),       # date only, far away
+          polygon(5, 1050, "2020-04-12T20:10:00+00:00")]         # linked to a line
+    built, stats = hz.build_polygon_hazards(ps, [{"polygon_oid": 5}])
+    groups = sorted(h["polygon_objectids"] for h in built)
+    assert groups == ["1;2", "3", "4"] or groups == ["2;1", "3", "4"], groups
+    first = next(h for h in built if h["n_polygons"] == 2)
+    assert first["efscale"] == "EF2" and first["geometry_source"] == "polygon"
+    assert first["time_begin_utc"].startswith("2020-04-12T20:00")
+    alone = next(h for h in built if h["polygon_objectids"] == "4")
+    assert alone["time_begin_utc"] is None and alone["convective_day"] == "2020-04-13"
+    assert stats["polygon_hazards_date_only"] == 1
+
+
+def date_only_hazards_match_by_date() -> None:
+    """A hazard with a date but no time matches a record nearby within a day, by date."""
+    import datetime as dt
+    import pandas as pd
+    from shapely.geometry import LineString, box
+    from tornado_dataset.dat import storm_events
+    targets = pd.DataFrame({"geom": [box(0, 0, 1000, 1000), box(0, 0, 1000, 1000)],
+                            "t0": [pd.NaT, pd.Timestamp("2020-04-12T20:00", tz="UTC")],
+                            "t1": [pd.NaT, pd.Timestamp("2020-04-12T20:10", tz="UTC")],
+                            "date": [dt.date(2020, 4, 12), dt.date(2020, 4, 12)]})
+    near = LineString([(500, 500), (3000, 500)])
+    begin = pd.Series(pd.to_datetime(["2020-04-13T02:00", "2020-04-15T02:00"], utc=True))
+    pairs = storm_events.match_pairs(begin, begin, [near, near], targets)
+    got = {(r.row, r.hz, bool(r.by_date)) for r in pairs.itertuples()}
+    assert got == {(0, 0, True)}, got        # timed hazard: 6 h apart; second record: 3 days
+
+
 def watch_records_and_texts_parse() -> None:
     """County records place a tornado by its own county's times; texts give relations."""
     import pandas as pd
@@ -637,6 +693,9 @@ for name, fn in [
     ("DAT reference extends through SPC", dat_reference_extends_through_spc),
     ("spc episodes carry to DAT hazards", spc_episodes_carry_to_dat_hazards),
     ("episode counts cover all SPC tornadoes", episode_counts_cover_all_spc_tornadoes),
+    ("wind features are not tornadoes", wind_features_are_not_tornadoes),
+    ("unclaimed polygons become hazards", unclaimed_polygons_become_hazards),
+    ("date-only hazards match by date", date_only_hazards_match_by_date),
     ("watch records and texts parse", watch_records_and_texts_parse),
     ("watch systems follow the three rules", watch_systems_follow_the_three_rules),
     ("watch scores see merging across offices", watch_scores_see_merging_across_offices),

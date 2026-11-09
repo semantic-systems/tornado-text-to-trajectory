@@ -98,7 +98,9 @@ disagrees with the geometry on more than half the polygons.
 The median unlinked polygon is **135 km** from the nearest line surveyed the
 same day, so these are overwhelmingly damage areas recorded without any track
 line rather than links the threshold missed — only 101 sit within 1 km of a
-same-day line. Widening the gap threshold cannot recover them.
+same-day line. Widening the gap threshold cannot recover them. Those rated as a
+tornado become hazards of their own in stage 12 (section 5), and most match an
+SPC tornado (section 6).
 
 ## 4. Linker evaluation against the `path_guid` gold set
 
@@ -221,24 +223,42 @@ which is exactly why these metrics are not extrapolated to the full dataset.
 ## 5. Hazards and episodes
 
 11499 usable lines and 9815 usable polygons were assembled into
-**9982 hazards** (one tornado each) grouped into **2795 episodes**
+**11316 hazards** (one tornado each) grouped into **3172 episodes**
 (convective day + spatial proximity).
+
+| geometry | hazards | what it rests on |
+|---|---:|---|
+| `line` | 6,968 | track line(s) only |
+| `line+polygon` | 2,873 | track line(s) and the damage polygon(s) linked to them |
+| `polygon` | 1,475 | damage polygon(s) no line claims: a tornado surveyed without a drawn track |
+
+Left out before assembly as not a tornado (rated TSTM/WIND):
+**300 lines** and
+**1,076 polygons**. Thunderstorm-wind
+features matched an SPC tornado 7% of the time; a wind polygon lying on a tornado
+track is therefore not taken for that tornado's damage. Of the polygons linked to a
+tornado line, 259
+fall below the link-confidence floor (0.5) and are
+used nowhere. 2,245 polygons without a
+line form the 1,475 polygon-only hazards
+(237 of them with a date but no time).
+
 
 | property | n | share |
 |---|---|---|
-| hazards with ≥1 damage polygon | 2984 | 29.9% |
-| hazards with oracle survey text (`comments`) | 7314 | 73.3% |
-| hazards with a known WFO | 4498 | 45.1% |
-| hazards inside the GDELT window (≥ 2017-01-01) | 8319 | 83.3% |
-| hazards assembled from >1 line | 857 | 8.6% |
+| hazards with ≥1 damage polygon | 4348 | 38.4% |
+| hazards with oracle survey text (`comments`) | 7850 | 69.4% |
+| hazards with a known WFO | 4425 | 39.1% |
+| hazards inside the GDELT window (≥ 2017-01-01) | 8975 | 79.3% |
+| hazards assembled from >1 line | 816 | 7.2% |
 
 Merge evidence for multi-line hazards (why segments were joined):
 
 | evidence                                |   hazards |
 |:----------------------------------------|----------:|
-| endpoint_gap                            |       589 |
-| event_id+date                           |       126 |
-| spatial_link                            |       102 |
+| endpoint_gap                            |       577 |
+| event_id+date                           |       123 |
+| spatial_link                            |        76 |
 | endpoint_gap;event_id+date              |        17 |
 | endpoint_gap;spatial_link               |        16 |
 | endpoint_gap;event_id+date;spatial_link |         3 |
@@ -258,22 +278,22 @@ Storm Events rows are matched to DAT hazards (stage 14) when within 5 km and 30 
 
 | year | SE rows | SE tornadoes | DAT hazards | SE tornadoes found in DAT | DAT hazards found in SE |
 |---|---:|---:|---:|---|---|
-| 2010 | 1,450 | 1,294 | 18 | 1% [1%, 2%] | 83% [61%, 94%] |
-| 2011 | 2,075 | 1,692 | 168 | 9% [8%, 11%] | 82% [76%, 87%] |
-| 2012 | 1,058 | 941 | 111 | 4% [3%, 5%] | 27% [20%, 36%] |
-| 2013 | 1,053 | 913 | 209 | 20% [17%, 23%] | 80% [74%, 85%] |
-| 2014 | 1,064 | 933 | 271 | 31% [28%, 34%] | 74% [68%, 79%] |
-| 2015 | 1,320 | 1,177 | 459 | 37% [34%, 39%] | 81% [77%, 84%] |
-| 2016 | 1,081 | 983 | 427 | 43% [40%, 46%] | 86% [83%, 89%] |
-| 2017 | 1,663 | 1,446 | 695 | 47% [44%, 49%] | 89% [87%, 91%] |
-| 2018 | 1,256 | 1,131 | 524 | 47% [44%, 50%] | 88% [85%, 91%] |
-| 2019 | 1,737 | 1,521 | 934 | 59% [56%, 61%] | 88% [86%, 90%] |
-| 2020 | 1,253 | 1,087 | 706 | 63% [60%, 66%] | 91% [88%, 93%] |
-| 2021 | 1,545 | 1,319 | 964 | 69% [67%, 72%] | 87% [84%, 89%] |
-| 2022 | 1,384 | 1,169 | 892 | 74% [71%, 76%] | 91% [89%, 93%] |
-| 2023 | 1,522 | 1,323 | 971 | 76% [73%, 78%] | 91% [89%, 92%] |
-| 2024 | 2,137 | 1,787 | 1,471 | 84% [82%, 85%] | 92% [90%, 93%] |
-| 2025 | 1,591 | 1,332 | 1,162 | 85% [83%, 86%] | 89% [87%, 91%] |
+| 2010 | 1,450 | 1,294 | 23 | 2% [1%, 3%] | 78% [58%, 90%] |
+| 2011 | 2,075 | 1,692 | 238 | 12% [11%, 14%] | 81% [75%, 85%] |
+| 2012 | 1,058 | 941 | 158 | 7% [5%, 9%] | 39% [32%, 47%] |
+| 2013 | 1,053 | 913 | 371 | 35% [32%, 39%] | 81% [77%, 85%] |
+| 2014 | 1,064 | 933 | 377 | 37% [34%, 40%] | 70% [65%, 75%] |
+| 2015 | 1,320 | 1,177 | 633 | 49% [46%, 52%] | 82% [78%, 84%] |
+| 2016 | 1,081 | 983 | 541 | 52% [49%, 55%] | 85% [81%, 87%] |
+| 2017 | 1,663 | 1,446 | 899 | 59% [56%, 61%] | 88% [86%, 90%] |
+| 2018 | 1,256 | 1,131 | 656 | 57% [54%, 60%] | 89% [86%, 91%] |
+| 2019 | 1,737 | 1,521 | 1,042 | 65% [63%, 68%] | 89% [87%, 91%] |
+| 2020 | 1,253 | 1,087 | 794 | 70% [67%, 72%] | 89% [87%, 91%] |
+| 2021 | 1,545 | 1,319 | 984 | 71% [68%, 73%] | 87% [85%, 89%] |
+| 2022 | 1,384 | 1,169 | 924 | 76% [73%, 78%] | 91% [89%, 93%] |
+| 2023 | 1,522 | 1,323 | 998 | 77% [74%, 79%] | 90% [88%, 92%] |
+| 2024 | 2,137 | 1,787 | 1,521 | 86% [84%, 88%] | 92% [91%, 93%] |
+| 2025 | 1,591 | 1,332 | 1,157 | 85% [83%, 86%] | 90% [88%, 91%] |
 
 The fifth column is **DAT completeness**: the share of officially recorded tornadoes that have a DAT survey. DAT was adopted unevenly by the offices, so it is low in the early years; every figure built on DAT geometry inherits that.
 The sixth is the share of DAT hazards with an official record. A DAT hazard without one is usually a timing or location disagreement beyond the tolerances, occasionally a survey Storm Data never received.
@@ -282,59 +302,71 @@ The sixth is the share of DAT hazards with an official record. A DAT hazard with
 
 - 8,517 Storm Events episodes hold tornadoes; the most offices any one spans is **1**. Episodes are filed per office, so a multi-state outbreak is many episodes.
 - **Linked episodes.** 3,190 rows point to a continuation county, 454 of them in another office. Joining episodes that share a tornado turns 8,517 episodes into 7,995 (`LINKED_EPISODE`), 279 of which span more than one office (at most 9). Offices whose parts of an outbreak share no crossing tornado stay separate, so large outbreaks remain several episodes.
-- 3,681 episodes are matched to at least one DAT hazard; `scripts/51_compare_episodes.py` scores grouping methods against both `EPISODE_ID` and `LINKED_EPISODE`.
+- 4,080 episodes are matched to at least one DAT hazard; `scripts/51_compare_episodes.py` scores grouping methods against both `EPISODE_ID` and `LINKED_EPISODE`.
 
 ### SPC whole tracks
 
-SPC's database holds one reviewed record per tornado — the official version of the chaining above. Same matching rule; the last column adds the time-repaired second pass (next section).
+SPC's database holds one reviewed record per tornado — the official version of the chaining above. Same matching rule; the last column adds the time-repaired second pass (next section) and, for hazards whose DAT survey gives only a date, a match by date within a day.
 
-| year | SPC tornadoes | DAT hazards | SPC tornadoes found in DAT | DAT hazards found in SPC | … with time repair |
+| year | SPC tornadoes | DAT hazards | SPC tornadoes found in DAT | DAT hazards found in SPC | … all passes |
 |---|---:|---:|---|---|---|
-| 2010 | 1,302 | 18 | 2% [1%, 2%] | 83% [61%, 94%] | 89% [67%, 97%] |
-| 2011 | 1,704 | 168 | 10% [8%, 11%] | 82% [76%, 87%] | 90% [84%, 94%] |
-| 2012 | 948 | 111 | 4% [3%, 5%] | 27% [20%, 36%] | 86% [79%, 92%] |
-| 2013 | 916 | 209 | 20% [17%, 22%] | 80% [74%, 85%] | 95% [91%, 97%] |
-| 2014 | 928 | 271 | 30% [27%, 33%] | 74% [68%, 79%] | 95% [92%, 97%] |
-| 2015 | 1,182 | 459 | 36% [34%, 39%] | 81% [77%, 84%] | 93% [91%, 95%] |
-| 2016 | 976 | 427 | 43% [40%, 46%] | 86% [83%, 89%] | 96% [93%, 97%] |
-| 2017 | 1,442 | 695 | 47% [44%, 49%] | 89% [87%, 91%] | 96% [94%, 97%] |
-| 2018 | 1,138 | 524 | 46% [43%, 49%] | 88% [85%, 91%] | 95% [93%, 97%] |
-| 2019 | 1,534 | 934 | 59% [57%, 61%] | 90% [87%, 91%] | 96% [94%, 97%] |
-| 2020 | 1,090 | 706 | 64% [61%, 66%] | 92% [90%, 94%] | 97% [95%, 98%] |
-| 2021 | 1,328 | 964 | 71% [68%, 73%] | 89% [87%, 91%] | 95% [94%, 96%] |
-| 2022 | 1,167 | 892 | 74% [71%, 76%] | 92% [90%, 93%] | 97% [96%, 98%] |
-| 2023 | 1,321 | 971 | 76% [74%, 78%] | 91% [89%, 92%] | 96% [94%, 97%] |
-| 2024 | 1,805 | 1,471 | 84% [82%, 85%] | 93% [91%, 94%] | 96% [95%, 97%] |
-| 2025 | 1,383 | 1,162 | 85% [84%, 87%] | 94% [92%, 95%] | 97% [96%, 98%] |
+| 2010 | 1,302 | 23 | 2% [1%, 3%] | 74% [54%, 87%] | 87% [68%, 95%] |
+| 2011 | 1,704 | 238 | 12% [11%, 14%] | 79% [74%, 84%] | 91% [87%, 94%] |
+| 2012 | 948 | 158 | 5% [4%, 6%] | 24% [18%, 31%] | 86% [80%, 91%] |
+| 2013 | 916 | 371 | 28% [25%, 31%] | 64% [59%, 69%] | 97% [95%, 98%] |
+| 2014 | 928 | 377 | 35% [32%, 38%] | 65% [60%, 69%] | 94% [91%, 96%] |
+| 2015 | 1,182 | 633 | 47% [44%, 50%] | 78% [75%, 81%] | 93% [91%, 95%] |
+| 2016 | 976 | 541 | 51% [48%, 55%] | 83% [79%, 86%] | 95% [92%, 96%] |
+| 2017 | 1,442 | 899 | 57% [54%, 59%] | 86% [83%, 88%] | 96% [94%, 97%] |
+| 2018 | 1,138 | 656 | 56% [53%, 59%] | 88% [85%, 90%] | 95% [94%, 97%] |
+| 2019 | 1,534 | 1,042 | 65% [63%, 68%] | 90% [88%, 91%] | 97% [96%, 98%] |
+| 2020 | 1,090 | 794 | 69% [66%, 72%] | 89% [87%, 91%] | 96% [94%, 97%] |
+| 2021 | 1,328 | 984 | 73% [70%, 75%] | 90% [88%, 92%] | 97% [95%, 98%] |
+| 2022 | 1,167 | 924 | 76% [73%, 78%] | 91% [89%, 93%] | 97% [96%, 98%] |
+| 2023 | 1,321 | 998 | 77% [75%, 79%] | 91% [89%, 92%] | 96% [94%, 97%] |
+| 2024 | 1,805 | 1,521 | 86% [84%, 87%] | 93% [92%, 94%] | 97% [97%, 98%] |
+| 2025 | 1,383 | 1,157 | 85% [84%, 87%] | 94% [93%, 95%] | 98% [97%, 98%] |
 
 - **Chaining check.** Of 19,991 Storm Events tornadoes (chained county segments) matched to an SPC track, **98.3%** correspond one-to-one. 69 chains spread over several SPC tracks (over-chained, or SPC keeps them apart); 154 SPC tracks hold several chains (a `TOR_OTHER_*` pointer that did not resolve).
 - Records dropped on loading: 0 not whole-track, 0 with an unknown time zone.
 
+#### By geometry source
+
+Hazards from damage polygons alone (stage 12: tornadoes DAT surveyed without drawing a track) are matched by their polygons; most carry a time, those with only a date are matched by date.
+
+| geometry | hazards | strict | time repaired | by date | no SPC track |
+|---|---:|---:|---:|---:|---:|
+| line | 6,968 | 6,256 (90%) | 506 (7%) | 0 (0%) | 206 (3%) |
+| line+polygon | 2,873 | 2,651 (92%) | 183 (6%) | 0 (0%) | 39 (1%) |
+| polygon | 1,475 | 888 (60%) | 192 (13%) | 185 (13%) | 210 (14%) |
+
+- **136 SPC tracks are the closest of more than one DAT hazard** (286 hazards; 91 involve a polygon-only hazard). One tornado in DAT twice: a polygon beyond stage 11's linking distance from its own line, pieces of one track drawn apart, or a second survey. Kept as they are and flagged on the links (`hazards_on_track`): merging them needs the SPC track, which stage 12, building hazards from DAT alone, does not use.
+
 ### Time-repaired matches (second pass)
 
-The strict rule leaves 1,114 of 9,982 DAT hazards without an SPC track. Most have one within metres whose start differs by a **whole number of hours, to the minute** — the DAT time was saved in the wrong zone or on the wrong date. The second pass links a hazard to an SPC track within 5 km whose start is k hours away, 1 ≤ |k| ≤ 48, to within ±10 min. DAT's times are never changed; the offset is kept on the link (`link_method = time_repaired`, `time_offset_h`, `offset_class`).
+The strict rule leaves 1,521 of 11,316 DAT hazards without an SPC track. Most have one within metres whose start differs by a **whole number of hours, to the minute** — the DAT time was saved in the wrong zone or on the wrong date. The second pass links a hazard to an SPC track within 5 km whose start is k hours away, 1 ≤ |k| ≤ 48, to within ±10 min. DAT's times are never changed; the offset is kept on the link (`link_method = time_repaired`, `time_offset_h`, `offset_class`).
 
-**690 more hazards** are linked (88.8% → 95.8% of DAT).
+**881 more hazards** are linked (86.6% → 94.3% of DAT).
 
 Three checks that do not rest on the time field:
 
-- **The offsets pile up on the hour.** Of 939 candidate pairs within the distance, 613 are within 2 min of a whole hour. Pairs that are not one tornado fall anywhere in the hour; their density 20–30 min from it puts chance at ≈ 67 of the 757 candidates kept (9%, an upper bound — it counts candidates, and most hazards with a chance candidate also have a real one).
-- **Ratings agree as often as in the first pass.** EF ratings match on 97% of second-pass links, 97% of first-pass links, and 38% for ratings drawn at random; solving (1 − f)·0.968 + f·0.378 = 0.966 puts the share of wrong pairs at **≈ 0.3%**.
-- **DAT's own `event_id` sides with SPC.** Where it holds a legible date (38 links), it is SPC's local date and not DAT's for 18, DAT's and not SPC's for 1. For the date repairs alone (19 with a date): SPC 17, DAT 1.
+- **The offsets pile up on the hour.** Of 1,192 candidate pairs within the distance, 777 are within 2 min of a whole hour. Pairs that are not one tornado fall anywhere in the hour; their density 20–30 min from it puts chance at ≈ 90 of the 967 candidates kept (9%, an upper bound — it counts candidates, and most hazards with a chance candidate also have a real one).
+- **Ratings agree as often as in the first pass.** EF ratings match on 94% of second-pass links, 97% of first-pass links, and 38% for ratings drawn at random; solving (1 − f)·0.966 + f·0.377 = 0.945 puts the share of wrong pairs at **≈ 3.6%**.
+- **DAT's own `event_id` sides with SPC.** Where it holds a legible date (50 links), it is SPC's local date and not DAT's for 23, DAT's and not SPC's for 1. For the date repairs alone (25 with a date): SPC 21, DAT 1.
 
 | cause | hazards | EF agrees | SPC track also has a first-pass hazard |
 |---|---:|---:|---:|
-| `date` | 195 | 96% | 17 |
+| `date` | 272 | 92% | 67 |
 | `date+dst` | 10 | 100% | 4 |
-| `date+local_as_utc` | 19 | 94% | 1 |
-| `date+unexplained` | 20 | 100% | 2 |
-| `date+utc_as_local` | 7 | 83% | 3 |
-| `dst` | 136 | 96% | 2 |
-| `local_as_utc` | 255 | 98% | 5 |
-| `unexplained` | 42 | 95% | 1 |
-| `utc_as_local` | 6 | 100% | 0 |
+| `date+local_as_utc` | 21 | 90% | 1 |
+| `date+unexplained` | 22 | 95% | 5 |
+| `date+utc_as_local` | 9 | 75% | 5 |
+| `dst` | 157 | 96% | 2 |
+| `local_as_utc` | 330 | 96% | 13 |
+| `unexplained` | 52 | 94% | 2 |
+| `utc_as_local` | 8 | 100% | 1 |
 
-Most common class per year (repaired hazards): 2010 dst (1), 2011 local_as_utc (13), 2012 local_as_utc (66), 2013 local_as_utc (32), 2014 local_as_utc (57), 2015 dst (57), 2016 local_as_utc (39), 2017 dst (48), 2018 local_as_utc (36), 2019 date+1 (59), 2020 local_as_utc (36), 2021 local_as_utc (59), 2022 local_as_utc (47), 2023 local_as_utc (48), 2024 local_as_utc (51), 2025 dst (41).
+Most common class per year (repaired hazards): 2010 dst (2), 2011 local_as_utc (25), 2012 local_as_utc (74), 2013 local_as_utc (58), 2014 local_as_utc (89), 2015 dst (72), 2016 local_as_utc (54), 2017 date+1 (69), 2018 date+1 (44), 2019 date+1 (70), 2020 local_as_utc (47), 2021 local_as_utc (67), 2022 local_as_utc (53), 2023 local_as_utc (52), 2024 local_as_utc (64), 2025 dst (41).
 
 - `local_as_utc` (+4…+7 h): the local clock saved as if it were UTC, so DAT is early by the zone's offset — 5 h for CDT, 6 h for CST.
 - `dst` (±1 h): daylight saving applied or missed. `date±n`: the date wrong by n days; combined with an hour part when both are wrong.
@@ -343,7 +375,7 @@ Most common class per year (repaired hazards): 2010 dst (1), 2011 local_as_utc (
 
 #### Still without an SPC track
 
-424 DAT hazards (4.2%). 187 have an SPC track within 20 km and 72 h (listed with its distance and offset), **237 have none** — candidates for tornadoes not in the official record (reclassified, never submitted, a duplicate or a test entry). One row each in `data/interim/spc_unmatched_dat_2010-01-01_2025-12-31.csv`, for a hand check.
+455 DAT hazards (4.0%). 202 have an SPC track within 20 km and 72 h (listed with its distance and offset), **253 have none** — candidates for tornadoes not in the official record (reclassified, never submitted, a duplicate or a test entry). One row each in `data/interim/spc_unmatched_dat_2010-01-01_2025-12-31.csv`, for a hand check.
 
 ### Notes
 
@@ -358,8 +390,8 @@ Most common class per year (repaired hazards): 2010 dst (1), 2011 local_as_utc (
 2. **The `path_guid` evaluation is conditional** on 289 polygons from
    2017, 2020, 2021, 2022, 2023, 2024, 2025, an editing-practice subsample rather than a random one.
 3. **29.5% of polygons carry no track line** — mostly by design, but this
-   limits how many hazards have both geometry roles (29.9% do).
-4. **WFO is missing on 54.9% of hazards**, which will constrain the NWS/IEM
+   limits how many hazards have both geometry roles (38.4% do).
+4. **WFO is missing on 60.9% of hazards**, which will constrain the NWS/IEM
    text retrieval in Stage B until it is backfilled from the CWA polygons.
 5. **The window is fixed at 2010-2025.** DAT is edited retroactively, so a
    later rerun may differ; `retrieved_at` in each manifest pins this snapshot.

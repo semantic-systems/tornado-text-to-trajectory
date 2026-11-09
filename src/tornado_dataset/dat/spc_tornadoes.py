@@ -140,7 +140,7 @@ def join_hazards(spc: pd.DataFrame, geoms: list, hazards: pd.DataFrame, **tol) -
         return pd.DataFrame(columns=cols)
     pairs["spc_id"] = spc.spc_id.to_numpy()[pairs.row]
     pairs["hazard_uid"] = hazards.hazard_uid.to_numpy()[pairs.hz]
-    pairs["link_method"] = "spatial_temporal_join"
+    pairs["link_method"] = np.where(pairs.by_date, "date_only", "spatial_temporal_join")
     return pairs[cols].sort_values(["hazard_uid", "rank_for_hazard"])
 
 
@@ -268,10 +268,28 @@ def ef_agrees(links: pd.DataFrame, spc: pd.DataFrame, hazards: pd.DataFrame) -> 
 
 def with_first_pass_columns(links: pd.DataFrame, spc: pd.DataFrame,
                             hazards: pd.DataFrame) -> pd.DataFrame:
-    """First-pass links in the shape of :func:`repair_time_links`'s, so both stack."""
-    return links.assign(time_offset_h=0, offset_class="none",
+    """First-pass links in the shape of :func:`repair_time_links`'s, so both stack.
+
+    Date-only links (hazards with no DAT time) have no offset to state.
+    """
+    dated = links.link_method == "date_only"
+    return links.assign(time_offset_h=np.where(dated, np.nan, 0),
+                        offset_class=np.where(dated, "date_only", "none"),
                         residual_min=links.gap_s / 60, spc_already_linked=False,
                         ef_agrees=ef_agrees(links, spc, hazards))
+
+
+def hazards_per_track(links: pd.DataFrame) -> pd.Series:
+    """Per link: how many DAT hazards have this SPC track as their closest.
+
+    Above 1, one tornado is in DAT more than once — typically a polygon-only
+    hazard beside the line hazard of the same tornado (the polygon lay beyond
+    stage 11's linking distance), or a second survey. Stage 12 builds hazards
+    from DAT alone and cannot see this; the SPC track can. Flagged, not merged.
+    """
+    best = links[links.rank_for_hazard == 1].drop_duplicates("hazard_uid")
+    n = best.groupby("spc_id").hazard_uid.nunique()
+    return links.spc_id.map(n).fillna(0).astype(int)
 
 
 def chance_ef_agreement(spc: pd.DataFrame, hazards: pd.DataFrame) -> float:
