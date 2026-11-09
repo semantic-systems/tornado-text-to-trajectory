@@ -13,13 +13,13 @@
   <span class="count" id="count">{{ '{:,}'.format(facets.total) }} articles</span>
   <div class="filters">
     <input type="search" id="q" placeholder="headline, domain or URL…" autocomplete="off">
-    <select id="quality" title="stage 21 quality checks">
+    <select id="quality" title="stage 33 quality checks">
       <option value="">any quality</option>
       <option value="ok">passes hard checks</option>
       <option value="fail">fails a hard check</option>
       {% for f in facets.flags %}<option value="{{ f }}">flag: {{ f }}</option>{% endfor %}
     </select>
-    <select id="ft" title="stage 23 full-text label">
+    <select id="ft" title="stage 34 full-text label">
       <option value="">any full-text label</option>
       {% for l in facets.labels %}<option value="{{ l }}">full text: {{ l }}</option>{% endfor %}
       <option value="unlabelled">not labelled</option>
@@ -60,10 +60,10 @@
       <p>Pick an article on the left, or press <kbd>r</kbd> for a random one.</p>
       <p>Verdicts are saved to <code>data/interim/{{ inspection_file }}</code> — URL,
         headline and your answer only — and summarised by
-        <code>scripts/23_label_fulltext.py compare</code>. Use <kbd>r</kbd> when the aim
+        <code>scripts/34_label_fulltext.py compare</code>. Use <kbd>r</kbd> when the aim
         is an accuracy estimate: only randomly drawn verdicts support one.</p>
       {% if not facets.has_labels %}<p>No full-text labels yet: the headline label is
-        shown alone until <code>scripts/23_label_fulltext.py run</code> has been run.</p>{% endif %}
+        shown alone until <code>scripts/34_label_fulltext.py run</code> has been run.</p>{% endif %}
     </div>
   </div>
 </main>

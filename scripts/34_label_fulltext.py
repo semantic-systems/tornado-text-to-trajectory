@@ -1,20 +1,20 @@
 #!/usr/bin/env python
-"""Stage 23 — label the retrieved Media Cloud bodies, and compare with the headlines.
+"""Stage 34 — label the retrieved Media Cloud bodies, and compare with the headlines.
 
-Stage 18 labelled Media Cloud from headline and URL alone. Stage 21 has since
+Stage 30 labelled Media Cloud from headline and URL alone. Stage 33 has since
 retrieved the bodies of most ``EVENT`` stories, so they can now be labelled on
-the same evidence as LexisNexis — with **stage 19's prompt, schema, evidence
+the same evidence as LexisNexis — with **stage 32's prompt, schema, evidence
 window and temperature, unchanged** — and the two answers compared. That
 comparison is the measurement of what headline-only labelling costs.
 
 Typical run — forward the model's port first, then::
 
     ssh -N -L 8000:localhost:8000 you@your-server        # in another terminal
-    python scripts/23_label_fulltext.py profile          # what will be sent; no LLM
-    python scripts/23_label_fulltext.py run              # label + uncertainty + apply + compare
-    python scripts/16_viewer.py --corpus mediacloud      # read the disagreements
+    python scripts/34_label_fulltext.py profile          # what will be sent; no LLM
+    python scripts/34_label_fulltext.py run              # label + uncertainty + apply + compare
+    python scripts/viewer.py --corpus mediacloud      # read the disagreements
 
-Needs ``scripts/21_fetch_fulltext.py quality`` to have been run: by default only
+Needs ``scripts/33_fetch_fulltext.py quality`` to have been run: by default only
 bodies that pass every hard quality check are labelled, because a front page
 served in place of an article would be labelled as though it were the article,
 and every such case would surface as a spurious headline/full-text disagreement.
@@ -28,7 +28,7 @@ apply        propagate to every story, enforce the protect rule, write the table
 compare      headline-only versus full-text labels; writes the report
 run          label, uncertainty, apply and compare
 
-Resumable and tag-isolated exactly like stage 19: answers are cached by (model,
+Resumable and tag-isolated exactly like stage 32: answers are cached by (model,
 prompt, temperature, sample), and ``--tag`` keeps an experiment's outputs apart.
 
 **The comparison measures precision only.** The crawl covered headline-``EVENT``
@@ -67,7 +67,7 @@ def set_paths(tag: str | None) -> None:
     suffix = f"_{tag}" if tag else ""
     LABELS = config.INTERIM_DIR / f"mediacloud_fulltext_labels{suffix}.csv"
     CONSISTENCY = config.INTERIM_DIR / f"mediacloud_fulltext_consistency{suffix}.csv"
-    # Shared across tags, as in stage 19.
+    # Shared across tags, as in stage 32.
     LLM_CACHE = config.INTERIM_DIR / "mediacloud_fulltext_llm_cache.jsonl"
     # Per story, both labels side by side, no text — what the viewer reads.
     STORY_LABELS = config.PROCESSED_DIR / f"mediacloud_fulltext_story_labels{suffix}.csv"
@@ -81,7 +81,7 @@ def load_corpus(args) -> pd.DataFrame:
     quality = fc.load_quality()
     if quality is None:
         sys.exit(f"missing {fc.QUALITY_CSV} — run "
-                 "`python scripts/21_fetch_fulltext.py quality` first.")
+                 "`python scripts/33_fetch_fulltext.py quality` first.")
     print("reading the full-text store…")
     df = fc.load_bodies(fulltext.load_store(fc.STORE), fc.load_population(), quality)
     unknown = int((~df.quality_known).sum())
@@ -112,7 +112,7 @@ def make_client(args) -> LLMClient:
 
 def run_llm(client: LLMClient, rows: pd.DataFrame, desc: str, mode: str,
             temperature: float | None = None, variant: str = "") -> pd.DataFrame:
-    """Identical to stage 19's call: same system prompt, schema and token budget."""
+    """Identical to stage 32's call: same system prompt, schema and token budget."""
     prompts, _ = lf.build_prompts(rows, mode=mode)
     before = dict(client.stats)
     update, close = iter_progress(len(prompts), desc)
@@ -153,7 +153,7 @@ def cmd_profile(args) -> None:
           f"(of {df.body_key.nunique():,} distinct bodies retrieved)")
     print(f"body words: median {reps.n_words.median():,.0f}, "
           f"total {reps.n_words.sum():,}")
-    print("\nheadline labels in this population (stage 18)")
+    print("\nheadline labels in this population (stage 30)")
     for label, n in ok[HL + "primary"].value_counts().items():
         print(f"  {label:<20}{n:>8,}")
     print("\ntornado mentions per body")
@@ -167,7 +167,7 @@ def cmd_profile(args) -> None:
         mean = float(np.mean(lens)) if lens else 0.0
         print(f"  {mode:<12} mean {mean:>6.0f} words  -> "
               f"~{mean * len(reps) * 1.35 / 1e6:>5.1f}M tokens"
-              f"{'   <- stage 19 default' if mode == 'windows' else ''}")
+              f"{'   <- stage 32 default' if mode == 'windows' else ''}")
 
 
 # ── label ───────────────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ def cmd_label(args) -> pd.DataFrame:
     df = load_corpus(args)
     reps = df[df.is_representative].copy()
     print(f"\nlabelling {len(reps):,} distinct bodies ({len(df):,} stories) at "
-          f"temperature 0 with stage 19's prompt (evidence mode: {args.mode})")
+          f"temperature 0 with stage 32's prompt (evidence mode: {args.mode})")
     client = make_client(args)
     parsed = run_llm(client, reps, "labelling", args.mode, temperature=0.0)
     out = pd.concat([reps.drop(columns=["body"]), parsed], axis=1)
@@ -302,9 +302,9 @@ def cmd_compare(args) -> None:
     print(fc.flag_agreement(df).to_string(index=False, float_format=lambda x: f"{x:.3f}"))
 
     lines = [
-        "# Media Cloud — full-text versus headline labels (Stage 23)", "",
-        f"> **Scope: {n:,} Media Cloud stories** whose headline stage 18 labelled "
-        f"{', '.join(f'`{l}`' for l in hl_labels)} and whose body stage 21 retrieved"
+        "# Media Cloud — full-text versus headline labels (Stage 34)", "",
+        f"> **Scope: {n:,} Media Cloud stories** whose headline stage 30 labelled "
+        f"{', '.join(f'`{l}`' for l in hl_labels)} and whose body stage 33 retrieved"
         f"{' and passed every hard quality check' if df.quality_ok.all() else ''}. "
         + ("Because only headline-`EVENT` stories were crawled, this measures the "
            "headline labeller's **precision**: how many of its `EVENT` calls the full "
@@ -314,8 +314,8 @@ def cmd_compare(args) -> None:
            "— but only for the sample that was crawled, not the corpus."), "",
         f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')}. "
         "Both labels come from the same locally hosted LLM; the full-text label uses "
-        f"stage 19's prompt and evidence window (`{df[FT + 'evidence_mode'].iloc[0]}`) "
-        "unchanged, the headline label stage 18's. Neither is ground truth.", "",
+        f"stage 32's prompt and evidence window (`{df[FT + 'evidence_mode'].iloc[0]}`) "
+        "unchanged, the headline label stage 30's. Neither is ground truth.", "",
         "## Agreement", "",
         f"- **Stories:** {ci(int(agree.sum()), n)} keep the same primary label.",
         f"- **Distinct bodies:** {ci(int(b_agree.sum()), len(bodies))}. Lower or "
@@ -386,7 +386,7 @@ def cmd_compare(args) -> None:
     # ── examples ────────────────────────────────────────────────────────────
     lines += ["## Examples to inspect", "",
               "Five per change, by URL and headline only — open them in "
-              "`python scripts/16_viewer.py --corpus mediacloud` with the matching "
+              "`python scripts/viewer.py --corpus mediacloud` with the matching "
               "filter to read the body next to both labels.", ""]
     for key in fc.transitions(df).index:
         h, f = key.split(" → ")
@@ -411,7 +411,7 @@ def cmd_compare(args) -> None:
         "retrievable, well-extracted part of the corpus — older and smaller-outlet "
         "stories are under-represented, as the coverage report shows.",
         "4. **Evidence windows.** The full-text label sees the lede and the context of "
-        "up to six tornado mentions, not the whole body. Stage 19's window ablation is "
+        "up to six tornado mentions, not the whole body. Stage 32's window ablation is "
         "the measurement of what that costs.",
         "5. **Story versus body.** A body carried under several headlines gets one "
         "full-text label; if those headlines were labelled differently, the "
@@ -441,7 +441,7 @@ def noise_floor(df: pd.DataFrame) -> list[str]:
         hl = pd.read_csv(MC_CONSISTENCY, keep_default_na=False, usecols=["url", "stable"])
         hl["stable"] = hl.stable.astype(str).str.lower() == "true"
         sub = df[df.url.isin(hl.url)]
-        out.append(f"- Headline labels sampled by stage 18's uncertainty pass: "
+        out.append(f"- Headline labels sampled by stage 30's uncertainty pass: "
                    f"{len(sub):,} of these stories.")
     if ft is not None and hl is not None:
         both = (df.merge(ft[["body_key", "stable"]].rename(columns={"stable": "ft_stable"}),
@@ -458,7 +458,7 @@ def noise_floor(df: pd.DataFrame) -> list[str]:
             out.append("- The two uncertainty samples do not overlap; no doubly-stable "
                        "subset to report.")
     if not out:
-        out.append("Run `uncertainty` here and in stage 18 to separate noise from "
+        out.append("Run `uncertainty` here and in stage 30 to separate noise from "
                    "evidence.")
     return out
 
@@ -467,7 +467,7 @@ def lexis_section(df: pd.DataFrame) -> list[str]:
     from tornado_dataset.text import corpora
     if not ATLAS_EDGES.exists():
         return [f"Skipped: `{ATLAS_EDGES.name}` not found — run "
-                "`python scripts/22_corpus_atlas.py` (full scope) first."]
+                "`python scripts/43_corpus_atlas.py` (full scope) first."]
     try:
         lexis = corpora.load_lexisnexis()
     except FileNotFoundError as exc:
@@ -578,7 +578,7 @@ def main() -> None:
         sp.add_argument("--uncertainty-frac", type=float, default=0.10)
         sp.add_argument("--k", type=int, default=3)
         sp.add_argument("--mode", default="windows", choices=lf.EVIDENCE_MODES,
-                        help="evidence sent to the model (default: windows, as stage 19)")
+                        help="evidence sent to the model (default: windows, as stage 32)")
         if llm:
             sp.add_argument("--api-base", default=None)
             sp.add_argument("--model", default=None,

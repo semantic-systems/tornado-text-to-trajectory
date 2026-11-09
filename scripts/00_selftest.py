@@ -79,13 +79,14 @@ check("viewer.fulltext", lambda: importlib.import_module("tornado_dataset.viewer
 
 print("\nstage scripts compile")
 scripts = sorted(p for p in (REPO / "scripts").glob("*.py")
-                 if p.name[0].isdigit() or p.stem == "_bootstrap")
+                 if p.name[0].isdigit() or p.stem in ("_bootstrap", "viewer"))
 for path in scripts:
     check(path.name, lambda p=path: py_compile.compile(str(p), doraise=True))
-if len(scripts) < 20:
-    failures.append(f"only {len(scripts)} stage scripts found — expected ~21 "
-                    "(00, 01-12, 14-19, 21-26). Some are probably untracked.")
-    print(f"  FAIL  expected ~21 stage scripts, found {len(scripts)}")
+if len(scripts) < 26:
+    failures.append(f"only {len(scripts)} stage scripts found — expected 26 "
+                    "(00, 10-12, 14, 16-22, 30-35, 40-43, 50-51, viewer, _bootstrap). "
+                    "Some are probably untracked.")
+    print(f"  FAIL  expected 26 stage scripts, found {len(scripts)}")
 
 # ── 2. configuration ────────────────────────────────────────────────────────
 print("\nconfiguration")
@@ -267,7 +268,7 @@ def fulltext_bodies_keep_both_labels_apart() -> None:
     assert len(df) == 2, "only retrieved bodies are rows"
     assert {"headline", "source", "pub_date", "body", "hl_primary", "hl_is_outbreak"} \
         <= set(df.columns)
-    assert "primary" not in df.columns, "an unprefixed label would collide with stage 23's"
+    assert "primary" not in df.columns, "an unprefixed label would collide with stage 34's"
     assert df.body_key.nunique() == 1 and df.is_representative.sum() == 1
 
 

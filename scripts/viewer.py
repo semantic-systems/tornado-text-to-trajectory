@@ -1,16 +1,16 @@
-"""Stage 16 — run the corpus viewer.
+"""The corpus viewer — a tool, not a pipeline stage.
 
 A local Flask app for reading articles next to the events they were linked to. Loads the corpus once (about half a minute)
 and then serves instantly.
 
-    python scripts/16_viewer.py
-    python scripts/16_viewer.py --port 8801 --tag march2025
+    python scripts/viewer.py
+    python scripts/viewer.py --port 8801 --tag march2025
 
 ``--corpus mediacloud`` opens the full-text inspection view instead: the bodies
-stage 21 retrieved, their quality flags, the headline label beside the full-text
-label from stage 23, and one-key verdicts saved for stage 23's ``compare``.
+stage 33 retrieved, their quality flags, the headline label beside the full-text
+label from stage 34, and one-key verdicts saved for stage 34's ``compare``.
 
-    python scripts/16_viewer.py --corpus mediacloud
+    python scripts/viewer.py --corpus mediacloud
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def main() -> None:
                              "mediacloud: retrieved full texts and their labels")
     parser.add_argument("--tag", default=None,
                         help="lexisnexis: dataset tag (default: the config window); "
-                             "mediacloud: stage 23 --tag whose labels to show")
+                             "mediacloud: stage 34 --tag whose labels to show")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8799)
     parser.add_argument("--debug", action="store_true")

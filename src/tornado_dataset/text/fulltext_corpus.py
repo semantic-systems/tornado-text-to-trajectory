@@ -1,14 +1,14 @@
 """The retrieved Media Cloud full texts as a labelled corpus.
 
-Stage 21 retrieves bodies for the Media Cloud ``EVENT`` stories; this module
+Stage 33 retrieves bodies for the Media Cloud ``EVENT`` stories; this module
 turns its store into something the rest of the pipeline can use:
 
 * :func:`load_population` — the stories the crawl was asked for, with the strata
-  every coverage table is broken down by. Stage 21 and stage 23 share it, so the
+  every coverage table is broken down by. Stage 33 and stage 34 share it, so the
   two cannot disagree about what "the population" was.
 * :func:`load_bodies` — retrieved bodies in the shape the LexisNexis labeller
-  expects (``headline``, ``source``, ``pub_date``, ``body``), so stage 23 can
-  apply stage 19's prompt **unchanged**. The headline labels from stage 18 ride
+  expects (``headline``, ``source``, ``pub_date``, ``body``), so stage 34 can
+  apply stage 32's prompt **unchanged**. The headline labels from stage 30 ride
   along under an ``hl_`` prefix; the full-text labels are added under ``ft_``.
 * the comparison functions — headline-only versus full-text labels, per story,
   per flag, per stratum, and against LexisNexis on stories both corpora hold.
@@ -23,7 +23,7 @@ the general case, so crawling a sample of non-``EVENT`` stories would fill in
 the other rows of the crosstab without code changes.
 
 The full-text label is better evidence, not ground truth. Where the two
-disagree, the inspection viewer (``scripts/16_viewer.py --corpus mediacloud``)
+disagree, the inspection viewer (``scripts/viewer.py --corpus mediacloud``)
 is the way to find out which one is right.
 """
 
@@ -38,7 +38,7 @@ from .. import config
 from . import lexisnexis_filter as lf
 from .labelling import BASE_FLAGS, PRIMARY_LABELS
 
-# Same files stage 21 reads and writes.
+# Same files stage 33 reads and writes.
 MC_LABELS = config.PROCESSED_DIR / "mediacloud_filtered.csv.gz"
 STORE = config.RAW_DIR / "fulltext" / "retrievals.jsonl"
 QUALITY_CSV = config.INTERIM_DIR / "fulltext_quality.csv"
@@ -54,7 +54,7 @@ HL, FT = "hl_", "ft_"
 
 # ── population ──────────────────────────────────────────────────────────────
 def load_population(path=None) -> pd.DataFrame:
-    """Distinct Media Cloud ``EVENT`` stories — what stage 21 was asked to crawl."""
+    """Distinct Media Cloud ``EVENT`` stories — what stage 33 was asked to crawl."""
     df = pd.read_csv(path or MC_LABELS, keep_default_na=False, low_memory=False)
     df = df[(df.primary == "EVENT")
             & (df.is_representative.astype(str).str.lower() == "true")].copy()
@@ -196,7 +196,7 @@ def cross_corpus(stories: pd.DataFrame, lexis: pd.DataFrame,
     both sides and the *same* prompt, the evidence gap is closed, so whatever
     disagreement remains belongs to the labeller or to the bodies themselves.
 
-    ``stories`` is the per-story table stage 23 writes; ``lexis`` is
+    ``stories`` is the per-story table stage 34 writes; ``lexis`` is
     :func:`corpora.load_lexisnexis`; ``edges`` is the atlas edge table.
     """
     from .corpora import _story_id

@@ -1,17 +1,17 @@
 #!/usr/bin/env python
-"""Stage 26 — SPC watch systems as a cross-office episode reference.
+"""Stage 50 — SPC watch systems as a cross-office episode reference.
 
 Plan: ``docs/plan_watch_linking.md`` (steps 0–4; step 5, the third reference in
-stage 25, is separate).
+stage 51, is separate).
 
-    python scripts/26_watch_systems.py probe     # step 0: feasibility, on a sample
-    python scripts/26_watch_systems.py fetch     # step 1: ~225 cached IEM requests + county boundaries
-    python scripts/26_watch_systems.py link      # steps 2–4, offline; report and sensitivity
-    python scripts/26_watch_systems.py run       # fetch + link
-    python scripts/26_watch_systems.py link --no-motion-check   # variant, own files
-    python scripts/26_watch_systems.py sheets    # hand-check worksheets → outputs/annotation/
-    python scripts/26_watch_systems.py review    # label them on a map → http://127.0.0.1:8800
-    python scripts/26_watch_systems.py check     # score them once filled in
+    python scripts/50_watch_systems.py probe     # step 0: feasibility, on a sample
+    python scripts/50_watch_systems.py fetch     # step 1: ~225 cached IEM requests + county boundaries
+    python scripts/50_watch_systems.py link      # steps 2–4, offline; report and sensitivity
+    python scripts/50_watch_systems.py run       # fetch + link
+    python scripts/50_watch_systems.py link --no-motion-check   # variant, own files
+    python scripts/50_watch_systems.py sheets    # hand-check worksheets → outputs/annotation/
+    python scripts/50_watch_systems.py review    # label them on a map → http://127.0.0.1:8800
+    python scripts/50_watch_systems.py check     # score them once filled in
 
 ``link`` builds watch systems by three rules (plan, step 3): watches in force
 in the same county at the same time; explicit "replaces watch N"; and inferred
@@ -23,7 +23,7 @@ tornado then takes the system of the watch its county was under (step 4).
 
 A ``link`` with ``--variant NAME`` writes every output with a ``_NAME`` suffix
 and leaves the main ones alone; ``--no-motion-check`` implies ``--variant
-no-motion``. Stage 25 scores against the main systems and, where present, the
+no-motion``. Stage 51 scores against the main systems and, where present, the
 ``no-motion`` variant, to show whether a conclusion depends on the check.
 
 ``probe`` answers the questions the plan leaves open before any linking is
@@ -40,7 +40,7 @@ built, on a small sample (about 25 requests to the IEM archive, cached under
 5. How often do the watch texts state succession ("replaces watch N"), and does
    it parse?
 
-Writes ``outputs/watch_probe_report.md``. Needs stage 24's SPC tracks
+Writes ``outputs/watch_probe_report.md``. Needs stage 14's SPC tracks
 (``data/interim/spc_tornadoes.csv``) for question 4.
 """
 
@@ -151,7 +151,7 @@ def cmd_probe(args) -> None:
                                                 sw.polygon_hits(tracks, polygons))
         print(f"tornadoes: {result['tornadoes']}")
     else:
-        print(f"no {SPC_TRACKS.name} — run scripts/24_storm_events.py join; "
+        print(f"no {SPC_TRACKS.name} — run scripts/14_match_references.py join; "
               "skipping the tornado comparison")
 
     # 5. Watch texts: the season month by month (under IEM's per-request cap),
@@ -194,7 +194,7 @@ def write_probe_report(r: dict, texts: pd.DataFrame) -> None:
         return "—" if v is None or pd.isna(v) else f"{v:.0%}"
 
     lines = [
-        "# SPC watch archive — feasibility probe (stage 26)", "",
+        "# SPC watch archive — feasibility probe (stage 50)", "",
         f"Generated {r['generated']}. Plan: `docs/plan_watch_linking.md`, step 0. "
         "Sources: IEM VTEC county records (`watchwarn.py`, TO.A/SV.A), IEM SPC watch "
         "polygons (`spc_watch.py`), SPC SEL watch texts (IEM text archive). Responses "
@@ -421,7 +421,7 @@ def cmd_link(args) -> None:
     write_report(summary, watches, counties, assign, grid, ref is not None, report)
     suffix = f"_{variant}" if variant else ""
     write_manifest(config.PROCESSED_DIR / f"manifest_watch_systems_{args.tag}{suffix}.json",
-                   "26_watch_systems", counts={k: v for k, v in summary.items()
+                   "50_watch_systems", counts={k: v for k, v in summary.items()
                                                if isinstance(v, (int, float, bool))},
                    outputs=list(paths.values()))
     print(f"{summary['systems']:,} watch systems; {summary['tornadoes_in_watch']:,}/"
@@ -480,7 +480,7 @@ def write_report(s: dict, watches, counties, assign, grid: pd.DataFrame, scored:
     with_t = sys_t[sys_t.tornadoes > 0]
     yr = assign.yr
     lines = [
-        "# SPC watch systems — Stage 26"
+        "# SPC watch systems — Stage 50"
         + (f" (variant `{s['variant']}`)" if s.get("variant") else ""), "",
         f"Generated {utcnow_iso()}. Plan: `docs/plan_watch_linking.md`. Thresholds: "
         f"*Δt* = {s['gap_h']:g} h, *d* = {s['edge_km']:g} km (county edge to county edge), "
@@ -563,7 +563,7 @@ def write_report(s: dict, watches, counties, assign, grid: pd.DataFrame, scored:
               "touch — side-by-side watches along one front. Following them gives "
               "**systems**: connected watch coverage. Keeping only hand-overs in time "
               "(same county at once, “replaces”, or a successor starting after its "
-              "predecessor ended) gives **sequences**: one chain of watches. Stage 25 uses "
+              "predecessor ended) gives **sequences**: one chain of watches. Stage 51 uses "
               "systems as an upper bound on an event and sequences as a lower bound.", "",
               "| | groups with tornadoes | largest (tornadoes) | extent p50 | p90 | max |",
               "|---|---:|---:|---:|---:|---:|",
@@ -645,7 +645,7 @@ REVIEW_SAMPLE = 50
 OUTBREAK_LABELS = ("matches", "too_coarse", "too_fine", "cannot_tell")
 REVIEW_LABELS = ("separate_systems", "should_link", "cannot_tell")
 # Groupings compared on the named outbreaks, all on SPC tracks: SPC's own watch
-# systems and sequences (stage 26), and from stage 25 --anchor spc stage 3's rule
+# systems and sequences (stage 50), and from stage 51 --anchor spc stage 12's rule
 # and its 400 km variant, the time-only outbreak sequence, the recommended
 # space-time setting, and the three density variants.
 OUTBREAK_GROUPINGS = {"watch systems": ("watch", "system_id"),
@@ -665,10 +665,10 @@ _N_GROUPINGS = len(OUTBREAK_GROUPINGS)
 COMPARE_GROUPINGS = ("space_time 400km 6h", ep.FUHRMANN_VARIANT,
                      "watch systems", "watch sequences")
 _LAST = "ABCDEFGHIJ"[_N_GROUPINGS - 1]
-HOW_TO = f"""How to do the watch hand checks (stage 26)
+HOW_TO = f"""How to do the watch hand checks (stage 50)
 ==========================================
 
-Start the app:  python scripts/26_watch_systems.py review   (http://127.0.0.1:8800)
+Start the app:  python scripts/50_watch_systems.py review   (http://127.0.0.1:8800)
 It saves every label into the two sheets below. Keep them closed in other
 programs meanwhile. The same guide is in the app (button "Guide").
 Do not open the *_key.csv files before you are done.
@@ -717,7 +717,7 @@ B. WATCH PAIRS  (watch_review_sheet.csv: 50 pairs)
       2 should_link       B covers A's storms (taken over or replaced): wrong
       3 cannot_tell       the map and texts do not settle it
 
-When done:  python scripts/26_watch_systems.py check
+When done:  python scripts/50_watch_systems.py check
 """
 
 
@@ -836,7 +836,7 @@ def cmd_sheets(args) -> None:
     r_sheet.to_csv(paths["review"], index=False)
     r_key.to_csv(paths["review_key"], index=False)
     paths["how_to"].write_text(HOW_TO, encoding="utf-8")
-    write_manifest(ANNOTATION / "manifest_annotation_watches.json", "26_watch_systems sheets",
+    write_manifest(ANNOTATION / "manifest_annotation_watches.json", "50_watch_systems sheets",
                    counts={"outbreak_rows": len(o_sheet), "review_pairs": len(r_sheet),
                            "review_population": int(len(pd.read_csv(out_paths(args.tag)["review"]))),
                            "seed": SHEET_SEED},
@@ -856,7 +856,7 @@ def cmd_check(args) -> None:
         if bad.any():
             raise SystemExit(f"{name} sheet: labels not in {allowed}: "
                              f"{sorted(df.label[bad].unique())}")
-    lines = ["# Watch hand checks — Stage 26", "",
+    lines = ["# Watch hand checks — Stage 50", "",
              f"Generated {utcnow_iso()} from `outputs/annotation/watch_*_sheet.csv`.", "",
              "## Named outbreaks: does each grouping cut them as the summaries do?", "",
              "| grouping | labelled | matches | too coarse | too fine | cannot tell |",

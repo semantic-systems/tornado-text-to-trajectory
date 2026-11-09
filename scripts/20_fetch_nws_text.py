@@ -1,4 +1,4 @@
-"""Stage 6 — collect NWS text (LSRs and storm-survey PNS) and attach it to hazards.
+"""Stage 20 — collect NWS text (LSRs and storm-survey PNS) and attach it to hazards.
 
 Produces the two same-org text streams:
 
@@ -12,9 +12,9 @@ the evidence it rests on (distance, time offset), and the survey section's own
 rating / path length are kept beside DAT's, since the two are independent
 descriptions of the same survey and their disagreements are worth measuring.
 
-    python scripts/06_fetch_iem_text.py --tag march2025
-    python scripts/06_fetch_iem_text.py --sample-days 30      # cost pilot
-    python scripts/06_fetch_iem_text.py                       # full window
+    python scripts/20_fetch_nws_text.py --tag march2025
+    python scripts/20_fetch_nws_text.py --sample-days 30      # cost pilot
+    python scripts/20_fetch_nws_text.py                       # full window
 """
 
 from __future__ import annotations
@@ -465,7 +465,7 @@ def main() -> None:
                        "tier_rule_version": tiering.TIER_RULE_VERSION},
     }
     write_manifest(config.PROCESSED_DIR / f"manifest_nws_text_{suffix}.json",
-                   "06_fetch_iem_text", counts=counts, outputs=[refs_path, links_path])
+                   "20_fetch_nws_text", counts=counts, outputs=[refs_path, links_path])
 
     print(f"\n{len(refs)} text references, {len(links)} links")
     print(f"  by role: {counts['by_text_role']}")

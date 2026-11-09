@@ -1,4 +1,4 @@
-"""Stage 7 — collect independent news coverage per episode from GDELT.
+"""Stage 21 — collect independent news coverage per episode from GDELT.
 
 One query per episode (an outbreak), built from the place names its tornadoes
 passed through. GDELT enforces one request per five seconds, so a full sweep runs
@@ -9,9 +9,9 @@ Articles are stored as links and metadata only — never bodies — and each is
 classified on the two independence axes against the episode's onset and the time
 its first NWS survey was published.
 
-    python scripts/07_fetch_gdelt.py --limit 20            # pilot
-    python scripts/07_fetch_gdelt.py --tag march2025
-    python scripts/07_fetch_gdelt.py                       # full sweep (hours)
+    python scripts/21_fetch_gdelt.py --limit 20            # pilot
+    python scripts/21_fetch_gdelt.py --tag march2025
+    python scripts/21_fetch_gdelt.py                       # full sweep (hours)
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from tornado_dataset.text import gdelt, tiering
 
 
 def survey_times(tag: str) -> dict[str, dt.datetime]:
-    """First primary-survey publication per episode, if Stage 6 has run."""
+    """First primary-survey publication per episode, if Stage 20 has run."""
     refs_path = config.PROCESSED_DIR / f"textrefs_nws_{tag}.csv"
     links_path = config.PROCESSED_DIR / f"textlinks_nws_{tag}.csv"
     hazards_path = config.PROCESSED_DIR / f"hazards_{tag}.csv"
@@ -105,7 +105,7 @@ def main() -> None:
           f"({coverage_start}) and are flagged, {len(eligible)} to query")
     surveys = survey_times(args.tag)
     if surveys:
-        print(f"  survey times known for {len(surveys)} episodes (from Stage 6)")
+        print(f"  survey times known for {len(surveys)} episodes (from Stage 20)")
 
     cache_dir = config.RAW_DIR / "gdelt"
     wayback_dir = config.RAW_DIR / "wayback"
@@ -252,7 +252,7 @@ def main() -> None:
                        "tier_rule_version": tiering.TIER_RULE_VERSION},
     }
     write_manifest(config.PROCESSED_DIR / f"manifest_news_{suffix}.json",
-                   "07_fetch_gdelt", counts=counts, outputs=[refs_path, links_path])
+                   "21_fetch_gdelt", counts=counts, outputs=[refs_path, links_path])
 
     print(f"{len(refs)} unique articles across {counts['episodes_with_articles']} episodes")
     print(f"  roles: {counts['by_text_role']}")

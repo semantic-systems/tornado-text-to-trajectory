@@ -29,7 +29,7 @@ re-tiered reproducibly.
 - **News is *published* as links and metadata only.** GDELT queries run per
   episode and store links. Article text itself is retrieved and held locally where
   it is needed for analysis — LexisNexis full-text exports, and Media Cloud bodies
-  via stage 21 — under the §60d UrhG research exception for text and data mining.
+  via stage 33 — under the §60d UrhG research exception for text and data mining.
   The distinction is between local processing and redistribution: what leaves this
   project is links plus derived annotations, never the article text.
 - **Independent cross-check:** where a survey section matched a hazard, the survey's
@@ -75,15 +75,15 @@ of missed links — it kept hamlets like *Buffalo Mop* and dropped *Tuscaloosa* 
 and prominence now comes from Census population estimates joined to GNIS. See
 [`docs/linking_coverage_analysis.md`](docs/linking_coverage_analysis.md).
 
-**Links are candidates until annotated.** `scripts/12_sample_annotation.py` draws
+**Links are candidates until annotated.** `scripts/40_sample_annotation.py` draws
 blind precision, recall and agreement sheets ([codebook](docs/annotation_codebook.md));
-`scripts/14_qa_links.py` turns the returned labels into precision per score band
+`scripts/41_qa_links.py` turns the returned labels into precision per score band
 with Wilson intervals, recall, and Cohen's κ, and only then is a publishable
 threshold defined.
 
 ### The corpus in time
 
-`scripts/15_analyze_news_time.py` writes
+`scripts/42_analyze_news_time.py` writes
 [`outputs/news_time_report.md`](outputs/news_time_report.md): corpus volume and
 source mix over time, how quickly coverage appears after a tornado, how it decays
 by death toll, the anniversary tail, which events get covered at all, and — the
@@ -105,7 +105,7 @@ day, the survey days later. Note the news hours are date-resolution (LexisNexis
 gives a date, not a timestamp), so compare streams by order and scale, not by the
 hour — the report says so where it matters.
 
-### Reading articles — `scripts/16_viewer.py`
+### Reading articles — `scripts/viewer.py`
 
 A local Flask app at `http://127.0.0.1:8799` for going through the corpus without
 opening an 18 MB CSV. It loads once (~30 s) and then serves instantly:
@@ -135,10 +135,10 @@ bar to work offline or to see the geometry unobstructed.
 This is the surface the annotation UI will be built on, since judging a link means
 reading the article and the event side by side.
 
-`--corpus mediacloud` opens a second view over the full texts stage 21 retrieved —
+`--corpus mediacloud` opens a second view over the full texts stage 33 retrieved —
 see *Inspecting the full texts* below.
 
-### Filtering the Media Cloud corpus — `scripts/18_filter_media_cloud.py`
+### Filtering the Media Cloud corpus — `scripts/30_filter_media_cloud.py`
 
 The Media Cloud export is 491,432 rows of **headline and URL only** — no body, no
 lead paragraph. It was collected with the full-text query
@@ -214,8 +214,8 @@ uncertainty signal than the model's self-reported `conf`, which is not calibrate
 
 ```bash
 ssh -N -L 8000:localhost:8000 you@your-server
-python scripts/18_filter_media_cloud.py profile   # cue coverage, no LLM needed
-python scripts/18_filter_media_cloud.py run       # label + uncertainty + write
+python scripts/30_filter_media_cloud.py profile   # cue coverage, no LLM needed
+python scripts/30_filter_media_cloud.py run       # label + uncertainty + write
 ```
 
 `--api-base`, `--model` (default: ask the server which model it has loaded),
@@ -231,9 +231,9 @@ stage reports is model output, so precision and recall against human labels stil
 require a blind, stratified annotation sample — the `UNCLEAR` stratum and the
 rows with `modal_share < 1.0` are where it should be concentrated.
 
-### Filtering the LexisNexis corpus — `scripts/19_filter_lexisnexis.py`
+### Filtering the LexisNexis corpus — `scripts/32_filter_lexisnexis.py`
 
-Same method and the same label vocabulary as stage 18, so the two corpora stay
+Same method and the same label vocabulary as stage 30, so the two corpora stay
 comparable for the overlap study; the shared machinery lives in
 [`text/labelling.py`](src/tornado_dataset/text/labelling.py). Three things differ,
 and each changes a design decision.
@@ -241,7 +241,7 @@ and each changes a design decision.
 **Full body text is available.** 24,917 rows collapse to **20,138 distinct
 bodies** (the labelling unit) carrying 22,896 `textref_uid`s (the downstream join
 key). Median body is 525 words. The headline under-determination that made
-`UNCLEAR` load-bearing in stage 18 largely disappears — so if `UNCLEAR` stays
+`UNCLEAR` load-bearing in stage 30 largely disappears — so if `UNCLEAR` stays
 common here, something is wrong with the evidence window or the prompt rather
 than with the corpus.
 
@@ -265,7 +265,7 @@ article, with omissions marked `[…]`. It averages **257 words — cheaper than
 Which window is right is measured, not assumed:
 
 ```bash
-python scripts/19_filter_lexisnexis.py window
+python scripts/32_filter_lexisnexis.py window
 ```
 
 labels a mention-count-stratified sample under all four modes and reports each
@@ -277,10 +277,10 @@ median words virtually every article contains "storm", so a full-body protect
 rule is vacuously true and stops being a guard.
 
 ```bash
-python scripts/19_filter_lexisnexis.py profile    # corpus shape, no LLM
-python scripts/19_filter_lexisnexis.py window     # choose the evidence window
-python scripts/19_filter_lexisnexis.py run        # label + uncertainty + write
-python scripts/19_filter_lexisnexis.py crosstab   # validate against stage 11
+python scripts/32_filter_lexisnexis.py profile    # corpus shape, no LLM
+python scripts/32_filter_lexisnexis.py window     # choose the evidence window
+python scripts/32_filter_lexisnexis.py run        # label + uncertainty + write
+python scripts/32_filter_lexisnexis.py crosstab   # validate against stage 31
 ```
 
 Both stages take `--tag`, and anything experimental should use it: output paths
@@ -289,11 +289,11 @@ how much of the corpus is *read*, which is not the same protection. The response
 cache is shared across tags, so a tagged run still inherits every answer already
 paid for.
 
-### Full text for the Media Cloud corpus — `scripts/21_fetch_fulltext.py`
+### Full text for the Media Cloud corpus — `scripts/33_fetch_fulltext.py`
 
-Media Cloud supplies headline, URL and date but no body. That bounds what stage 18
+Media Cloud supplies headline, URL and date but no body. That bounds what stage 30
 can decide and, more importantly, leaves its 48,741 `EVENT` stories **unlinkable**:
-stage 11 matches toponyms in the article text, so without a body they cannot enter
+stage 31 matches toponyms in the article text, so without a body they cannot enter
 the dataset at all. Retrieving them would roughly triple the linkable corpus over
 the 12,077 LexisNexis articles available today.
 
@@ -328,10 +328,10 @@ archive, which serves from the US. Left unhandled it would have been a silent,
 systematic hole in exactly the local coverage the project needs.
 
 ```bash
-python scripts/21_fetch_fulltext.py pilot          # measure, ~600 URLs
-python scripts/21_fetch_fulltext.py crawl          # the full pass, resumable
-python scripts/21_fetch_fulltext.py status         # progress; safe during a crawl
-python scripts/21_fetch_fulltext.py crawl --retry-failed   # transients only
+python scripts/33_fetch_fulltext.py pilot          # measure, ~600 URLs
+python scripts/33_fetch_fulltext.py crawl          # the full pass, resumable
+python scripts/33_fetch_fulltext.py status         # progress; safe during a crawl
+python scripts/33_fetch_fulltext.py crawl --retry-failed   # transients only
 ```
 
 `crawl` appends every outcome to `data/raw/fulltext/retrievals.jsonl` as it happens,
@@ -356,10 +356,10 @@ it always was: links and derived annotations, never the article text.
 
 ### Gating the linker
 
-`scripts/11_link_articles.py --labels data/processed/lexisnexis_article_labels.csv`
+`scripts/31_link_articles.py --labels data/processed/lexisnexis_article_labels.csv`
 links only `EVENT` articles. The rest are **recorded, not dropped** — they get
 `link_status = filtered_<primary>`, because `article_status_*.csv` is a complete
-census of the corpus that the report and the viewer both read. An article stage 19
+census of the corpus that the report and the viewer both read. An article stage 32
 did not judge is still linked, and counted, rather than silently discarded.
 
 The existing regex heuristics in `classify_scope` are superseded but kept: they
@@ -367,7 +367,7 @@ still populate the `scope` column, and their disagreement with the model is a fr
 drift monitor.
 
 Gating is one-directional — once the linker runs gated, a filter false negative
-becomes invisible. Run `crosstab` **before** re-running stage 11: it compares the
+becomes invisible. Run `crosstab` **before** re-running stage 31: it compares the
 labels against the ungated `link_status` already on disk and lists both
 disagreement directions. Its first run already showed that several `EVENT`
 articles the linker could not place are non-US tornadoes (Sechelt BC, Ayr Ontario,
@@ -375,14 +375,14 @@ a Puerto Rico F4) that DAT structurally cannot cover.
 
 ### Exploring the data
 
-`scripts/09_analyze_hazards.py` writes
+`scripts/18_analyze_events.py` writes
 [`outputs/hazard_analysis_report.md`](outputs/hazard_analysis_report.md) with figures
 for counts per year, rating distribution and mix, season and time of day (in local
 solar time, since a UTC histogram smears the afternoon peak across four time
 zones), track geometry, human impact, a density map in equal-area projection, and
 per-year coverage of each layer.
 
-`scripts/10_hazard_map.py` writes `outputs/hazard_map.html` — a single
+`scripts/19_event_map.py` writes `outputs/hazard_map.html` — a single
 self-contained file (~3 MB, no network, no build step) showing all 9,982 tracks on
 a US map with a month slider and play button, a window mode (month / year /
 cumulative), a rating filter, hover details and a table of the strongest tracks in
@@ -414,7 +414,7 @@ python -m http.server 8791 --directory outputs
 ```
 
 
-### Rebuilding GDELT from cache — `scripts/07_fetch_gdelt.py --cache-only`
+### Rebuilding GDELT from cache — `scripts/21_fetch_gdelt.py --cache-only`
 
 Every GDELT response is cached under `data/raw/gdelt/`, so the tables can be
 rebuilt without touching the network. `--cache-only` skips any query that was
@@ -427,7 +427,7 @@ one `query_articles` already makes between `None` and `[]`: "not attempted",
 "refused" and "genuinely empty" are three different facts, and a rebuild that
 conflated them would report partial coverage as complete.
 
-### Labelling a second headline corpus — `18_filter_media_cloud.py --source`
+### Labelling a second headline corpus — `30_filter_media_cloud.py --source`
 
 GDELT is the same shape as Media Cloud — headline, URL, date, outlet, no body —
 so it needs no separate labeller, only a loader that renames its columns.
@@ -440,23 +440,23 @@ so the same headline in two corpora produces different prompts and different cac
 keys — a shared cache would buy nothing, and renaming the existing one would
 orphan the answers already paid for.
 
-### The corpus atlas — `scripts/22_corpus_atlas.py`
+### The corpus atlas — `scripts/43_corpus_atlas.py`
 
-Replaces the retired stages 13 and 20. Run it twice; the two scopes answer
+Replaces the retired pairwise overlap stages (`legacy/`). Run it twice; the two scopes answer
 different questions and write to different files:
 
 ```bash
-python scripts/22_corpus_atlas.py                 # what was collected
-python scripts/22_corpus_atlas.py --events-only   # what is usable  <- the relevant one
-python scripts/22_corpus_atlas.py --probe         # + ask GDELT about missed stories
+python scripts/43_corpus_atlas.py                 # what was collected
+python scripts/43_corpus_atlas.py --events-only   # what is usable  <- the relevant one
+python scripts/43_corpus_atlas.py --probe         # + ask GDELT about missed stories
 ```
 
 `--events-only` restricts to stories labelled `EVENT` and writes
 `corpus_atlas_events_report.md`; the unrestricted run writes
 `corpus_atlas_report.md`. Each report states its scope in its first line.
 
-Compares all three news corpora as a set. Supersedes stages 13 and 20, which are
-retained until the atlas has run against a labelled GDELT.
+Compares all three news corpora as a set. Supersedes the pairwise overlap stages, which are
+retained in `legacy/` until the atlas has run against a labelled GDELT.
 
 Three design points, each fixing something the pairwise scripts got wrong:
 
@@ -480,7 +480,7 @@ identifiers that then matched indiscriminately, fabricating 6,559 of 14,018
 Media Cloud ↔ GDELT edges.
 
 
-### Full-text quality — `21_fetch_fulltext.py quality`
+### Full-text quality — `33_fetch_fulltext.py quality`
 
 Offline. Retrieval `ok` only means extraction produced enough words that are not
 an obvious paywall; `quality` asks whether the body is the article the headline
@@ -507,14 +507,14 @@ extracts cleanly and mentions a tornado; anything else goes to
 `data/raw/fulltext/archive_refetch.jsonl` and the direct body stays. Records it
 writes carry `note = "archive_refetch: …"`, which the coverage report counts.
 `--flags` restricts it to bodies failing particular checks, `--dry-run` shows the
-candidates without fetching. Re-run `quality` afterwards, then stage 23 — cached
+candidates without fetching. Re-run `quality` afterwards, then stage 34 — cached
 answers mean only the replaced bodies cost model calls.
 
-### Labelling the full texts — `scripts/23_label_fulltext.py`
+### Labelling the full texts — `scripts/34_label_fulltext.py`
 
-Stage 19's prompt, JSON schema, evidence window (`windows` by default) and token
+Stage 32's prompt, JSON schema, evidence window (`windows` by default) and token
 budget, applied unchanged to the Media Cloud bodies, so a full-text label means the
-same thing in both corpora. Same subcommands and guarantees as stage 19: `label`
+same thing in both corpora. Same subcommands and guarantees as stage 32: `label`
 at T=0 over distinct bodies, `uncertainty` (k=3 at T=1 on 10%), `apply` to
 propagate to every story under the protect invariant, `run` for all of it, `--tag`
 for isolation, answers cached in `data/interim/mediacloud_fulltext_llm_cache.jsonl`.
@@ -526,7 +526,7 @@ under several headlines, the representative is chosen after sorting by URL, so t
 headline the model sees does not depend on crawl order.
 
 `apply` writes `data/processed/mediacloud_fulltext_story_labels.csv` — one row per
-story, the stage 18 label under `hl_` and the full-text label under `ft_`, no text.
+story, the stage 30 label under `hl_` and the full-text label under `ft_`, no text.
 `compare` reads it and writes `outputs/mediacloud_fulltext_vs_headline_report.md`.
 The comparison functions live in `tornado_dataset.text.fulltext_corpus`
 (`primary_crosstab`, `flag_agreement` with Cohen's κ, `agreement_by`,
@@ -536,7 +536,7 @@ The crawl covered headline-`EVENT` stories only, so the report measures headline
 **precision**; it says so in its scope line, and adapts if non-`EVENT` stories are
 ever crawled.
 
-### Inspecting the full texts — `scripts/16_viewer.py --corpus mediacloud`
+### Inspecting the full texts — `scripts/viewer.py --corpus mediacloud`
 
 Filters for quality (pass, fail, any single flag), full-text label, headline versus
 full-text agreement, route, years, shared bodies and inspected/not. The article view
@@ -547,11 +547,11 @@ window the model saw, `m` jumps between mentions.
 
 Verdicts are one key each — `1` right article, `2` wrong page, `3` partial; `e`, `p`,
 `n`, `u` for a label — appended to `data/interim/fulltext_inspection.csv` with the
-active filter and whether the article was drawn at random (`r`). Stage 23's
+active filter and whether the article was drawn at random (`r`). Stage 34's
 `compare` reports headline and full-text accuracy against them, separately for
 random draws, because only those support an estimate.
 
-### NCEI Storm Events — `scripts/24_storm_events.py`
+### NCEI Storm Events — `scripts/14_match_references.py`
 
 `fetch` downloads the newest `StormEvents_details-*.csv.gz` per year from
 <https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/> into
@@ -567,7 +567,7 @@ county within 30 min (`TORNADO_KEY`), and joins episodes that share a tornado
 (`LINKED_EPISODE`) — which spans offices only where a tornado crossed between
 them. `report` writes `../local/archive/storm_events_report.md`: per-year completeness in
 tornadoes, both directions. One hazard can match several rows; the closest
-(`rank_for_hazard == 1`) gives the hazard's reference episode, and stage 25
+(`rank_for_hazard == 1`) gives the hazard's reference episode, and stage 51
 scores against both `EPISODE_ID` and `LINKED_EPISODE`.
 `--from-dir` reads details files from elsewhere, e.g. ones downloaded by hand.
 
@@ -579,7 +579,7 @@ also matches every Storm Events row to its closest SPC track, which checks the
 `TOR_OTHER_*` chaining: a chain should land on exactly one SPC tornado
 (`data/interim/spc_chain_crosscheck_<tag>.json`, and a section of the report).
 Those row ↔ track pairs are kept (`data/processed/spc_storm_events_links_<tag>.csv`):
-they give each SPC track its Storm Events episode for stage 25's `--anchor spc`.
+they give each SPC track its Storm Events episode for stage 51's `--anchor spc`.
 A **second pass** takes the DAT hazards the strict rule leaves without an SPC
 track and links each to an SPC track within the same 5 km whose start differs
 by a whole number of hours, 1 ≤ |k| ≤ 48, to within 10 min
@@ -603,9 +603,9 @@ SPC's `om` is a per-year number up to September 2007 and a text identifier
 (`YYMMDDHHMM-NN`, start time in CST plus a sequence) after; `spc_id` keeps it as text.
 `--spc-file` uses a file from elsewhere; without one, the SPC part is skipped.
 
-### Comparing episode definitions — `scripts/25_compare_episodes.py`
+### Comparing episode definitions — `scripts/51_compare_episodes.py`
 
-Offline and read-only towards the pipeline. Runs stage 3's rule (re-implemented
+Offline and read-only towards the pipeline. Runs stage 12's rule (re-implemented
 and checked to reproduce its episodes exactly) and the alternatives in
 `tornado_dataset.dat.episodes` on the same hazards: space-time single linkage
 (no day boundary; with unlimited distance and a 6 h gap, a variant of the
@@ -620,12 +620,12 @@ count. Outputs: `../local/archive/episode_comparison_report.md`,
 column of episode labels per method). Implausible DAT end times are repaired in
 memory first; see HANDOVER's traps.
 
-`--anchor spc` runs the same methods on SPC's whole tracks (stage 24) instead of
+`--anchor spc` runs the same methods on SPC's whole tracks (stage 14) instead of
 DAT hazards — the complete, reviewed tornado list, so tornadoes DAT lacks cannot
 cut an outbreak — scored against each track's closest Storm Events row. Its
 episodes are then carried to DAT hazards (each takes its closest SPC track's
 episode; a hazard without an SPC match is its own) and scored against the DAT
-reference, with the ARI against stage 3's published episodes. Outputs carry an
+reference, with the ARI against stage 12's published episodes. Outputs carry an
 `_spc` suffix. SPC geometry is a straight start→end line, so distances between
 long curved tracks are approximate.
 
@@ -635,11 +635,11 @@ No grouping applies a minimum size. `--anchor spc` therefore also writes
 and the DAT hazards carried into it (`n_dat`). These are the counts a dataset user
 cannot recompute from DAT, which lacks many SPC tornadoes; an outbreak threshold
 such as ≥6 EF1+ (Fuhrmann et al.) is a filter on them. The report shows what that
-threshold keeps per method. They become episode columns when stage 3 switches to
+threshold keeps per method. They become episode columns when stage 12 switches to
 SPC-built episodes.
 
 The DAT hazards' reference is their own Storm Events match, **extended through
-SPC** where they have none: DAT hazard → closest SPC track (including stage 24's
+SPC** where they have none: DAT hazard → closest SPC track (including stage 14's
 time-repaired links) → that track's closest Storm Events row
 (`episodes.reference_via_spc`, `combine_references`). This reaches the hazards
 whose DAT time is off by hours, which can never match Storm Events directly.
@@ -647,19 +647,19 @@ Where both routes exist they name the same episode for 98.6% of hazards; the
 report states the counts. `--dat-reference direct` scores against the hazards'
 own matches only, as before.
 
-With stage 26's `spc_watch_systems_<tag>.csv` present, every method is also
+With stage 50's `spc_watch_systems_<tag>.csv` present, every method is also
 scored against SPC watches (DAT hazards through their closest SPC track), on
 watched tornadoes only: **within systems** — of pairs a method groups, the
 share inside one watch system, and the part on pairs from two offices — as an
 upper bound, and **sequences kept** — of pairs in one watch sequence, the share
 the method keeps — as a lower bound. F1 against each is in the metrics CSV.
-Where stage 26's `no-motion` variant exists as well (`link --no-motion-check`),
+Where stage 50's `no-motion` variant exists as well (`link --no-motion-check`),
 every method is scored against it too (`alt_` columns), and the report sets both
 side by side, with the largest change and Kendall's τ of the method order per
 score: whether a conclusion depends on the motion check. `--watch-variant`
 names another variant, `''` turns this off.
 
-### Watch systems — `scripts/26_watch_systems.py`
+### Watch systems — `scripts/50_watch_systems.py`
 
 The watch reference from `docs/plan_watch_linking.md`, steps 0–4.
 `probe` makes about 25 cached requests to the IEM archives
@@ -668,7 +668,7 @@ the official area), the SPC watch polygons with their attributes, and the SEL
 watch texts — and writes `outputs/watch_probe_report.md` and
 `data/interim/watch_probe.json`: from which year county records are complete
 (one April per year, default 2004–2012), how often counties end before their
-watch expires, whether counties and polygons place stage 24's SPC tornadoes in
+watch expires, whether counties and polygons place stage 14's SPC tornadoes in
 the same watches (one season, default spring 2011), and how often the texts
 state "replaces watch N" (that season by month, plus April 2024 for the newer
 mixed-case format). A tornado's county is SPC's `st` + `C` + `f1` (UGC code),
@@ -710,13 +710,13 @@ sensitivity, and the named outbreaks for a hand check.
 `link --variant NAME` writes all of these with a `_NAME` suffix
 (`spc_watch_systems_<tag>_NAME.csv`, `outputs/watch_systems_NAME_report.md`, …)
 and leaves the main ones alone; `--no-motion-check` implies `--variant
-no-motion`, which stage 25 picks up to test whether its conclusions depend on the
+no-motion`, which stage 51 picks up to test whether its conclusions depend on the
 motion check.
 
 `sheets` writes the two hand checks to `outputs/annotation/` (instructions in
 `HOW_TO_ANNOTATE_watches.txt`): `watch_outbreak_sheet.csv` — each of the 10 named
 outbreaks (`NAMED_OUTBREAKS`) grouped nine ways on SPC tracks (watch systems and
-sequences, stage 3's rule, convective day 400 km, the 6 h time-gap rule (Fuhrmann variant),
+sequences, stage 12's rule, convective day 400 km, the 6 h time-gap rule (Fuhrmann variant),
 space-time 400 km / 6 h, KDE per day 100 km and the overlapping-window KDE at
 50 and 100 km; `OUTBREAK_GROUPINGS`), blinded as groupings A–I — 90 labels —
 each to be labelled

@@ -1,14 +1,14 @@
 # Plan — an outbreak reference from SPC watches
 
-Status: **step 0 done (2026-10-27), see below; steps 1–4 built and run on 2010–2025 (`scripts/26_watch_systems.py`, report `outputs/watch_systems_report.md`); step 5 built (stage 25); hand checks open.** Thread 6 in HANDOVER.
+Status: **step 0 done (2026-10-27), see below; steps 1–4 built and run on 2010–2025 (`scripts/50_watch_systems.py`, report `outputs/watch_systems_report.md`); step 5 built (stage 51); hand checks open.** Thread 6 in HANDOVER.
 
 ## Why
 
-Stage 25 scores episode definitions against NCEI Storm Events episodes, which
+Stage 51 scores episode definitions against NCEI Storm Events episodes, which
 are filed per forecast office: they test whether a method *splits* a weather
 system, but they cannot see whether it *over-merges* across offices, because no
 Storm Events episode spans two offices except where a tornado crossed between
-them (linked episodes, stage 24). There is no authoritative cross-office
+them (linked episodes, stage 14). There is no authoritative cross-office
 outbreak record; the literature defines outbreaks by rule (Galway 1977;
 Fuhrmann et al. 2014) or by calendar day with manual review (Schneider,
 Schaefer & Brooks 2004, who chose fixed days precisely because event
@@ -25,13 +25,13 @@ a physical one. For this dataset that is a strength rather than a compromise:
 the dataset links tornadoes to news, and watches are the unit in which the
 threat was announced to the public, emergency managers and the press. A watch
 system is therefore a defensible definition of "one event" for text linking in
-its own right, and it is independent of every method stage 25 compares. It is
+its own right, and it is independent of every method stage 51 compares. It is
 used **alongside** the office episodes, not instead of them: conclusions should
 hold against both.
 
 ## Scope
 
-**In:** watch systems as a third reference in stage 25.
+**In:** watch systems as a third reference in stage 51.
 
 **Out, deliberately:** physical references — radar storm tracks for tornado
 families (e.g. GridRad-Severe, Murphy, Homeyer & Allen 2023) and
@@ -64,7 +64,7 @@ Using these means a tornado counts as "in a watch" only when *its county* was
 under a watch *at that minute*: counties cleared early, and extensions to new
 counties, are handled as they were in reality.
 
-To check first (feasibility step 0, `python scripts/26_watch_systems.py probe`,
+To check first (feasibility step 0, `python scripts/50_watch_systems.py probe`,
 report in `outputs/watch_probe_report.md`):
 
 - the first year with complete `TO.A`/`SV.A` county records (expected mid-2000s,
@@ -118,7 +118,7 @@ identified by year + number, with the type an attribute.
 
 **Step 1 — fetch.** One request per year, 2010–2025, for the county records and
 the watch attributes, into `data/raw/spc_watches/`, with provenance as in stage
-24; the watch texts per year likewise, if step 0 passes.
+14; the watch texts per year likewise, if step 0 passes.
 
 **Step 2 — tornado → watch.** The anchor is the SPC whole track (decision 2),
 placed in its county: the county shape that contains its start point, checked
@@ -184,13 +184,13 @@ system, say) can be joined through one pair of touching watches.
 watch it is in. No tie-break is needed: if a tornado's county is under two
 watches at that minute, rule 1 of step 3 has linked those watches, so the
 tornado is in one system **by construction**. One label per tornado is what
-the stage 25 scores require (pair-based recall and precision, and the adjusted
+the stage 51 scores require (pair-based recall and precision, and the adjusted
 Rand index, compare partitions). Unwatched tornadoes get no label and are
 excluded from scoring, as Storm Events-unmatched hazards are now.
 
-**Step 5 — use it in stage 25.** Add the watch-system label as a third
+**Step 5 — use it in stage 51.** Add the watch-system label as a third
 reference next to `EPISODE_ID` and `LINKED_EPISODE`, carried to DAT hazards
-through `spc_tornado_links_<tag>.csv` (stage 24). Because systems span
+through `spc_tornado_links_<tag>.csv` (stage 14). Because systems span
 offices, this is the first reference that can score **cross-office
 precision**: of hazard pairs a method groups, the share SPC also treated as one
 system. Recall against it is informative too, but weaker, since one weather
@@ -204,7 +204,7 @@ median tornado, coarser than every method. **Sequences** (rule 3 only where B
 begins after A ended, plus rules 1 and 2) are one chain of hand-overs, ~260 km,
 finer than every method. F1 against either ranks methods by how close their
 granularity is to that one definition, and the ranking flips between the two.
-Stage 25 therefore uses them as **bounds**: *within systems* (precision against
+Stage 51 therefore uses them as **bounds**: *within systems* (precision against
 systems, and its cross-office part) flags merging beyond anything SPC
 connected; *sequences kept* (recall against sequences) flags cutting a chain
 SPC ran as one. F1 values stay in the metrics CSV, not in the report's ranking.
@@ -253,12 +253,12 @@ SPC ran as one. F1 values stay in the metrics CSV, not in the report's ranking.
 | piece | where | effort |
 |---|---|---|
 | feasibility: county-record coverage, watch-text parsing | notes in this file | ½ day |
-| fetch + load county records, attributes, texts | `src/tornado_dataset/dat/spc_watches.py`, stage 26 `fetch` | ½–1 day |
-| tornado ↔ watch, the three linking rules, systems | same module, stage 26 `link` | 1–2 days |
+| fetch + load county records, attributes, texts | `src/tornado_dataset/dat/spc_watches.py`, stage 50 `fetch` | ½–1 day |
+| tornado ↔ watch, the three linking rules, systems | same module, stage 50 `link` | 1–2 days |
 | replacement parsing (if feasible) | same | ½–1 day |
 | validation report (coverage, office agreement, sensitivity, counties vs polygons) | `outputs/watch_systems_report.md` | 1 day |
 | named-outbreak check, review lists | hand work, sheet under `outputs/annotation/` | ½–1 day |
-| third reference in stage 25 | `scripts/25_compare_episodes.py` | ½ day |
+| third reference in stage 51 | `scripts/51_compare_episodes.py` | ½ day |
 
 ## Decisions
 
@@ -267,7 +267,7 @@ SPC ran as one. F1 values stay in the metrics CSV, not in the report's ranking.
    The type is kept on every watch and tornado, so results can also be shown
    for tornado watches only.
 2. *Decided:* the anchor is SPC whole tracks (complete and reviewed). DAT
-   hazards receive their system through the stage 24 SPC ↔ DAT links; a DAT
+   hazards receive their system through the stage 14 SPC ↔ DAT links; a DAT
    hazard without an SPC match falls back to its own start point and is
    counted separately in the report.
 3. *Decided:* the forecast-made reference is acceptable for publication when

@@ -1,4 +1,4 @@
-"""Stage 11 — link news articles to the tornado or outbreak they describe.
+"""Stage 31 — link news articles to the tornado or outbreak they describe.
 
 Runs the pipeline in docs/stage_c_plan.md: a date window to build a shortlist, IDF-
 weighted toponym matching to decide, corroborating signals to break ties, and a
@@ -9,9 +9,9 @@ have full bodies, GDELT records have a headline and nothing else. They are score
 by the same code and reported separately, because their precision is not
 comparable.
 
-    python scripts/11_link_articles.py                    # both sources
-    python scripts/11_link_articles.py --skip-gdelt
-    python scripts/11_link_articles.py --news-suffix march2025
+    python scripts/31_link_articles.py                    # both sources
+    python scripts/31_link_articles.py --skip-gdelt
+    python scripts/31_link_articles.py --news-suffix march2025
 """
 
 from __future__ import annotations
@@ -53,18 +53,18 @@ NO_EVENT_RE = re.compile(
 
 
 def load_gate_labels(path) -> dict[str, str] | None:
-    """Read stage 19's per-article relevance labels, or ``None`` if not gating.
+    """Read stage 32's per-article relevance labels, or ``None`` if not gating.
 
     The regex heuristics above are *superseded* by these labels but deliberately
     kept: they still populate the ``scope`` column, and their disagreement with
-    the model is a free drift monitor — the same treatment stage 18 gave its cue
+    the model is a free drift monitor — the same treatment stage 30 gave its cue
     regexes after measurement removed them from the decision.
     """
     if path is None:
         return None
     path = Path(path)
     if not path.exists():
-        raise SystemExit(f"missing {path} — run scripts/19_filter_lexisnexis.py apply first")
+        raise SystemExit(f"missing {path} — run scripts/32_filter_lexisnexis.py apply first")
     frame = pd.read_csv(path, keep_default_na=False,
                         usecols=["textref_uid", "primary"])
     labels = dict(zip(frame.textref_uid, frame.primary))
@@ -247,7 +247,7 @@ def main() -> None:
     parser.add_argument("--articles", type=Path,
                         default=config.OUTPUT_DIR / "lexisnexis_articles.jsonl")
     parser.add_argument("--labels", type=Path, default=None,
-                        help="stage 19 relevance labels "
+                        help="stage 32 relevance labels "
                              "(data/processed/lexisnexis_article_labels.csv). When "
                              "given, only EVENT articles are linked; the rest are "
                              "recorded with link_status=filtered_<primary>.")
@@ -303,7 +303,7 @@ def main() -> None:
             continue
         seen_uids.add(ref_uid)
 
-        # Stage 19's relevance label, when supplied, gates the expensive part.
+        # Stage 32's relevance label, when supplied, gates the expensive part.
         # An article it did not judge is still linked rather than silently
         # dropped — a partial label file is a mismatch to report, not a licence
         # to shrink the corpus.
@@ -380,7 +380,7 @@ def main() -> None:
         print(f"  scored {len(news)}/{len(news)}")
         stats["gdelt_articles"] = len(news)
     elif not args.skip_gdelt:
-        print(f"\nGDELT: {news_path.name} not found — run scripts/07_fetch_gdelt.py "
+        print(f"\nGDELT: {news_path.name} not found — run scripts/21_fetch_gdelt.py "
               f"or pass --news-suffix")
 
     links = pd.DataFrame(rows)
@@ -429,7 +429,7 @@ def main() -> None:
     counts["in_scope_articles"] = len(in_scope)
     counts["in_scope_linked"] = int((in_scope.link_status == "linked").sum()) if len(in_scope) else 0
     write_manifest(config.PROCESSED_DIR / f"manifest_article_links_{args.tag}.json",
-                   "11_link_articles", counts=counts,
+                   "31_link_articles", counts=counts,
                    outputs=[links_path, refs_path, status_path])
 
     print(f"\n{len(links)} candidate links written")

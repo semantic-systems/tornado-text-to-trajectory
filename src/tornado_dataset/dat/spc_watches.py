@@ -697,7 +697,7 @@ def sequence_links(links: pd.DataFrame) -> pd.DataFrame:
     sets along one front — and so describe connected watch coverage, often
     across a thousand kilometres or more. **Sequences** keep only hand-overs in
     time (same county at once, "replaces", or B starting after A's last county
-    ended) and describe one chain of watches. Stage 25 uses systems as the
+    ended) and describe one chain of watches. Stage 51 uses systems as the
     upper bound of an event (do not merge what SPC never connected) and
     sequences as the lower bound (do not split what SPC carried as one chain).
     """

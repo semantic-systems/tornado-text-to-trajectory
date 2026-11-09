@@ -17,7 +17,7 @@ Both are US-government works, so their full text may be stored and redistributed
 Retrieval is shaped by what scales. LSRs come as one bulk CSV per year (16
 requests for the whole window) and are matched to hazards locally. PNS products
 are listed nationally per date — one request covers every office — and only the
-products belonging to a hazard's WFO are then downloaded, which is why Stage 5's
+products belonging to a hazard's WFO are then downloaded, which is why Stage 16's
 WFO backfill runs first.
 """
 

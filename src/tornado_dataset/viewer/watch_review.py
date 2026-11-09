@@ -1,6 +1,6 @@
-"""Map-based review of the stage 26 hand checks.
+"""Map-based review of the stage 50 hand checks.
 
-The two worksheets ``scripts/26_watch_systems.py sheets`` writes are hard to
+The two worksheets ``scripts/50_watch_systems.py sheets`` writes are hard to
 judge from text alone: whether a grouping cuts an outbreak the way the official
 summaries do, or whether a watch the motion check kept apart really belongs to
 another system, is a question about places and times. This app shows both on a
@@ -26,7 +26,7 @@ CSVs, so ``check`` reads them unchanged.
 Labels go to the ``label`` and ``notes`` columns only, written atomically. Do
 not keep the CSVs open in a spreadsheet program while labelling here.
 
-    python scripts/26_watch_systems.py review          # http://127.0.0.1:8800
+    python scripts/50_watch_systems.py review          # http://127.0.0.1:8800
 """
 
 from __future__ import annotations
@@ -100,7 +100,7 @@ class WatchReviewStore:
         self.labels = {"outbreak": list(outbreak_labels), "review": list(review_labels)}
         for k in ("outbreak", "outbreak_key", "review", "review_key"):
             if not sheets[k].exists():
-                raise SystemExit(f"no {sheets[k].name} — run `python scripts/26_watch_systems.py "
+                raise SystemExit(f"no {sheets[k].name} — run `python scripts/50_watch_systems.py "
                                  "sheets` first")
         print("loading SPC tracks, groupings and watches …")
         t = pd.read_csv(config.INTERIM_DIR / "spc_tornadoes.csv", low_memory=False)

@@ -1,4 +1,4 @@
-"""Stage 10 — build a self-contained interactive map of every hazard.
+"""Stage 19 — build a self-contained interactive map of every hazard.
 
 Writes `outputs/hazard_map.html`: one file, no network at view time, no build
 step. Tracks are pre-projected to CONUS Albers and simplified in Python, so the
@@ -9,8 +9,8 @@ Controls: a month slider with play/pause, a rating filter, a window mode
 (one month / whole year / everything up to now), hover details, and a table of
 the strongest tracks currently shown.
 
-    python scripts/10_hazard_map.py
-    python scripts/10_hazard_map.py --width 1180 --simplify-m 1500
+    python scripts/19_event_map.py
+    python scripts/19_event_map.py --width 1180 --simplify-m 1500
 """
 
 from __future__ import annotations

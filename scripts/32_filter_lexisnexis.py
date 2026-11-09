@@ -1,18 +1,18 @@
 #!/usr/bin/env python
-"""Stage 19 — filter the LexisNexis corpus to articles reporting real tornadoes.
+"""Stage 32 — filter the LexisNexis corpus to articles reporting real tornadoes.
 
 Labels all 20,138 distinct article bodies with a locally hosted LLM and
 propagates each answer to the 22,896 ``textref_uid``s that share them. Same
-method and same label vocabulary as stage 18, so the two corpora stay comparable
+method and same label vocabulary as stage 30, so the two corpora stay comparable
 for the overlap study; see :mod:`tornado_dataset.text.lexisnexis_filter` for what
 this corpus needs done differently.
 
 Typical run — forward the model's port first, then::
 
     ssh -N -L 8000:localhost:8000 you@your-server        # in another terminal
-    python scripts/19_filter_lexisnexis.py profile       # corpus shape, no LLM
-    python scripts/19_filter_lexisnexis.py window        # choose the evidence window
-    python scripts/19_filter_lexisnexis.py run           # label + uncertainty + write
+    python scripts/32_filter_lexisnexis.py profile       # corpus shape, no LLM
+    python scripts/32_filter_lexisnexis.py window        # choose the evidence window
+    python scripts/32_filter_lexisnexis.py run           # label + uncertainty + write
 
 Resumable: every answer is cached on disk by (model, prompt, temperature,
 sample), so an interrupted job re-reads what it already paid for.
@@ -24,7 +24,7 @@ window       label a sample under each evidence mode and compare — run this fi
 label        label every distinct body at temperature 0
 uncertainty  re-label a random subset k times at temperature 1.0
 apply        propagate to every article, enforce the protect rule, write the table
-crosstab     compare labels with stage 11's existing link_status (validation)
+crosstab     compare labels with stage 31's existing link_status (validation)
 run          label, uncertainty and apply
 
 Use ``--tag`` for anything experimental. Output paths are derived from it, so a
@@ -309,16 +309,16 @@ def cmd_apply(args) -> None:
     print(f"\nwrote {ARTICLE_LABELS} ({len(out):,} articles, "
           f"{out.textref_uid.nunique():,} distinct textref_uid)")
     print(f"  EVENT: {len(ev):,} articles ({ev.body_key.nunique():,} distinct bodies) "
-          "— these are what stage 11 will link")
+          "— these are what stage 31 will link")
     print(f"wrote {REPORT}")
 
 
 # ── crosstab against the existing linker run ────────────────────────────────
 def cmd_crosstab(args) -> None:
-    """Compare labels with stage 11's link_status from its pre-gate run.
+    """Compare labels with stage 31's link_status from its pre-gate run.
 
-    Gating stage 11 means filtered articles are never linked, so a filter false
-    negative would be invisible from then on. Stage 11 has already run over the
+    Gating stage 31 means filtered articles are never linked, so a filter false
+    negative would be invisible from then on. Stage 31 has already run over the
     whole corpus once, ungated, so this comparison is available for free — but
     only until it is re-run under the gate. Do it now, and read both disagreement
     lists by hand.
@@ -331,7 +331,7 @@ def cmd_crosstab(args) -> None:
     status = pd.read_csv(STATUS_CSV, keep_default_na=False)
     merged = labels.merge(status[["textref_uid", "link_status", "n_links"]],
                           on="textref_uid", how="inner")
-    print(f"\nmatched {len(merged):,} articles against stage 11's ungated run\n")
+    print(f"\nmatched {len(merged):,} articles against stage 31's ungated run\n")
     print(pd.crosstab(merged.primary, merged.link_status).to_string())
 
     fn = merged[(merged.primary != lf.EVENT) & (merged.link_status == "linked")
@@ -345,7 +345,7 @@ def cmd_crosstab(args) -> None:
           f"{len(fp):,}")
     for _, r in fp.head(10).iterrows():
         print(f"   {str(r.headline)[:96]}")
-    print("\nBoth lists are worth reading in full before stage 11 is re-run gated.")
+    print("\nBoth lists are worth reading in full before stage 31 is re-run gated.")
 
 
 def cmd_run(args) -> None:
@@ -363,7 +363,7 @@ def write_report(out: pd.DataFrame, labels: pd.DataFrame, args) -> None:
     n = len(out)
     ev = out[out.is_event]
     lines = [
-        "# LexisNexis filter — Stage 19", "",
+        "# LexisNexis filter — Stage 32", "",
         f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')} "
         f"from `{SOURCE_JSONL.relative_to(config.REPO_ROOT)}`.", "",
         "## What went in", "",
@@ -376,7 +376,7 @@ def write_report(out: pd.DataFrame, labels: pd.DataFrame, args) -> None:
         f"to the model: **{args.mode}** (see the window ablation).", "",
         "## What came out", "",
         f"- **{len(ev):,} articles labelled `EVENT`** ({len(ev) / n:.1%}), "
-        f"{ev.body_key.nunique():,} distinct bodies. These are the articles stage 11 "
+        f"{ev.body_key.nunique():,} distinct bodies. These are the articles stage 31 "
         "links; everything else is recorded with its reason and skipped.", "",
         "| primary label | articles | share |", "|---|---:|---:|",
     ]
@@ -390,7 +390,7 @@ def write_report(out: pd.DataFrame, labels: pd.DataFrame, args) -> None:
         "", "## Method", "",
         "Every distinct article body was labelled by a locally hosted LLM at "
         "temperature 0 and the answer propagated to the articles sharing that "
-        "body. Same label vocabulary as stage 18, so the two corpora remain "
+        "body. Same label vocabulary as stage 30, so the two corpora remain "
         "comparable for the overlap study; the corpus-specific distinctions "
         "(`is_passing_mention`, `is_press_release`, `is_roundup`) are flags, not "
         "primary categories.",
@@ -413,10 +413,10 @@ def write_report(out: pd.DataFrame, labels: pd.DataFrame, args) -> None:
         "3. **Exact-duplicate detection only.** Bodies are grouped by normalised "
         "identity, the cheap variant of `LexisNexisTools::lnt_similarity`, so "
         "lightly edited wire copy is counted as distinct.",
-        "4. **Gating is one-directional.** Once stage 11 runs gated, filtered "
+        "4. **Gating is one-directional.** Once stage 31 runs gated, filtered "
         "articles are not linked and a filter false negative becomes invisible. "
         "The `crosstab` subcommand is the only check on this, and only while "
-        "stage 11's ungated run is still on disk.",
+        "stage 31's ungated run is still on disk.",
         "5. **The corpus is one LexisNexis query's complete export** — 22,896 "
         "unique articles, not truncated — but not a census of coverage: it is "
         "bounded by which outlets LexisNexis indexes and by the query terms.", "",
@@ -454,7 +454,7 @@ def main() -> None:
         ("label", cmd_label, "label every distinct body at T=0"),
         ("uncertainty", cmd_uncertainty, "k draws at T=1 on a random subset"),
         ("apply", cmd_apply, "propagate, guard, write the article table"),
-        ("crosstab", cmd_crosstab, "compare with stage 11's ungated link_status"),
+        ("crosstab", cmd_crosstab, "compare with stage 31's ungated link_status"),
         ("run", cmd_run, "label, uncertainty and apply"),
     ]:
         sp = sub.add_parser(name, help=helptext)

@@ -58,45 +58,62 @@ outputs/                     # reports (*.md tracked) and figures (not tracked)
 
 ## The pipeline
 
+Stages are numbered by phase, and each phase reads only what earlier phases wrote:
+**1x** events (tornadoes, episodes, geometry, references), **2x** text collection,
+**3x** text selection, enrichment and linking, **4x** annotation and analysis,
+**5x** method studies that informed design choices but are not part of the build.
+
 ```bash
 python scripts/00_selftest.py          # no network, no data — check the environment
-python scripts/01_fetch_dat.py         # DAT lines+polygons for the configured window
-python scripts/02_link_geometry.py     # candidate + accepted line<->polygon links
-python scripts/03_build_hazards.py     # hazards (tornadoes) and episodes (outbreaks)
-python scripts/04_qa_dat.py            # evaluation + outputs/dat_qa_report.md
-python scripts/05_enrich_geography.py  # counties, states, WFO backfill, place names
-python scripts/06_fetch_iem_text.py    # NWS LSRs (timely) + storm-survey PNS (oracle)
-python scripts/07_fetch_gdelt.py       # independent news links per episode
-python scripts/08_qa_text.py           # outputs/text_qa_report.md
-python scripts/09_analyze_hazards.py   # descriptive report + figures
-python scripts/10_hazard_map.py        # interactive map (self-contained HTML)
-python scripts/11_link_articles.py     # articles -> events, with evidence per link
-python scripts/12_sample_annotation.py # blind validation sheets
-python scripts/14_qa_links.py          # score annotations -> outputs/link_qa_report.md
-python scripts/15_analyze_news_time.py # the corpus in time -> news_time_report.md
-python scripts/16_viewer.py            # browse the corpus at localhost:8799
-python scripts/16_viewer.py --corpus mediacloud  # inspect retrieved full texts
-python scripts/17_fetch_media_cloud.py # Media Cloud headlines, 2010-2025
-python scripts/18_filter_media_cloud.py run    # LLM relevance labels
-python scripts/18_filter_media_cloud.py run --source gdelt   # ...and for GDELT
-python scripts/19_filter_lexisnexis.py run    # same, for the LexisNexis corpus
-python scripts/21_fetch_fulltext.py crawl      # full text for Media Cloud (long)
-python scripts/21_fetch_fulltext.py quality    # is each body the right article?
-python scripts/21_fetch_fulltext.py refetch    # archive copies for failed bodies
-python scripts/23_label_fulltext.py run        # label bodies, compare with headlines
-python scripts/24_storm_events.py run         # NCEI Storm Events, matched to DAT
-python scripts/25_compare_episodes.py         # episode definitions compared
-python scripts/25_compare_episodes.py --anchor spc  # ...grouping SPC's complete tornado list
-python scripts/26_watch_systems.py probe      # SPC watch archive: feasibility check
-python scripts/26_watch_systems.py run        # SPC watch systems (fetch + link)
-python scripts/26_watch_systems.py sheets     # hand-check worksheets
-python scripts/26_watch_systems.py review     # label them on a map (then: check)
-python scripts/22_corpus_atlas.py --events-only  # all three corpora as a set
+
+# 1x  events
+python scripts/10_fetch_dat.py         # DAT lines+polygons for the configured window
+python scripts/11_link_geometry.py     # candidate + accepted line<->polygon links
+python scripts/12_build_hazards.py     # hazards (tornadoes) and episodes (outbreaks)
+python scripts/14_match_references.py run   # NCEI Storm Events + SPC, matched to DAT
+python scripts/16_enrich_geography.py  # counties, states, WFO backfill, place names
+python scripts/17_qa_events.py         # evaluation + outputs/dat_qa_report.md
+python scripts/18_analyze_events.py    # descriptive report + figures
+python scripts/19_event_map.py         # interactive map (self-contained HTML)
+
+# 2x  text collection
+python scripts/20_fetch_nws_text.py    # NWS LSRs (timely) + storm-survey PNS (oracle)
+python scripts/21_fetch_gdelt.py       # independent news links per episode
+python scripts/22_fetch_media_cloud.py # Media Cloud headlines, 2010-2025
+python -m tornado_dataset.text.lexisnexis   # LexisNexis RTF exports -> articles (to become stage 23)
+
+# 3x  text selection, enrichment, linking
+python scripts/30_filter_media_cloud.py run    # LLM relevance labels
+python scripts/30_filter_media_cloud.py run --source gdelt   # ...and for GDELT
+python scripts/31_link_articles.py     # articles -> events, with evidence per link
+python scripts/32_filter_lexisnexis.py run     # LLM relevance labels, LexisNexis
+python scripts/33_fetch_fulltext.py crawl      # full text for Media Cloud (long)
+python scripts/33_fetch_fulltext.py quality    # is each body the right article?
+python scripts/33_fetch_fulltext.py refetch    # archive copies for failed bodies
+python scripts/34_label_fulltext.py run        # label bodies, compare with headlines
+python scripts/35_qa_text.py           # outputs/text_qa_report.md
+
+# 4x  annotation and analysis
+python scripts/40_sample_annotation.py # blind validation sheets
+python scripts/41_qa_links.py          # score annotations -> outputs/link_qa_report.md
+python scripts/42_analyze_news_time.py # the corpus in time -> news_time_report.md
+python scripts/43_corpus_atlas.py --events-only  # all three corpora as a set
+
+# 5x  method studies
+python scripts/50_watch_systems.py run        # SPC watch systems (fetch + link)
+python scripts/51_compare_episodes.py --anchor spc  # episode definitions compared
+python scripts/50_watch_systems.py sheets     # hand checks, then: review, check
+
+# tool
+python scripts/viewer.py               # browse the corpus at localhost:8799
+python scripts/viewer.py --corpus mediacloud  # inspect retrieved full texts
 ```
 
-Stages 13 and 20 are retired — the three-way atlas (stage 22) replaces both;
-see [legacy/README.md](legacy/README.md). [HANDOVER.md](HANDOVER.md) has the
-per-stage status table.
+Numbers are not contiguous: gaps leave room for stages to come (13, 15 and 23
+are planned). The pairwise overlap stages of the old numbering (13 and 20) are
+retired — the three-way atlas (stage 43) replaces both; see
+[legacy/README.md](legacy/README.md). [HANDOVER.md](HANDOVER.md) has the
+per-stage status table and the old → new numbering.
 
 Long stages cache every response under `data/raw/`, so an interrupted run resumes
 where it stopped and a rerun needs no network: IEM ~26k requests (~3.5 h), GDELT
@@ -140,8 +157,8 @@ public APIs. Keys live in the environment, never in the source:
 
 | Variable | Needed by | Where to get it |
 |---|---|---|
-| `MEDIACLOUD_API_KEY` | `scripts/17_fetch_media_cloud.py` | <https://search.mediacloud.org/> |
-| `TORNADO_LLM_BASE` | stages 18–19 (optional) | your own vLLM server; defaults to `http://127.0.0.1:8000/v1` |
+| `MEDIACLOUD_API_KEY` | `scripts/22_fetch_media_cloud.py` | <https://search.mediacloud.org/> |
+| `TORNADO_LLM_BASE` | stages 30 and 32 (optional) | your own vLLM server; defaults to `http://127.0.0.1:8000/v1` |
 | `TORNADO_DATA_DIR` | every stage (optional) | local path or mount point for the 4.7 GB `data/`; see [HANDOVER.md](HANDOVER.md) |
 | `TORNADO_OUTPUT_DIR` | every stage (optional) | defaults to `outputs/` in the working tree |
 
@@ -149,7 +166,7 @@ public APIs. Keys live in the environment, never in the source:
 `192.168.106.17:/data/share/geoai/tornado-text-to-trajectory/data`; copy or mount
 it and point `TORNADO_DATA_DIR` at the local path.
 
-Stages 18 and 19 label every article with a locally hosted LLM. If it runs on
+Stages 30 and 32 label every article with a locally hosted LLM. If it runs on
 another machine, forward the port and the default base URL applies unchanged:
 
 ```bash

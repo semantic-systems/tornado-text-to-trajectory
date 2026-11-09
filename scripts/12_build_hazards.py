@@ -1,11 +1,11 @@
-"""Stage 3 — assemble hazards (tornado tracks) and episodes (outbreaks).
+"""Stage 12 — assemble hazards (tornado tracks) and episodes (outbreaks).
 
 Turns the linked DAT features into the dataset's unit of analysis: one hazard per
 tornado, carrying its track line(s), damage polygon(s), attributes, the DAT survey
 ``comments`` as oracle text, and flags describing what evidence it rests on.
 
-    python scripts/03_build_hazards.py
-    python scripts/03_build_hazards.py --tag march2025
+    python scripts/12_build_hazards.py
+    python scripts/12_build_hazards.py --tag march2025
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ def main() -> None:
     links_path = config.INTERIM_DIR / f"dat_links_{args.tag}.csv"
     for path in (lines_path, polygons_path, links_path):
         if not path.exists():
-            raise SystemExit(f"missing {path} — run stages 1 and 2 first")
+            raise SystemExit(f"missing {path} — run stages 10 and 11 first")
 
     lines = link.prepare(json.loads(lines_path.read_text(encoding="utf-8"))["features"])
     polygons = link.prepare(json.loads(polygons_path.read_text(encoding="utf-8"))["features"])
@@ -95,7 +95,7 @@ def main() -> None:
     pd.DataFrame(episodes).to_csv(episodes_path, index=False)
     pd.DataFrame(geometry_rows).to_csv(geometries_path, index=False)
 
-    # Polygons linked in stage 2 but below the hazard confidence floor are left
+    # Polygons linked in stage 11 but below the hazard confidence floor are left
     # unattached on purpose; the gap between these two numbers is the price of
     # that floor and belongs in the record.
     counts = {
@@ -114,7 +114,7 @@ def main() -> None:
         "min_link_confidence": args.min_link_confidence,
     }
     write_manifest(config.PROCESSED_DIR / f"manifest_hazards_{args.tag}.json",
-                   "03_build_hazards", counts=counts,
+                   "12_build_hazards", counts=counts,
                    outputs=[hazards_path, hazards_table, episodes_path, geometries_path])
 
     print(f"  with a damage polygon: {counts['hazards_with_polygon']} "

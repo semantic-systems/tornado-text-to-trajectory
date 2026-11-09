@@ -1,7 +1,8 @@
 #!/usr/bin/env python
-"""Stage 22 — one three-way view of the news corpora.
+"""Stage 43 — one three-way view of the news corpora.
 
-Supersedes the pairwise comparisons in stages 13 and 20, which answered "do these
+Supersedes the pairwise comparisons in the retired overlap stages
+(`legacy/overlap_report.py`, `legacy/corpus_overlap.py`), which answered "do these
 two overlap" in two different units by two different methods, and could not answer
 the question the dataset has to state: **how many distinct tornado stories do we
 hold, and what does each source uniquely contribute?**
@@ -22,12 +23,12 @@ those produced a published figure comparing URLs against titles.
 
 Usage::
 
-    python scripts/22_corpus_atlas.py                  # all three
-    python scripts/22_corpus_atlas.py --corpora lexisnexis mediacloud
-    python scripts/22_corpus_atlas.py --events-only    # restrict to EVENT stories
+    python scripts/43_corpus_atlas.py                  # all three
+    python scripts/43_corpus_atlas.py --corpora lexisnexis mediacloud
+    python scripts/43_corpus_atlas.py --events-only    # restrict to EVENT stories
 
 GDELT contributes to the structural figures whether or not it has been labelled;
-it is omitted from label-conditioned figures until `scripts/18_filter_media_cloud.py
+it is omitted from label-conditioned figures until `scripts/30_filter_media_cloud.py
 --source gdelt` has run, rather than having "unlabelled" treated as a label.
 """
 

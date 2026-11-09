@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Stage 18 — filter the Media Cloud export to articles reporting real tornadoes.
+"""Stage 30 — filter the Media Cloud export to articles reporting real tornadoes.
 
 Labels all 266,215 distinct headlines with a locally hosted LLM and propagates
 each answer to its syndicated copies.
@@ -7,8 +7,8 @@ each answer to its syndicated copies.
 Typical run — forward the model's port first, then::
 
     ssh -N -L 8000:localhost:8000 you@your-server        # in another terminal
-    python scripts/18_filter_media_cloud.py profile      # cue coverage, no LLM
-    python scripts/18_filter_media_cloud.py run          # label + uncertainty + write
+    python scripts/30_filter_media_cloud.py profile      # cue coverage, no LLM
+    python scripts/30_filter_media_cloud.py run          # label + uncertainty + write
 
 Resumable: every answer is cached on disk by (model, prompt, temperature,
 sample), so an interrupted job re-reads what it already paid for.
@@ -122,9 +122,9 @@ def load_corpus(limit: int | None = None, literal_protect: bool = False,
     different code could not be compared.
     """
     if not SOURCE_CSV.exists():
-        hint = ("Run scripts/17_fetch_media_cloud.py first."
+        hint = ("Run scripts/22_fetch_media_cloud.py first."
                 if source == "mediacloud"
-                else "Run scripts/07_fetch_gdelt.py --cache-only first.")
+                else "Run scripts/21_fetch_gdelt.py --cache-only first.")
         sys.exit(f"missing input: {SOURCE_CSV}\n{hint}")
     df = pd.read_csv(SOURCE_CSV, dtype=str, keep_default_na=False)
     if source == "gdelt":
@@ -387,7 +387,7 @@ def write_report(out: pd.DataFrame, labels: pd.DataFrame, args) -> None:
     n = len(out)
     ev = out[out.is_event]
     lines = [
-        f"# {args.source} filter — Stage 18", "",
+        f"# {args.source} filter — Stage 30", "",
         f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')} "
         f"from `{SOURCE_CSV.relative_to(config.REPO_ROOT)}`.", "",
         "## What went in", "",

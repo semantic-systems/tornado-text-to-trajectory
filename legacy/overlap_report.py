@@ -1,4 +1,4 @@
-"""Stage 13 — how much of the LexisNexis full text is reachable from GDELT?
+"""Retired stage 13 (old numbering; now legacy/overlap_report.py) — how much of the LexisNexis full text is reachable from GDELT?
 
 Two levels, because "is this article in GDELT?" is two questions (see
 `text/overlap.py`): whether *our* episode queries returned it, and whether GDELT

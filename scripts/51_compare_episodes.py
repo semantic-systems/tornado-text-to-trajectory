@@ -1,31 +1,31 @@
 #!/usr/bin/env python
-"""Stage 25 — compare ways of grouping tornadoes into episodes.
+"""Stage 51 — compare ways of grouping tornadoes into episodes.
 
-Runs stage 3's convective-day rule and the space-time alternatives from the
+Runs stage 12's convective-day rule and the space-time alternatives from the
 literature on the same tornadoes, and scores each against NCEI Storm Events
-episodes (stage 24). Read-only with respect to the pipeline: stage 3's episodes
+episodes (stage 14). Read-only with respect to the pipeline: stage 12's episodes
 are not changed; this produces the evidence for deciding whether they should be.
 
-    python scripts/25_compare_episodes.py                 # group DAT hazards
-    python scripts/25_compare_episodes.py --anchor spc    # group SPC whole tracks
-    python scripts/25_compare_episodes.py --methods kde space_time   # a subset
+    python scripts/51_compare_episodes.py                 # group DAT hazards
+    python scripts/51_compare_episodes.py --anchor spc    # group SPC whole tracks
+    python scripts/51_compare_episodes.py --methods kde space_time   # a subset
 
 ``--anchor spc`` groups SPC's complete tornado list instead of the surveyed
 subset in DAT, which is thin before ~2020: missing tornadoes can no longer cut
 an outbreak in two. Its episodes are then carried to DAT hazards through the
-stage 24 SPC ↔ DAT links and scored there as well — the design the dataset
+stage 14 SPC ↔ DAT links and scored there as well — the design the dataset
 would use if episodes were built on SPC. Outputs get an ``_spc`` suffix, and
 one more is written: ``episode_counts_spc.csv``, per method and episode its SPC
 tornadoes (all, EF1+, unrated) and DAT hazards — the counts an outbreak
 threshold filters on (``episodes.episode_counts``).
 
-With stage 26's watch systems present, every method is scored against them;
-with its ``no-motion`` variant present as well (``26_watch_systems.py link
+With stage 50's watch systems present, every method is scored against them;
+with its ``no-motion`` variant present as well (``50_watch_systems.py link
 --no-motion-check``), against that too, and the report shows whether any
 conclusion depends on the motion check (``--watch-variant`` names another).
 
 Methods and their sources are described in :mod:`tornado_dataset.dat.episodes`.
-Needs ``scripts/24_storm_events.py join`` for the reference; without it the
+Needs ``scripts/14_match_references.py join`` for the reference; without it the
 descriptive columns are still produced and the scores are left empty.
 """
 
@@ -90,7 +90,7 @@ def reference_for(frame: pd.DataFrame, tag: str, anchor: str = "dat",
     """
     path = se_links_path(tag, anchor)
     if not path.exists():
-        print(f"no {path.name} — scores will be empty; run scripts/24_storm_events.py join")
+        print(f"no {path.name} — scores will be empty; run scripts/14_match_references.py join")
         return None
     links = pd.read_csv(path)
     if anchor == "spc":
@@ -115,23 +115,23 @@ def reference_for(frame: pd.DataFrame, tag: str, anchor: str = "dat",
 
 def watch_systems_for(uids: pd.Series, tag: str, anchor: str,
                       variant: str = "") -> pd.DataFrame | None:
-    """Each item's SPC watch system and sequence (stage 26); missing when unwatched.
+    """Each item's SPC watch system and sequence (stage 50); missing when unwatched.
 
     SPC tracks carry them directly. A DAT hazard takes those of its closest
-    SPC track (stage 24 links), as SPC-built episodes are carried to DAT.
-    ``variant`` reads a stage 26 output variant (``link --variant``).
+    SPC track (stage 14 links), as SPC-built episodes are carried to DAT.
+    ``variant`` reads a stage 50 output variant (``link --variant``).
     """
     path = config.PROCESSED_DIR / f"spc_watch_systems_{tag}{'_' + variant if variant else ''}.csv"
     if not path.exists():
         print(f"no {path.name} — " + (
-            f"no comparison with watch variant {variant!r}; run scripts/26_watch_systems.py "
+            f"no comparison with watch variant {variant!r}; run scripts/50_watch_systems.py "
             + ("link --no-motion-check" if variant == "no-motion" else f"link --variant {variant}")
             if variant else
-            "watch scores will be empty; run scripts/26_watch_systems.py link"))
+            "watch scores will be empty; run scripts/50_watch_systems.py link"))
         return None
     ws = pd.read_csv(path).set_index("spc_id")
     if "sequence_id" not in ws.columns:
-        raise SystemExit(f"{path.name} predates watch sequences — rerun scripts/26_watch_systems.py link")
+        raise SystemExit(f"{path.name} predates watch sequences — rerun scripts/50_watch_systems.py link")
     key = uids
     if anchor == "dat":
         links = pd.read_csv(config.PROCESSED_DIR / f"spc_tornado_links_{tag}.csv")
@@ -155,7 +155,7 @@ def load_frame(tag: str, anchor: str) -> pd.DataFrame:
     if anchor == "dat":
         return ep.load_hazard_frame(tag)
     if not SPC_TRACKS.exists():
-        raise SystemExit(f"no {SPC_TRACKS.name} — run scripts/24_storm_events.py join "
+        raise SystemExit(f"no {SPC_TRACKS.name} — run scripts/14_match_references.py join "
                          "with the SPC file present")
     links = se_links_path(tag, "spc")
     return ep.load_spc_frame(SPC_TRACKS, links if links.exists() else None)
@@ -172,7 +172,7 @@ class Projection:
         self.stage3 = pd.Series(pd.factorize(hz.episode_uid)[0], index=hz.index)
         path = config.PROCESSED_DIR / f"spc_tornado_links_{tag}.csv"
         if not path.exists():
-            raise SystemExit(f"no {path.name} — run scripts/24_storm_events.py join")
+            raise SystemExit(f"no {path.name} — run scripts/14_match_references.py join")
         self.links = pd.read_csv(path)
         best = self.links[self.links.rank_for_hazard == 1].drop_duplicates("hazard_uid")
         self.spc_id = hz.hazard_uid.map(best.set_index("hazard_uid").spc_id)
@@ -213,17 +213,17 @@ def main() -> None:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--tag", default=default_tag)
     p.add_argument("--anchor", choices=["dat", "spc"], default="dat",
-                   help="group DAT hazards (default) or SPC whole tracks (stage 24)")
+                   help="group DAT hazards (default) or SPC whole tracks (stage 14)")
     p.add_argument("--dat-reference", choices=["via_spc", "direct"], default="via_spc",
                    help="DAT hazards' Storm Events reference: their own match, extended "
                         "through their SPC track where they have none (default), or "
                         "their own match only (the behaviour before)")
     p.add_argument("--watch-variant", default="no-motion",
-                   help="stage 26 output variant to score against as well, where present "
+                   help="stage 50 output variant to score against as well, where present "
                         "(default: no-motion, from link --no-motion-check; '' for none)")
     p.add_argument("--methods", nargs="*", default=None,
                    help="run only methods whose name contains one of these strings "
-                        "(stage 3's rule always runs, as the baseline)")
+                        "(stage 12's rule always runs, as the baseline)")
     args = p.parse_args()
 
     metrics_path, assignments_path, report_path, counts_path = outputs(args.anchor)
@@ -275,12 +275,12 @@ def main() -> None:
                  f"{row['seq_recall']:.3f}" if "watch_precision" in row else "")
               + f"  ({row['seconds']}s)")
 
-    # Stage 3 must be reproduced exactly, or the comparison is not like for like.
+    # Stage 12 must be reproduced exactly, or the comparison is not like for like.
     agreement = None
     if args.anchor == "dat":
         stage3 = pd.Series(pd.factorize(frame.episode_uid)[0], index=frame.index)
         agreement = ep.adjusted_rand(labels[STAGE3], stage3)
-        print(f"\nre-implementation vs stage 3's episodes: ARI {agreement:.4f}")
+        print(f"\nre-implementation vs stage 12's episodes: ARI {agreement:.4f}")
 
     metrics = pd.DataFrame(rows)
     config.INTERIM_DIR.mkdir(parents=True, exist_ok=True)
@@ -320,7 +320,7 @@ def sources_note(s: dict | None) -> list[str]:
     return ["", f"> **DAT reference.** {s['direct']:,} DAT hazards match a Storm Events row "
             f"themselves; **{s['via_spc_only']:,} more** reach one through their SPC track "
             "(DAT hazard → SPC track → Storm Events row; mostly hazards whose DAT time is "
-            "off by hours, stage 24). Where both routes exist "
+            "off by hours, stage 14). Where both routes exist "
             f"({s['both']:,} hazards), they name the same Storm Events episode for "
             f"**{s['agree_episode']:.1%}**. {s['neither']:,} have neither. "
             "`--dat-reference direct` scores against the hazards' own matches only."]
@@ -333,23 +333,23 @@ def write_report(path, m: pd.DataFrame, reference, agreement: float | None,
     n_ref = int(reference.EPISODE_ID.notna().sum()) if scored else 0
     unit = "DAT hazards" if anchor == "dat" else "SPC whole tracks"
     if agreement is None:
-        check = ("Stage 3's rule is applied here to SPC tracks, so its row is the "
-                 "convective-day rule on the complete tornado list, not stage 3's "
+        check = ("Stage 12's rule is applied here to SPC tracks, so its row is the "
+                 "convective-day rule on the complete tornado list, not stage 12's "
                  "episodes; the projection table compares it with those.")
     else:
-        check = (f"Stage 3's rule re-implemented here reproduces its episodes with ARI "
+        check = (f"Stage 12's rule re-implemented here reproduces its episodes with ARI "
                  f"{agreement:.4f}"
                  + (" (exact)." if agreement > 0.9999 else " — **not exact; check before "
                     "reading the comparison as like for like.**"))
     lines = [
-        "# Episode definitions compared — Stage 25"
+        "# Episode definitions compared — Stage 51"
         + ("" if anchor == "dat" else " (SPC tracks)"), "",
         f"> **Scope:** all {n_items:,} {unit}, grouped by each method below. "
         + (f"Scores use the {n_ref:,} matched to an NCEI Storm Events row "
-           "(stage 24), whose `EPISODE_ID` is the reference." if scored else
+           "(stage 14), whose `EPISODE_ID` is the reference." if scored else
            "No Storm Events reference was available, so only the descriptive "
            "columns are filled.")
-        + " Stage 3's episodes are unchanged; this is evidence for deciding whether "
+        + " Stage 12's episodes are unchanged; this is evidence for deciding whether "
         "they should be.", "",
         f"Generated {utcnow_iso()}. {check}",
     ] + (sources_note(sources) if anchor == "dat" else []) + [
@@ -385,7 +385,7 @@ def write_report(path, m: pd.DataFrame, reference, agreement: float | None,
     if scored:
         lines += ["", "### Recall by period", "",
                   ("DAT holds a small share of the official tornadoes before ~2020 "
-                   "(stage 24), so early-period scores rest on fewer, possibly "
+                   "(stage 14), so early-period scores rest on fewer, possibly "
                    "unrepresentative, hazards." if anchor == "dat" else
                    "SPC tracks are complete in every period, so differences between "
                    "periods here are not a coverage effect."), "",
@@ -404,7 +404,7 @@ def write_report(path, m: pd.DataFrame, reference, agreement: float | None,
         lines += projection_section(m, sources)
     lines += [
         "", "## Methods", "",
-        "- **convective_day** — stage 3: same 1200–1159 UTC day, single linkage on "
+        "- **convective_day** — stage 12: same 1200–1159 UTC day, single linkage on "
         "track distance.",
         "- **space_time** — single linkage on track distance and the gap between time "
         "intervals; no day boundary.",
@@ -436,12 +436,12 @@ def write_report(path, m: pd.DataFrame, reference, agreement: float | None,
         "mixes method behaviour with office practice.",
         "3. **Only matched tornadoes are scored** — for DAT hazards about nine in ten "
         "from 2020, fewer before; SPC tracks match Storm Events almost completely "
-        "(stage 24 report).",
+        "(stage 14 report).",
         "4. **The grid is coarse on purpose**: three distances × three gaps, two "
         "density settings. A finer search would overfit the one reference available.",
         "5. **SPC geometry is a straight start→end line**; distances between long, "
         "curved tracks are approximate under `--anchor spc`.",
-        "6. **Watches are a forecast-made reference** (stage 26): they score only "
+        "6. **Watches are a forecast-made reference** (stage 50): they score only "
         "watched tornadoes, and they group what SPC expected to be one threat. They are "
         "the only reference here that spans offices; as bounds rather than a target, "
         "they flag over-merging (systems) and splitting (sequences). Conclusions should "
@@ -454,14 +454,14 @@ def write_report(path, m: pd.DataFrame, reference, agreement: float | None,
 
 def watch_section(m: pd.DataFrame, unit: str, prefix: str = "",
                   title: str = "Against SPC watches: upper and lower bounds") -> list[str]:
-    """Scores against stage 26's watch systems and sequences — references that span offices."""
+    """Scores against stage 50's watch systems and sequences — references that span offices."""
     n = int(m[prefix + "watch_scored"].iloc[0])
     lines = [
         "", f"## {title}", "",
-        f"Scored on the {n:,} {unit} in a watch (stage 26; unwatched tornadoes — about a "
+        f"Scored on the {n:,} {unit} in a watch (stage 50; unwatched tornadoes — about a "
         "quarter, mostly weak — are left out). Watches are how SPC organised the threat "
         "in real time, across offices: an operational and communication unit, not a "
-        "physical one. Stage 26 gives two granularities, and they bracket every method:", "",
+        "physical one. Stage 50 gives two granularities, and they bracket every method:", "",
         "- **Watch systems** (side-by-side watches joined; typically ~800 km across) are "
         "coarser than any method. Read as an **upper bound**: of pairs a method groups, the "
         "share inside one system — **within systems**, and its **cross-office** part. "
@@ -486,9 +486,9 @@ def watch_section(m: pd.DataFrame, unit: str, prefix: str = "",
 
 
 def variant_section(m: pd.DataFrame, v: dict) -> list[str]:
-    """The watch scores against a stage 26 variant beside those against the main systems."""
+    """The watch scores against a stage 50 variant beside those against the main systems."""
     what = ("linked without the upstream-motion check (`link --no-motion-check`)"
-            if v["name"] == "no-motion" else f"stage 26's `--variant {v['name']}`")
+            if v["name"] == "no-motion" else f"stage 50's `--variant {v['name']}`")
     lines = [
         "", f"## Against SPC watches: does it depend on the linking? (`{v['name']}`)", "",
         f"The same scores against watch systems {what}. Systems: "
@@ -540,15 +540,15 @@ def projection_section(m: pd.DataFrame, sources: dict | None = None) -> list[str
     share = m.dat_matched_share.iloc[0]
     lines = [
         "", "## Carried to DAT hazards", "",
-        f"Each DAT hazard takes the episode of its closest SPC track (stage 24 links); "
+        f"Each DAT hazard takes the episode of its closest SPC track (stage 14 links); "
         f"{share:.1%} have one. The other {1 - share:.1%} become their own episode, "
         "which costs recall where such a hazard belongs to an outbreak. Scores use the "
         "DAT hazards' own Storm Events reference, so they compare directly with "
-        "`episode_comparison_report.md`; **ARI vs stage 3** says how far each "
+        "`episode_comparison_report.md`; **ARI vs stage 12** says how far each "
         "SPC-built grouping is from the episodes the dataset publishes now.",
     ] + sources_note(sources) + ["",
         "| method | DAT episodes | recall | recall linked | office precision | "
-        "SE split | ARI vs stage 3 | " + " | ".join(f"{lo}–{hi}" for lo, hi in PERIODS)
+        "SE split | ARI vs stage 12 | " + " | ".join(f"{lo}–{hi}" for lo, hi in PERIODS)
         + " |", "|---|---:|---:|---:|---:|---:|---:|" + "---:|" * len(PERIODS)]
     for r in m.itertuples():
         lines.append(

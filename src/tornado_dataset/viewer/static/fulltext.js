@@ -146,20 +146,20 @@ function renderDetail() {
     </div>
 
     <div class="labels">
-      ${labelCard('headline only — stage 18', a.headline_label, a.fulltext_label)}
-      ${labelCard('full text — stage 23', a.fulltext_label, a.headline_label)}
+      ${labelCard('headline only — stage 30', a.headline_label, a.fulltext_label)}
+      ${labelCard('full text — stage 34', a.fulltext_label, a.headline_label)}
     </div>
 
     <div id="verdict"></div>
 
-    <div class="section-title">is this the article? — stage 21 quality</div>
+    <div class="section-title">is this the article? — stage 33 quality</div>
     <div class="flaglist" style="margin-bottom:8px">
       ${Object.entries(a.quality_flags).map(([k, v]) =>
         `<span class="chip ${!v ? 'no' : a.hard.includes(k) ? 'bad' : 'yes'}"
                title="${a.hard.includes(k) || !v ? '' : 'soft flag: informational'}">${k}</span>`).join('')}
     </div>
     <div class="muted" style="font-size:12.5px;margin-bottom:8px">
-      ${a.quality_ok ? 'Passes every hard check.' : 'Fails a hard check — excluded from stage 23 labelling.'}
+      ${a.quality_ok ? 'Passes every hard check.' : 'Fails a hard check — excluded from stage 34 labelling.'}
       Struck-through flags did not fire; orange ones are hard failures, blue ones soft.
     </div>
     <div class="fields">
@@ -178,7 +178,7 @@ function renderDetail() {
       <span style="text-transform:none;letter-spacing:0">· <a href="#" id="toggle">${
         modelView ? 'show full text' : 'show what the model saw'}</a> (v)</span></div>
     ${modelView ? `<div class="mode-note">Lede plus ±40 words around up to six tornado mentions,
-      exactly as rendered into stage 19's prompt; […] marks omitted text.</div>` : ''}
+      exactly as rendered into stage 32's prompt; […] marks omitted text.</div>` : ''}
     <div class="body">${bodyHtml()}</div>`;
 
   detailEl.querySelectorAll('[data-show]').forEach(el => {

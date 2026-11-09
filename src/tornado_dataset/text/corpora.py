@@ -120,7 +120,7 @@ def _tag() -> str:
 def load_lexisnexis() -> pd.DataFrame:
     path = config.PROCESSED_DIR / "lexisnexis_article_labels.csv"
     if not path.exists():
-        raise FileNotFoundError(f"{path} — run scripts/19_filter_lexisnexis.py apply")
+        raise FileNotFoundError(f"{path} — run scripts/32_filter_lexisnexis.py apply")
     df = pd.read_csv(path, keep_default_na=False, low_memory=False)
     return pd.DataFrame({
         "corpus": "lexisnexis",
@@ -138,7 +138,7 @@ def load_lexisnexis() -> pd.DataFrame:
 def load_mediacloud() -> pd.DataFrame:
     path = config.PROCESSED_DIR / "mediacloud_filtered.csv.gz"
     if not path.exists():
-        raise FileNotFoundError(f"{path} — run scripts/18_filter_media_cloud.py apply")
+        raise FileNotFoundError(f"{path} — run scripts/30_filter_media_cloud.py apply")
     df = pd.read_csv(path, keep_default_na=False, low_memory=False)
     return pd.DataFrame({
         "corpus": "mediacloud",
@@ -154,7 +154,7 @@ def load_mediacloud() -> pd.DataFrame:
 
 
 def load_gdelt() -> pd.DataFrame:
-    """GDELT, with its labels if stage 18 has been run over it.
+    """GDELT, with its labels if stage 30 has been run over it.
 
     ``primary`` is empty when the corpus has not been labelled, and the atlas
     then omits GDELT from every label-conditioned figure rather than treating
@@ -162,7 +162,7 @@ def load_gdelt() -> pd.DataFrame:
     """
     path = config.PROCESSED_DIR / f"textrefs_news_{_tag()}.csv"
     if not path.exists():
-        raise FileNotFoundError(f"{path} — run scripts/07_fetch_gdelt.py --cache-only")
+        raise FileNotFoundError(f"{path} — run scripts/21_fetch_gdelt.py --cache-only")
     df = pd.read_csv(path, keep_default_na=False, low_memory=False)
 
     labelled = config.PROCESSED_DIR / "gdelt_filtered.csv.gz"

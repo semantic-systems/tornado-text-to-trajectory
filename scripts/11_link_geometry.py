@@ -1,12 +1,12 @@
-"""Stage 2 — link DAT damage lines to damage polygons.
+"""Stage 11 — link DAT damage lines to damage polygons.
 
 Emits every candidate pair with the evidence used to judge it, plus the reduced
 "best line per polygon" table. Linkage uses geometry and time only; ``path_guid``
-and ``event_id`` ride along as independent columns so stage 4 can score the
+and ``event_id`` ride along as independent columns so stage 17 can score the
 linker against them.
 
-    python scripts/02_link_geometry.py
-    python scripts/02_link_geometry.py --tag march2025
+    python scripts/11_link_geometry.py
+    python scripts/11_link_geometry.py --tag march2025
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def main() -> None:
     polygons_path = config.INTERIM_DIR / f"dat_polygons_{args.tag}.geojson"
     for path in (lines_path, polygons_path):
         if not path.exists():
-            raise SystemExit(f"missing {path} — run scripts/01_fetch_dat.py first")
+            raise SystemExit(f"missing {path} — run scripts/10_fetch_dat.py first")
 
     raw_lines = load_features(lines_path)
     raw_polygons = load_features(polygons_path)
@@ -85,7 +85,7 @@ def main() -> None:
                        "buffer_m": args.buffer_m,
                        "max_date_delta_days": args.max_date_delta_days},
     }
-    write_manifest(config.INTERIM_DIR / f"manifest_link_{args.tag}.json", "02_link_geometry",
+    write_manifest(config.INTERIM_DIR / f"manifest_link_{args.tag}.json", "11_link_geometry",
                    counts=counts, outputs=[candidates_path, best_path])
 
     print(f"\n{counts['candidate_pairs']} candidate pairs, {len(kept)} accepted; "

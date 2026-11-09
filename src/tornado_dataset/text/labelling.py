@@ -1,8 +1,8 @@
 """Corpus-agnostic machinery for LLM relevance labelling of a news corpus.
 
 Two corpora are labelled by the same method and must stay comparable — the
-Media Cloud headline export (stage 18) and the LexisNexis full-text export
-(stage 19) — so everything that does not depend on *what a row looks like* lives
+Media Cloud headline export (stage 30) and the LexisNexis full-text export
+(stage 32) — so everything that does not depend on *what a row looks like* lives
 here: the label vocabulary, answer parsing, the protect invariant, the
 deduplicate-label-propagate pattern, and the self-consistency estimator.
 

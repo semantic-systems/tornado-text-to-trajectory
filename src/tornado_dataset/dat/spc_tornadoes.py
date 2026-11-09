@@ -382,7 +382,7 @@ def join_storm_events(se: pd.DataFrame, se_geoms: list, spc: pd.DataFrame,
     Columns as :func:`storm_events.join_hazards`, with ``spc_id`` in place of
     ``hazard_uid``: ``rank_for_event`` 1 is each row's closest SPC track,
     ``rank_for_hazard`` 1 each SPC track's closest row. These pairs carry the
-    Storm Events episodes to SPC tracks for stage 25, and feed the chaining check.
+    Storm Events episodes to SPC tracks for stage 51, and feed the chaining check.
     """
     from .storm_events import join_hazards
 

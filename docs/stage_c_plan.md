@@ -68,7 +68,7 @@ Two article classes escape this window and are handled separately:
 
 ### Step 2 — Toponym scoring (the step that decides)
 
-Every hazard already carries authoritative place names from Stage 5 (populated
+Every hazard already carries authoritative place names from Stage 16 (populated
 places within 25 km of the track, plus county and state). Aggregating those over an
 episode gives its toponym set.
 
@@ -223,10 +223,10 @@ src/tornado_dataset/text/
   matching.py    # normalised title/date/domain matching (used by the overlap study)
   overlap.py     # the two-level LexisNexis <-> GDELT analysis
 scripts/
-  11_link_articles.py    # LexisNexis + GDELT -> textrefs / textlinks / candidates
-  12_sample_annotation.py # draws the stratified samples, writes blind sheets
-  13_overlap_report.py   # the overlap study
-  14_qa_links.py         # scores the returned annotations, calibration, QA report
+  31_link_articles.py    # LexisNexis + GDELT -> textrefs / textlinks / candidates
+  40_sample_annotation.py # draws the stratified samples, writes blind sheets
+  overlap_report.py      # the overlap study (legacy/, was stage 13)
+  41_qa_links.py         # scores the returned annotations, calibration, QA report
 docs/
   annotation_codebook.md
 ```

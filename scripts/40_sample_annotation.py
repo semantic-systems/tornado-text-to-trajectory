@@ -1,4 +1,4 @@
-"""Stage 12 — draw the blind annotation samples that validate the links.
+"""Stage 40 — draw the blind annotation samples that validate the links.
 
 Three sheets, each answering a different question:
 
@@ -12,8 +12,8 @@ Three sheets, each answering a different question:
 * **agreement** — a subset of the precision pairs repeated, to report κ. Without
   it, a precision figure rests on one person's unexamined judgement.
 
-    python scripts/12_sample_annotation.py
-    python scripts/12_sample_annotation.py --precision 100 --recall 50 --agreement 30
+    python scripts/40_sample_annotation.py
+    python scripts/40_sample_annotation.py --precision 100 --recall 50 --agreement 30
 """
 
 from __future__ import annotations
@@ -178,7 +178,7 @@ def main() -> None:
         "\nFor recall_sheet.csv, read the article and record the event it is about\n"
         "(date and place) from the text alone — do not consult the dataset.\n\n"
         "Full rules and worked examples: docs/annotation_codebook.md\n"
-        "When done, run: python scripts/14_qa_links.py\n", encoding="utf-8")
+        "When done, run: python scripts/41_qa_links.py\n", encoding="utf-8")
 
     counts = {
         "corpus": args.corpus,
@@ -189,7 +189,7 @@ def main() -> None:
         "seed": args.seed,
     }
     write_manifest(out_dir / f"manifest_annotation_{args.corpus}.json",
-                   "12_sample_annotation", counts=counts, outputs=list(paths.values()))
+                   "40_sample_annotation", counts=counts, outputs=list(paths.values()))
 
     print(f"precision sheet: {len(precision_sheet)} pairs across "
           f"{precision.score_band.nunique()} score bands")

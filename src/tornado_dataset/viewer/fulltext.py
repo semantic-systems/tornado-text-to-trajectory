@@ -6,18 +6,18 @@ retrieval and labelling stages leave open and only a reader can settle:
 * **Is this body the article?** Every quality flag is shown with the measure it
   was computed from, next to the text and links to the live page and the
   archived copy.
-* **Which label is right?** The headline-only label (stage 18) and the
-  full-text label (stage 23) sit side by side, and the body can be switched to
+* **Which label is right?** The headline-only label (stage 30) and the
+  full-text label (stage 34) sit side by side, and the body can be switched to
   exactly the evidence window the model saw.
 * **Record the answer.** Single keystrokes store a verdict — whether the body
   is the article, and the label a reader would give — in
-  ``data/interim/fulltext_inspection.csv``. Stage 23's ``compare`` reads it back.
+  ``data/interim/fulltext_inspection.csv``. Stage 34's ``compare`` reads it back.
   ``r`` draws a random article from the current filter and marks the verdict
   as randomly drawn, which is what makes an accuracy estimate from it valid.
 
 The verdict file holds URL, headline and the verdict only, never body text.
 
-    python scripts/16_viewer.py --corpus mediacloud      # http://127.0.0.1:8799
+    python scripts/viewer.py --corpus mediacloud      # http://127.0.0.1:8799
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ class FulltextStore:
         quality = fc.load_quality()
         if quality is None:
             print("  no quality table yet — scoring in memory (run "
-                  "`scripts/21_fetch_fulltext.py quality` to make this instant)")
+                  "`scripts/33_fetch_fulltext.py quality` to make this instant)")
             quality = fulltext.quality_table(store, population)
         df = fc.load_bodies(store, population, quality)
         del store
@@ -87,7 +87,7 @@ class FulltextStore:
             print(f"  full-text labels: {self.labels_path.name}")
         else:
             df[FT + "primary"] = ""
-            print("  no full-text labels yet — run scripts/23_label_fulltext.py")
+            print("  no full-text labels yet — run scripts/34_label_fulltext.py")
         df[FT + "primary"] = df[FT + "primary"].fillna("").astype(str)
 
         df = df.reset_index(drop=True)
@@ -184,7 +184,7 @@ class FulltextStore:
         r = self.df.loc[i]
         text = self.texts[i]
         # Unlabelled rows (e.g. failing a quality check) have no mode of their
-        # own; show them the window stage 23 would use by default.
+        # own; show them the window stage 34 would use by default.
         mode = _clean(r.get(FT + "evidence_mode")) or "windows"
         evidence, _ = lf.render_evidence({"body": text}, str(mode))
         measures = {k: _clean(r.get(k)) for k in (

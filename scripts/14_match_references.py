@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Stage 24 — NCEI Storm Events and SPC tornadoes: download, match to DAT, report.
+"""Stage 14 — NCEI Storm Events and SPC tornadoes: download, match to DAT, report.
 
 Storm Events is the NWS's own tornado record, filed by each forecast office as
 *Storm Data*. It is used here as a reference for DAT — how complete DAT is in
@@ -13,10 +13,10 @@ whole track (:mod:`tornado_dataset.dat.spc_tornadoes`). It is the tornado-level
 reference — completeness of DAT counted in tornadoes — and the check on how
 well Storm Events' county segments were chained into tornadoes.
 
-    python scripts/24_storm_events.py fetch          # ~16 Storm Events files + 1 SPC file
-    python scripts/24_storm_events.py join           # match rows to DAT hazards
-    python scripts/24_storm_events.py report         # coverage per year
-    python scripts/24_storm_events.py run            # all three
+    python scripts/14_match_references.py fetch          # ~16 Storm Events files + 1 SPC file
+    python scripts/14_match_references.py join           # match rows to DAT hazards
+    python scripts/14_match_references.py report         # coverage per year
+    python scripts/14_match_references.py run            # all three
 
 ``fetch`` needs the network (ncei.noaa.gov, spc.noaa.gov) and skips files
 already present; ``join`` and ``report`` are offline. ``--from-dir`` and
@@ -129,7 +129,7 @@ def cmd_join(args) -> None:
           f"{hz:,}/{len(hazards):,} DAT hazards "
           f"(≤{args.max_distance_m/1000:g} km, ≤{args.max_gap_s/60:g} min)")
     write_manifest(config.PROCESSED_DIR / f"manifest_storm_events_{args.tag}.json",
-                   "24_storm_events", counts={
+                   "14_match_references", counts={
                        "se_tornado_rows": len(tornadoes),
                        "se_tornadoes": int(tornadoes.TORNADO_KEY.nunique()),
                        "se_episodes": int(tornadoes.EPISODE_ID.nunique()),
@@ -217,7 +217,7 @@ def cmd_report(args) -> None:
     cross = int((tornadoes.TOR_OTHER_WFO.notna()
                  & (tornadoes.TOR_OTHER_WFO != tornadoes.WFO)).sum())
     lines = [
-        "# NCEI Storm Events against DAT — Stage 24", "",
+        "# NCEI Storm Events against DAT — Stage 14", "",
         f"Generated {utcnow_iso()}. Storm Events rows matched to DAT hazards when "
         "within the `join` tolerances (default "
         f"{se.MATCH_DISTANCE_M/1000:g} km and {se.MATCH_GAP_S/60:g} min, in UTC converted "
@@ -256,7 +256,7 @@ def cmd_report(args) -> None:
         f"{int(linked_wfo.max())}). Offices whose parts of an outbreak share no "
         "crossing tornado stay separate, so large outbreaks remain several episodes.",
         f"- {best.EPISODE_ID.nunique():,} episodes are matched to at least one DAT "
-        "hazard; `scripts/25_compare_episodes.py` scores grouping methods against both "
+        "hazard; `scripts/51_compare_episodes.py` scores grouping methods against both "
         "`EPISODE_ID` and `LINKED_EPISODE`.", "",
     ] + spc_section(args, hazards, ci) + [
         "## Notes", "",

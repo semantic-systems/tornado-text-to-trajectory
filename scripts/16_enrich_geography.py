@@ -1,12 +1,12 @@
-"""Stage 5 — attach counties, states, WFO and place names to each hazard.
+"""Stage 16 — attach counties, states, WFO and place names to each hazard.
 
 Fills the gap that blocks NWS text retrieval: DAT records a WFO on under half of
 the hazards, so the office is derived from the NWS county polygons for the
 hazard's own year. Every hazard also gets the populated places nearest its track,
 which is what news queries and article matching actually key on.
 
-    python scripts/05_enrich_geography.py
-    python scripts/05_enrich_geography.py --tag march2025
+    python scripts/16_enrich_geography.py
+    python scripts/16_enrich_geography.py --tag march2025
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def main() -> None:
 
     hazards_path = config.PROCESSED_DIR / f"hazards_{args.tag}.geojson"
     if not hazards_path.exists():
-        raise SystemExit(f"missing {hazards_path} — run scripts/03_build_hazards.py first")
+        raise SystemExit(f"missing {hazards_path} — run scripts/12_build_hazards.py first")
     features = json.loads(hazards_path.read_text(encoding="utf-8"))["features"]
 
     years = {hazard_year(f["properties"]) for f in features} - {None}
@@ -149,7 +149,7 @@ def main() -> None:
         "ugc_snapshot_years": sorted(years),
     }
     write_manifest(config.PROCESSED_DIR / f"manifest_geography_{args.tag}.json",
-                   "05_enrich_geography", counts=counts, outputs=[out_path])
+                   "16_enrich_geography", counts=counts, outputs=[out_path])
 
     print(f"\nWFO known for {counts['wfo_known']}/{len(table)} hazards "
           f"({counts['wfo_known'] / max(1, len(table)):.1%}); sources: {dict(wfo_sources)}")

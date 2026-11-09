@@ -1,13 +1,13 @@
 """Alternative ways to group tornadoes into episodes, and how to score them.
 
-Stage 3 groups hazards by **convective day** (SPC's 1200–1159 UTC reporting
+Stage 12 groups hazards by **convective day** (SPC's 1200–1159 UTC reporting
 day) and joins those within 200 km by single linkage. Both choices are
 conventions rather than findings, and the fixed day cuts overnight outbreaks
 in two. This module implements the alternatives from the literature so they can
 be compared on the same hazards, against the same reference:
 
-``convective_day``   stage 3's rule, re-implemented so the comparison is like
-                     for like (a check asserts it reproduces stage 3 exactly).
+``convective_day``   stage 12's rule, re-implemented so the comparison is like
+                     for like (a check asserts it reproduces stage 12 exactly).
 ``space_time``       single linkage on distance *and* time gap, with no day
                      boundary. With an unlimited distance and a 6 h gap this is
                      a variant of the outbreak-sequence rule of Fuhrmann et al.
@@ -72,7 +72,7 @@ def _seconds(ts: pd.Series) -> np.ndarray:
 def load_hazard_frame(tag: str) -> pd.DataFrame:
     """Hazards with projected track geometry, UTC interval and a representative point.
 
-    ``geom`` is the geometry stage 3 measures episode distance on: the single
+    ``geom`` is the geometry stage 12 measures episode distance on: the single
     track line, or the convex hull of all vertices when a hazard has several.
     ``track`` is the actual line(s), for matching against other records;
     ``point`` is the track midpoint, used by the density methods.
@@ -116,12 +116,12 @@ def load_hazard_frame(tag: str) -> pd.DataFrame:
 
 
 def load_spc_frame(tracks_csv, se_links_csv=None) -> pd.DataFrame:
-    """SPC whole tracks (stage 24) in the shape of :func:`load_hazard_frame`.
+    """SPC whole tracks (stage 14) in the shape of :func:`load_hazard_frame`.
 
     The methods then run on the complete, reviewed tornado list instead of the
     surveyed subset in DAT. ``hazard_uid`` holds the ``spc_id`` so every method
     and score works unchanged. The geometry is SPC's straight start→end line;
-    ``convective_day`` follows stage 3's rule on the start time; ``wfo_all``
+    ``convective_day`` follows stage 12's rule on the start time; ``wfo_all``
     comes from the matched Storm Events rows, since SPC records no office.
     """
     from pyproj import Transformer
@@ -161,8 +161,8 @@ def reference_via_spc(dat_uid: pd.Series, spc_links: pd.DataFrame,
                       spc_se_links: pd.DataFrame) -> pd.DataFrame:
     """Each DAT hazard's Storm Events reference, reached through its SPC track.
 
-    DAT hazard → closest SPC track (stage 24's SPC ↔ DAT links, including the
-    time-repaired ones) → that track's closest Storm Events row (stage 24's
+    DAT hazard → closest SPC track (stage 14's SPC ↔ DAT links, including the
+    time-repaired ones) → that track's closest Storm Events row (stage 14's
     Storm Events ↔ SPC links). SPC and Storm Events share their times, so this
     reaches the hazards whose own DAT time is off by hours and that therefore
     never matched a Storm Events row directly. Indexed like ``dat_uid``.
@@ -213,7 +213,7 @@ def project_labels(labels: pd.Series, anchor_uid: pd.Series, dat_uid: pd.Series,
                    links: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     """Carry episodes built on SPC tracks to DAT hazards.
 
-    ``links`` are stage 24's SPC ↔ DAT pairs; each DAT hazard takes the episode
+    ``links`` are stage 14's SPC ↔ DAT pairs; each DAT hazard takes the episode
     of its closest SPC track (``rank_for_hazard == 1``). A DAT hazard with no
     SPC match becomes its own episode — it is still in the dataset, but nothing
     official groups it. Returns the labels, indexed like ``dat_uid``, and a mask
@@ -302,7 +302,7 @@ def _labels_from_unions(h: pd.DataFrame, unions) -> pd.Series:
 # ── methods ─────────────────────────────────────────────────────────────────
 def convective_day(h: pd.DataFrame, distance_m: float = config.EPISODE_LINK_DISTANCE_M
                    ) -> pd.Series:
-    """Stage 3: same convective day, single linkage within ``distance_m``."""
+    """Stage 12: same convective day, single linkage within ``distance_m``."""
     from shapely import STRtree
 
     unions = []
@@ -463,7 +463,7 @@ def score(labels: pd.Series, reference: pd.DataFrame,
 
 def score_watch(labels: pd.Series, system: pd.Series, wfo: pd.Series | None = None
                 ) -> dict[str, float]:
-    """Agreement with SPC watch systems (stage 26), on tornadoes that were in a watch.
+    """Agreement with SPC watch systems (stage 50), on tornadoes that were in a watch.
 
     Unlike Storm Events episodes, watch systems span offices, so precision is
     meaningful here:

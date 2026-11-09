@@ -1,12 +1,12 @@
-"""Stage 1 — download NOAA DAT damage geometry for the configured window.
+"""Stage 10 — download NOAA DAT damage geometry for the configured window.
 
 Writes GeoJSON FeatureCollections to ``data/interim/`` and keeps every raw API
 response under ``data/raw/dat/`` so later stages (and reviewers) can rebuild the
 tables without touching the network. Re-running is idempotent: cached chunks are
 reused unless ``--refresh`` is given.
 
-    python scripts/01_fetch_dat.py
-    python scripts/01_fetch_dat.py --start 2025-03-14 --end 2025-03-16 --tag march2025
+    python scripts/10_fetch_dat.py
+    python scripts/10_fetch_dat.py --start 2025-03-14 --end 2025-03-16 --tag march2025
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def main() -> None:
               f"{missing_geometry} without usable geometry, {reduced} with reduced fields")
         print(f"  wrote {path}")
 
-    write_manifest(config.INTERIM_DIR / f"manifest_fetch_{tag}.json", "01_fetch_dat",
+    write_manifest(config.INTERIM_DIR / f"manifest_fetch_{tag}.json", "10_fetch_dat",
                    counts=counts, outputs=outputs,
                    extra={"window": {"start": args.start.isoformat(),
                                      "end": args.end.isoformat()},

@@ -151,7 +151,7 @@ class ToponymIndex:
                 self.hazard_episode[hazard] = episode
 
             names: dict[str, str] = {}
-            # The wide matching set where Stage 5 has produced one, falling back
+            # The wide matching set where Stage 16 has produced one, falling back
             # to the query set for older geography files. Every surface form of a
             # name is indexed ("Saint Louis" and "St. Louis"), because which one
             # an outlet uses is house style, not information.

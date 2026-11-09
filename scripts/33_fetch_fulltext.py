@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Stage 21 — retrieve article full text for the Media Cloud corpus.
+"""Stage 33 — retrieve article full text for the Media Cloud corpus.
 
-The Media Cloud export has no body text, which bounds what stage 18 can decide
-and leaves 48,741 `EVENT` stories unlinkable, since stage 11 matches toponyms in
+The Media Cloud export has no body text, which bounds what stage 30 can decide
+and leaves 48,741 `EVENT` stories unlinkable, since stage 31 matches toponyms in
 the body. This stage fills that in.
 
 ``pilot`` runs first and exists to answer one question before any full crawl is
@@ -22,14 +22,14 @@ response carries no ``text`` key. Crawling is the only option.
 
 Usage::
 
-    python scripts/21_fetch_fulltext.py pilot            # ~600 URLs, measure
-    python scripts/21_fetch_fulltext.py crawl            # the full pass
-    python scripts/21_fetch_fulltext.py crawl --retry-failed   # transients only
-    python scripts/21_fetch_fulltext.py status           # progress so far
-    python scripts/21_fetch_fulltext.py report           # coverage report, offline
-    python scripts/21_fetch_fulltext.py quality          # text quality, offline
-    python scripts/21_fetch_fulltext.py refetch --dry-run   # what the archive could fix
-    python scripts/21_fetch_fulltext.py refetch          # archive copies for failed bodies
+    python scripts/33_fetch_fulltext.py pilot            # ~600 URLs, measure
+    python scripts/33_fetch_fulltext.py crawl            # the full pass
+    python scripts/33_fetch_fulltext.py crawl --retry-failed   # transients only
+    python scripts/33_fetch_fulltext.py status           # progress so far
+    python scripts/33_fetch_fulltext.py report           # coverage report, offline
+    python scripts/33_fetch_fulltext.py quality          # text quality, offline
+    python scripts/33_fetch_fulltext.py refetch --dry-run   # what the archive could fix
+    python scripts/33_fetch_fulltext.py refetch          # archive copies for failed bodies
 
 ``crawl`` is resumable: every outcome is appended to the store as soon as it is
 known, and a restart skips what is already there. Expect it to take **well over
@@ -79,10 +79,10 @@ YEAR_BANDS = fulltext_corpus.YEAR_BANDS
 
 
 def load_events() -> pd.DataFrame:
-    """The crawl population; shared with stage 23 so the two cannot drift."""
+    """The crawl population; shared with stage 34 so the two cannot drift."""
     config.require_data(config.PROCESSED_DIR)
     if not MC_LABELS.exists():
-        sys.exit(f"missing {MC_LABELS} — run scripts/18_filter_media_cloud.py apply")
+        sys.exit(f"missing {MC_LABELS} — run scripts/30_filter_media_cloud.py apply")
     return fulltext_corpus.load_population(MC_LABELS)
 
 
@@ -184,13 +184,13 @@ def write_report(events, merged, args) -> None:
     lo, hi = wilson_interval(ok, len(merged))
     got = merged[merged.status == "ok"]
     lines = [
-        "# Full-text retrieval pilot — Stage 21", "",
+        "# Full-text retrieval pilot — Stage 33", "",
         f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')}.", "",
         "## Question", "",
         f"The Media Cloud corpus has {len(events):,} distinct `EVENT` stories with "
         "no body text. Retrieving it would let those articles be labelled on the "
         "same evidence as the LexisNexis corpus and, more importantly, make them "
-        "**linkable** — stage 11 matches toponyms in the body, so without text they "
+        "**linkable** — stage 31 matches toponyms in the body, so without text they "
         "cannot enter the dataset at all.",
         "",
         "This pilot asks what fraction is retrievable and, since the answer will not "
@@ -377,8 +377,8 @@ def cmd_refetch(args) -> None:
           f"({ok/len(todo):.1%}); outcomes:")
     for outcome, n in sorted(counts.items(), key=lambda kv: -kv[1]):
         print(f"  {outcome:<34}{n:>7,}")
-    print("\nNext: `python scripts/21_fetch_fulltext.py quality` to score the replaced "
-          "bodies, then re-run stage 23 — only the new bodies cost model calls.")
+    print("\nNext: `python scripts/33_fetch_fulltext.py quality` to score the replaced "
+          "bodies, then re-run stage 34 — only the new bodies cost model calls.")
 
 
 def write_coverage_report(events: pd.DataFrame) -> None:
@@ -397,7 +397,7 @@ def write_coverage_report(events: pd.DataFrame) -> None:
     lo, hi = wilson_interval(ok, len(merged))
     got = merged[merged.status == "ok"]
     lines = [
-        "# Full-text coverage — Stage 21", "",
+        "# Full-text coverage — Stage 33", "",
         f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')}.", "",
         f"**{ok:,} of {len(merged):,} attempted** = {ok/len(merged):.1%} "
         f"[{lo:.1%}, {hi:.1%}], out of {len(events):,} `EVENT` stories in the "
@@ -455,7 +455,7 @@ def cmd_report(args) -> None:
 def cmd_quality(args) -> None:
     """Is each retrieved body the article its headline names?
 
-    Offline: reads only the store and the stage 18 table. Writes a per-article
+    Offline: reads only the store and the stage 30 table. Writes a per-article
     table to data/interim/ and a report to outputs/. The report is tracked in
     git, so it names articles by URL and headline only and never quotes a body.
     """
@@ -499,7 +499,7 @@ def write_quality_report(q: pd.DataFrame, events: pd.DataFrame) -> None:
         return out
 
     lines = [
-        "# Full-text quality — Stage 21", "",
+        "# Full-text quality — Stage 33", "",
         f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')} from "
         f"`{STORE.name}`.", "",
         "> Retrieval `ok` means extraction produced at least "

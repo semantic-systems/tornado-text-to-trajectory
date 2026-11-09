@@ -10,7 +10,7 @@ for two things DAT cannot tell us about itself:
   1,162 against 1,591; and
 * **an independent grouping** — ``EPISODE_ID``, the forecaster's own judgement
   of which events belong to one weather system, used by
-  ``scripts/25_compare_episodes.py`` as the reference partition.
+  ``scripts/51_compare_episodes.py`` as the reference partition.
 
 Three properties shape every use of it:
 

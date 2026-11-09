@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Stage 20 — how much do the LexisNexis and Media Cloud corpora overlap?
+"""Retired stage 20 (old numbering; now legacy/corpus_overlap.py) — how much do the LexisNexis and Media Cloud corpora overlap?
 
 Answers two questions the dataset has to state:
 

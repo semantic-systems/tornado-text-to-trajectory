@@ -1,7 +1,7 @@
 """Retrieve article full text for the Media Cloud corpus.
 
 The Media Cloud export carries headline, URL and date but no body, which bounds
-what stage 18 can decide and makes those articles unlinkable — stage 11's
+what stage 30 can decide and makes those articles unlinkable — stage 31's
 toponym matching needs text. This module retrieves the missing bodies.
 
 **The Media Cloud API cannot supply it.** ``mediacloud.types.Story`` declares a
