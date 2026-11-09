@@ -30,6 +30,7 @@ rerun — planned together with the episode switch. Geometry linker validated at
 | 20 NWS text (IEM) | **complete.** 15,687 LSRs + 14,956 survey products; 7,314 hazards (73.3%) have survey text |
 | 21 GDELT | **rebuilt from cache 12 Aug; partial by construction.** The sweep stopped at 5,155/6,615 queries (78%), so 1,442 queries were never fetched and 57 episodes have no cached slice at all. From what *was* fetched: **83,778 unique URLs** (was 66,034), 100,661 links, **1,857 episodes covered** — 66.4% of all episodes, 84.2% within GDELT's own 2017+ era |
 | 22 Media Cloud fetch | complete. 491,432 rows, 266,258 distinct headlines, 2010–2025 |
+| 23 LexisNexis import | **complete.** 24,917 articles parsed from the hand-made RTF exports (1,487 sources, 2010-01-16 to 2025-12-29), 4,779 verbatim duplicates flagged. Reproduces the August `outputs/lexisnexis_articles.*` |
 | 30 Media Cloud labels | **complete.** 110,438 EVENT rows / 48,741 distinct stories. Self-consistency: 88.9% unanimous over 3 draws at T=1 |
 | 31 article linking | ran **ungated**; 18,306 of 22,896 articles linked (80%). The `--labels` gate is wired but has never been used |
 | 32 LexisNexis labels | **complete.** 15,324 EVENT articles / 12,077 distinct bodies — but see traps |
@@ -57,7 +58,8 @@ and notes use the old numbers:
 | 08 | 35_qa_text | | 17 | 22_fetch_media_cloud | | 26 | 50_watch_systems |
 
 Old 13 and 20 (pairwise overlap) are `legacy/overlap_report.py` and
-`legacy/corpus_overlap.py`. Free numbers (15, 23) are planned stages. Old 24 is now split: 13 downloads,
+`legacy/corpus_overlap.py`. Free number 15 is a planned stage (SPC-built episodes); 23 imports the
+LexisNexis exports (was `python -m tornado_dataset.text.lexisnexis`). Old 24 is now split: 13 downloads,
 14 matches, and its report is part of 17's `events_qa_report.md`, which replaces
 `dat_qa_report.md` and `storm_events_report.md`.
 

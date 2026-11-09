@@ -45,6 +45,8 @@ DATA_DIR = _dir_from_env("TORNADO_DATA_DIR", REPO_ROOT / "data")
 RAW_DIR = DATA_DIR / "raw"            # verbatim API responses, never edited
 INTERIM_DIR = DATA_DIR / "interim"    # intermediate tables (links, candidates)
 PROCESSED_DIR = DATA_DIR / "processed"  # dataset-grade outputs
+# LexisNexis Uni full-text exports (RTF), downloaded by hand; read by stage 23.
+LEXISNEXIS_EXPORT_DIR = DATA_DIR / "lexis_nexis_tornado_news"
 # Reports are small and tracked in git, so they default to the working tree even
 # when the data lives elsewhere; override only if you want them beside the data.
 OUTPUT_DIR = _dir_from_env("TORNADO_OUTPUT_DIR", REPO_ROOT / "outputs")

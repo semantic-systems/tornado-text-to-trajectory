@@ -82,11 +82,11 @@ scripts = sorted(p for p in (REPO / "scripts").glob("*.py")
                  if p.name[0].isdigit() or p.stem in ("_bootstrap", "viewer"))
 for path in scripts:
     check(path.name, lambda p=path: py_compile.compile(str(p), doraise=True))
-if len(scripts) < 27:
-    failures.append(f"only {len(scripts)} stage scripts found — expected 27 "
-                    "(00, 10-14, 16-22, 30-35, 40-43, 50-51, viewer, _bootstrap). "
+if len(scripts) < 28:
+    failures.append(f"only {len(scripts)} stage scripts found — expected 28 "
+                    "(00, 10-14, 16-23, 30-35, 40-43, 50-51, viewer, _bootstrap). "
                     "Some are probably untracked.")
-    print(f"  FAIL  expected 27 stage scripts, found {len(scripts)}")
+    print(f"  FAIL  expected 28 stage scripts, found {len(scripts)}")
 
 # ── 2. configuration ────────────────────────────────────────────────────────
 print("\nconfiguration")
@@ -475,6 +475,17 @@ def episode_counts_cover_all_spc_tornadoes() -> None:
     assert c.n_spc_unrated.tolist() == [1, 0] and c.n_dat.tolist() == [1, 2], c
 
 
+def accents_do_not_make_duplicates() -> None:
+    """Bodies differing only in an accented letter are not verbatim duplicates."""
+    import pandas as pd
+    from tornado_dataset.text import lexisnexis as ln
+    df = ln.add_duplicate_flags(pd.DataFrame({"body": [
+        "Tornado hits Beyoncé's hometown.", "Tornado hits Beyonce's hometown.",
+        "TORNADO hits   Beyoncé's hometown!", ""]}))
+    assert df.is_duplicate.tolist() == [False, False, True, False], df.is_duplicate.tolist()
+    assert df.dup_group.tolist()[:3] == [0, 1, 0]
+
+
 def wind_features_are_not_tornadoes() -> None:
     """Only an explicit non-tornado rating keeps a DAT feature out; unrated ones stay."""
     from tornado_dataset.dat import hazards as hz
@@ -693,6 +704,7 @@ for name, fn in [
     ("DAT reference extends through SPC", dat_reference_extends_through_spc),
     ("spc episodes carry to DAT hazards", spc_episodes_carry_to_dat_hazards),
     ("episode counts cover all SPC tornadoes", episode_counts_cover_all_spc_tornadoes),
+    ("accents do not make duplicates", accents_do_not_make_duplicates),
     ("wind features are not tornadoes", wind_features_are_not_tornadoes),
     ("unclaimed polygons become hazards", unclaimed_polygons_become_hazards),
     ("date-only hazards match by date", date_only_hazards_match_by_date),

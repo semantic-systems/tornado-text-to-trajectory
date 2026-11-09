@@ -23,13 +23,12 @@ The public API is deliberately small::
     df       = to_dataframe(articles)          # -> pandas.DataFrame
     df       = add_duplicate_flags(df)         # -> + dup_group / is_duplicate
 
-Run as a script, it parses ``data/lexis_nexis_tornado_news`` and writes
-``outputs/lexisnexis_articles.{csv,jsonl}``.
+Stage 23 (``scripts/23_import_lexisnexis.py``) parses the exports in
+``config.LEXISNEXIS_EXPORT_DIR`` and writes ``outputs/lexisnexis_articles.{csv,jsonl}``.
 """
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import re
@@ -42,10 +41,8 @@ from pathlib import Path
 import pandas as pd
 from striprtf.striprtf import rtf_to_text
 
-# ── paths ────────────────────────────────────────────────────────────────────
-REPO_ROOT = Path(__file__).resolve().parents[3]
-INPUT_DIR = REPO_ROOT / "data" / "lexis_nexis_tornado_news"
-OUTPUT_DIR = REPO_ROOT / "outputs"
+# Stage 23 writes ``config.OUTPUT_DIR / f"{OUTPUT_STEM}.{csv,jsonl}"``; the
+# stages that read the articles look for them there.
 OUTPUT_STEM = "lexisnexis_articles"
 
 # ── document structure ───────────────────────────────────────────────────────
@@ -332,6 +329,9 @@ def textref_uid(row: dict) -> str:
                hashlib.sha1(body.encode("utf-8")).hexdigest()[:12])
 
 
+_NON_WORD = re.compile(r"\W+")
+
+
 def add_duplicate_flags(df: pd.DataFrame) -> pd.DataFrame:
     """Group articles whose text is identical after normalisation.
 
@@ -340,7 +340,10 @@ def add_duplicate_flags(df: pd.DataFrame) -> pd.DataFrame:
     the cheap, exact variant of ``LexisNexisTools::lnt_similarity``: it catches
     verbatim re-runs but not lightly edited ones.
     """
-    key = df["body"].str.lower().str.replace(r"\W+", " ", regex=True).str.strip()
+    # Python's ``re``, not the string engine: pandas' Arrow-backed strings treat
+    # accented letters as non-word characters under ``\W``, which merges bodies
+    # that differ only in them (11 more "duplicates" in this corpus).
+    key = df["body"].fillna("").map(lambda t: _NON_WORD.sub(" ", t.lower()).strip())
     df = df.copy()
     df["dup_group"] = key.factorize()[0]
     df["is_duplicate"] = key.duplicated(keep="first") & (key != "")
@@ -355,45 +358,3 @@ def to_dataframe(articles: list[Article]) -> pd.DataFrame:
     for column in ("pub_date", "load_date"):
         df[column] = pd.to_datetime(df[column], errors="coerce")
     return df
-
-
-# ── CLI ──────────────────────────────────────────────────────────────────────
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("input", nargs="?", type=Path, default=INPUT_DIR,
-                        help=f"directory with LexisNexis RTF files (default: {INPUT_DIR})")
-    parser.add_argument("-o", "--output-dir", type=Path, default=OUTPUT_DIR)
-    parser.add_argument("-f", "--format", choices=("csv", "jsonl", "both"), default="both")
-    args = parser.parse_args()
-
-    print(f"Parsing {args.input} ...", file=sys.stderr)
-    articles = parse_directory(args.input)
-    if not articles:
-        sys.exit(f"No RTF files found in {args.input}")
-    df = add_duplicate_flags(to_dataframe(articles))
-
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    if args.format in ("csv", "both"):
-        df.to_csv(args.output_dir / f"{OUTPUT_STEM}.csv", index=False)
-    if args.format in ("jsonl", "both"):
-        df.to_json(args.output_dir / f"{OUTPUT_STEM}.jsonl", orient="records",
-                   lines=True, force_ascii=False, date_format="iso")
-
-    # ── summary: the reported word count is a free consistency check ──
-    reported = df["length_words"]
-    off = ((df["n_words"] - reported).abs() > 0.1 * reported).fillna(False)
-    print(
-        f"\n{len(df)} articles | {df['source'].nunique()} sources | "
-        f"{df['pub_date'].min():%Y-%m-%d} to {df['pub_date'].max():%Y-%m-%d}\n"
-        f"missing date: {df['pub_date'].isna().sum()}, "
-        f"empty body: {(df['n_words'] == 0).sum()}, "
-        f"word count off by >10%: {int(off.sum())}, "
-        f"verbatim duplicates: {int(df['is_duplicate'].sum())}, "
-        f"rows with warnings: {(df['warnings'] != '').sum()}\n"
-        f"written to {args.output_dir / OUTPUT_STEM}.*",
-        file=sys.stderr,
-    )
-
-
-if __name__ == "__main__":
-    main()

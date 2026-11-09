@@ -74,7 +74,7 @@ def set_paths(tag: str | None) -> None:
 def load_corpus(limit: int | None = None) -> pd.DataFrame:
     if not SOURCE_JSONL.exists():
         sys.exit(f"missing input: {SOURCE_JSONL}\n"
-                 "Run `python -m tornado_dataset.text.lexisnexis` first.")
+                 "Run `python scripts/23_import_lexisnexis.py` first.")
     df = pd.read_json(SOURCE_JSONL, lines=True)
     if limit:
         df = df.head(limit).copy()

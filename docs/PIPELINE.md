@@ -42,6 +42,22 @@ re-tiered reproducibly.
 See [`outputs/text_qa_report.md`](outputs/text_qa_report.md), which also records the
 measurements behind the retrieval choices (query form, match radii).
 
+### Importing the LexisNexis exports — `scripts/23_import_lexisnexis.py`
+
+LexisNexis Uni offers no API for this corpus; the articles were exported by hand
+as RTF into `data/lexis_nexis_tornado_news/` (`config.LEXISNEXIS_EXPORT_DIR`, so it
+follows `TORNADO_DATA_DIR`). Stage 23 parses each file
+(`text/lexisnexis.py`, after the R package `LexisNexisTools`) into headline,
+source, dates, byline, section, body and the remaining labelled fields, and flags
+verbatim duplicates — bodies identical after lower-casing and collapsing
+non-word characters, which the export repeats where download batches
+overlapped (`dup_group`, `is_duplicate`; Python's `re`, so accented letters stay
+word characters whatever pandas' string engine). Writes
+`outputs/lexisnexis_articles.{csv,jsonl}` — gitignored, since they hold the
+article text — and `data/interim/manifest_lexisnexis_import.json` with the parse
+checks (missing dates, empty bodies, bodies whose word count is off LexisNexis's
+own `Length` by more than 10%). About 6 minutes for the 24,917 files.
+
 ### Linking articles to events
 
 Plan and rationale: [`docs/stage_c_plan.md`](docs/stage_c_plan.md).

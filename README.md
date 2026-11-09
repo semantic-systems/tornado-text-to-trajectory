@@ -81,7 +81,7 @@ python scripts/19_event_map.py         # interactive map (self-contained HTML)
 python scripts/20_fetch_nws_text.py    # NWS LSRs (timely) + storm-survey PNS (oracle)
 python scripts/21_fetch_gdelt.py       # independent news links per episode
 python scripts/22_fetch_media_cloud.py # Media Cloud headlines, 2010-2025
-python -m tornado_dataset.text.lexisnexis   # LexisNexis RTF exports -> articles (to become stage 23)
+python scripts/23_import_lexisnexis.py # LexisNexis RTF exports (by hand) -> articles
 
 # 3x  text selection, enrichment, linking
 python scripts/30_filter_media_cloud.py run    # LLM relevance labels
@@ -110,8 +110,8 @@ python scripts/viewer.py               # browse the corpus at localhost:8799
 python scripts/viewer.py --corpus mediacloud  # inspect retrieved full texts
 ```
 
-Numbers are not contiguous: gaps leave room for stages to come (15 and 23
-are planned). The pairwise overlap stages of the old numbering (13 and 20) are
+Numbers are not contiguous: gaps leave room for stages to come (15 is
+planned). The pairwise overlap stages of the old numbering (13 and 20) are
 retired — the three-way atlas (stage 43) replaces both; see
 [legacy/README.md](legacy/README.md). [HANDOVER.md](HANDOVER.md) has the
 per-stage status table and the old → new numbering.
