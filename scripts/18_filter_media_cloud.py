@@ -2,9 +2,7 @@
 """Stage 18 — filter the Media Cloud export to articles reporting real tornadoes.
 
 Labels all 266,215 distinct headlines with a locally hosted LLM and propagates
-each answer to its syndicated copies. There is no rule-based decision stage and
-no trained classifier; see :mod:`tornado_dataset.text.mediacloud` for the
-measurements that removed them.
+each answer to its syndicated copies.
 
 Typical run — forward the model's port first, then::
 
@@ -32,10 +30,7 @@ even at T=0 — continuous batching changes floating-point reduction order — s
 response cache, not the temperature, is what actually guarantees reproducibility.)
 
 Uncertainty is measured at **T=1.0**, the model's unmodified predictive
-distribution. Sampling below 1.0 sharpens the very thing being measured, and
-*varying* temperature across the k draws would confound the model's uncertainty
-with temperature's effect on entropy — the draws would come from different
-distributions, so their agreement would estimate nothing well-defined.
+distribution.
 
 Outputs
 -------

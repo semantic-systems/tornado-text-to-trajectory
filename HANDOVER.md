@@ -34,6 +34,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 | 13, 20 pairwise overlap | **retired** to `legacy/` — superseded by stage 22, which counts all three in one unit. Their unique functions (the GDELT index probe, the label-agreement crosstab) are ported |
 | 22 corpus atlas | **complete.** All three corpora as a set. Run twice: `corpus_atlas_report.md` (collected) and `corpus_atlas_events_report.md` (**the usable subset — the one to read**) |
 | 21 full text | **crawled 7 Oct.** 78% of the 48,741 `EVENT` stories retrieved; `report` and `quality` run offline over the store |
+| 23 full-text labels | **built, not run.** Stage 19's prompt over the retrieved bodies, compared with stage 18's headline labels |
 
 ## Traps
 
@@ -120,6 +121,40 @@ Outcomes append to `data/raw/fulltext/retrievals.jsonl` as they happen; killing 
 resuming is safe. `--retry-failed` re-attempts only transient failures, never
 settled ones. The quality table (`data/interim/fulltext_quality.csv`) carries every
 raw measure, so a threshold can be moved without re-reading the bodies.
+
+**Labelling the bodies and comparing with the headlines** — stage 23, built and
+tested on a stub model, not yet run on the GPU:
+
+```bash
+python scripts/23_label_fulltext.py profile    # ~31,300 distinct bodies, ~10.5M tokens; no LLM
+python scripts/23_label_fulltext.py run        # label + uncertainty + apply + compare
+python scripts/16_viewer.py --corpus mediacloud   # read the bodies next to both labels
+```
+
+It applies stage 19's prompt, schema, evidence window and temperature unchanged to
+every body that passes the quality checks, so a Media Cloud full-text label and a
+LexisNexis label mean the same thing. `compare` writes
+`outputs/mediacloud_fulltext_vs_headline_report.md`: the headline × full-text
+crosstab, which full-text flags explain the changes, agreement by headline
+confidence, mentions, year, outlet size and route, disagreement on rows where both
+labellers were unanimous (so not noise), and — on stories LexisNexis also holds —
+whether the same prompt on two copies of one story agrees, which bears directly on
+the LexisNexis over-calling question in the traps section.
+
+**Only headline-`EVENT` stories were crawled, so the comparison measures headline
+precision, not recall.** Crawling a random sample of `UNCLEAR` and
+`NOT_TORNADO_EVENT` headlines would fill in the rest of the crosstab without any
+code change.
+
+The viewer's `--corpus mediacloud` mode shows each body with its quality flags and
+the measures behind them, links to the live page and the archived copy, the
+headline label beside the full-text label, and a switch (`v`) to exactly the
+evidence window the model saw. Single keys record whether the body is the article
+(`1`–`3`) and what a reader would label it (`e`/`p`/`n`/`u`) into
+`data/interim/fulltext_inspection.csv` — URL, headline and verdict only — and
+`compare` reports accuracy against them. **Use `r` (random draw) when the aim is an
+estimate**: verdicts reached through a filter such as "labels disagree" are chosen
+because they are hard and overstate everyone's error.
 
 **Recoverable failures — `refetch`.** 5,836 of the 6,110 bodies failing a hard
 check came from direct fetches, where a dead article now returns the front page or
@@ -220,7 +255,9 @@ Infrastructure exists. `docs/annotation_codebook.md` defines the labels;
 `outputs/annotation/` holds blind sheets drawn by
 `scripts/12_sample_annotation.py`; `scripts/14_qa_links.py` already consumes a
 `label` column; and `scripts/16_viewer.py` was built to become the annotation UI —
-an `/annotate` screen is designed but not implemented.
+an `/annotate` screen is designed but not implemented for LexisNexis. For Media
+Cloud full text, `16_viewer.py --corpus mediacloud` already records body and label
+verdicts with one key each (thread 1).
 
 Strata worth concentrating on rather than sampling uniformly:
 

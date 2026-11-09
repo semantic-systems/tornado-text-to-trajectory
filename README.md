@@ -75,6 +75,7 @@ python scripts/12_sample_annotation.py # blind validation sheets
 python scripts/14_qa_links.py          # score annotations -> outputs/link_qa_report.md
 python scripts/15_analyze_news_time.py # the corpus in time -> news_time_report.md
 python scripts/16_viewer.py            # browse the corpus at localhost:8799
+python scripts/16_viewer.py --corpus mediacloud  # inspect retrieved full texts
 python scripts/17_fetch_media_cloud.py # Media Cloud headlines, 2010-2025
 python scripts/18_filter_media_cloud.py run    # LLM relevance labels
 python scripts/18_filter_media_cloud.py run --source gdelt   # ...and for GDELT
@@ -82,6 +83,7 @@ python scripts/19_filter_lexisnexis.py run    # same, for the LexisNexis corpus
 python scripts/21_fetch_fulltext.py crawl      # full text for Media Cloud (long)
 python scripts/21_fetch_fulltext.py quality    # is each body the right article?
 python scripts/21_fetch_fulltext.py refetch    # archive copies for failed bodies
+python scripts/23_label_fulltext.py run        # label bodies, compare with headlines
 python scripts/22_corpus_atlas.py --events-only  # all three corpora as a set
 ```
 

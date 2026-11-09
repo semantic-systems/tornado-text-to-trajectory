@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media Cloud full texts</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='fulltext.css') }}">
+</head>
+<body>
+<header>
+  <h1>Media Cloud full texts</h1>
+  <span class="count" id="count">{{ '{:,}'.format(facets.total) }} articles</span>
+  <div class="filters">
+    <input type="search" id="q" placeholder="headline, domain or URL…" autocomplete="off">
+    <select id="quality" title="stage 21 quality checks">
+      <option value="">any quality</option>
+      <option value="ok">passes hard checks</option>
+      <option value="fail">fails a hard check</option>
+      {% for f in facets.flags %}<option value="{{ f }}">flag: {{ f }}</option>{% endfor %}
+    </select>
+    <select id="ft" title="stage 23 full-text label">
+      <option value="">any full-text label</option>
+      {% for l in facets.labels %}<option value="{{ l }}">full text: {{ l }}</option>{% endfor %}
+      <option value="unlabelled">not labelled</option>
+    </select>
+    <select id="compare" title="headline label versus full-text label"
+            {% if not facets.has_labels %}disabled{% endif %}>
+      <option value="">headline vs full text</option>
+      <option value="disagree">labels disagree</option>
+      <option value="agree">labels agree</option>
+    </select>
+    <select id="via">
+      <option value="">any route</option>
+      {% for v in facets.vias %}<option value="{{ v }}">{{ v }}</option>{% endfor %}
+    </select>
+    <select id="year_band">
+      <option value="">any years</option>
+      {% for y in facets.year_bands %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+    </select>
+    <select id="shared">
+      <option value="">any body</option>
+      <option value="yes">body under several headlines</option>
+    </select>
+    <select id="inspected">
+      <option value="">inspected or not</option>
+      <option value="no">not yet inspected</option>
+      <option value="yes">inspected</option>
+    </select>
+    <button id="random" title="a random article from the current filter (r)">random</button>
+  </div>
+  <span class="hint"><kbd>j</kbd>/<kbd>k</kbd> move · <kbd>r</kbd> random ·
+    <kbd>v</kbd> model view · <kbd>?</kbd> keys</span>
+</header>
+
+<main>
+  <div id="list"><div class="spinner">loading…</div></div>
+  <div id="detail">
+    <div class="empty">
+      <p>Pick an article on the left, or press <kbd>r</kbd> for a random one.</p>
+      <p>Verdicts are saved to <code>data/interim/{{ inspection_file }}</code> — URL,
+        headline and your answer only — and summarised by
+        <code>scripts/23_label_fulltext.py compare</code>. Use <kbd>r</kbd> when the aim
+        is an accuracy estimate: only randomly drawn verdicts support one.</p>
+      {% if not facets.has_labels %}<p>No full-text labels yet: the headline label is
+        shown alone until <code>scripts/23_label_fulltext.py run</code> has been run.</p>{% endif %}
+    </div>
+  </div>
+</main>
+
+<div id="keys" hidden>
+  <div class="keys-card">
+    <div class="section-title">navigate</div>
+    <p><kbd>j</kbd>/<kbd>k</kbd> next / previous · <kbd>r</kbd> random from filter ·
+       <kbd>/</kbd> search · <kbd>v</kbd> full text ↔ what the model saw ·
+       <kbd>m</kbd> next tornado mention · <kbd>o</kbd> open original ·
+       <kbd>a</kbd> open archive copy</p>
+    <div class="section-title">is the body the article?</div>
+    <p><kbd>1</kbd> right article · <kbd>2</kbd> wrong page · <kbd>3</kbd> partial / truncated</p>
+    <div class="section-title">what would you label it?</div>
+    <p><kbd>e</kbd> EVENT · <kbd>p</kbd> PROSPECTIVE · <kbd>n</kbd> NOT_TORNADO_EVENT ·
+       <kbd>u</kbd> UNCLEAR</p>
+    <p class="muted">Each key saves at once; pressing another overwrites it. Press any
+       key to close.</p>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='fulltext.js') }}"></script>
+</body>
+</html>

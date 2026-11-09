@@ -135,6 +135,9 @@ bar to work offline or to see the geometry unobstructed.
 This is the surface the annotation UI will be built on, since judging a link means
 reading the article and the event side by side.
 
+`--corpus mediacloud` opens a second view over the full texts stage 21 retrieved —
+see *Inspecting the full texts* below.
+
 ### Filtering the Media Cloud corpus — `scripts/18_filter_media_cloud.py`
 
 The Media Cloud export is 491,432 rows of **headline and URL only** — no body, no
@@ -506,4 +509,45 @@ writes carry `note = "archive_refetch: …"`, which the coverage report counts.
 `--flags` restricts it to bodies failing particular checks, `--dry-run` shows the
 candidates without fetching. Re-run `quality` afterwards, then stage 23 — cached
 answers mean only the replaced bodies cost model calls.
+
+### Labelling the full texts — `scripts/23_label_fulltext.py`
+
+Stage 19's prompt, JSON schema, evidence window (`windows` by default) and token
+budget, applied unchanged to the Media Cloud bodies, so a full-text label means the
+same thing in both corpora. Same subcommands and guarantees as stage 19: `label`
+at T=0 over distinct bodies, `uncertainty` (k=3 at T=1 on 10%), `apply` to
+propagate to every story under the protect invariant, `run` for all of it, `--tag`
+for isolation, answers cached in `data/interim/mediacloud_fulltext_llm_cache.jsonl`.
+
+Only bodies passing every hard quality check are labelled (`--include-flagged` to
+override): a front page labelled as though it were the article would surface as a
+spurious disagreement. The labelling unit is the distinct body; when one body sits
+under several headlines, the representative is chosen after sorting by URL, so the
+headline the model sees does not depend on crawl order.
+
+`apply` writes `data/processed/mediacloud_fulltext_story_labels.csv` — one row per
+story, the stage 18 label under `hl_` and the full-text label under `ft_`, no text.
+`compare` reads it and writes `outputs/mediacloud_fulltext_vs_headline_report.md`.
+The comparison functions live in `tornado_dataset.text.fulltext_corpus`
+(`primary_crosstab`, `flag_agreement` with Cohen's κ, `agreement_by`,
+`transitions`, `cross_corpus`), so they can be used from a notebook as well.
+
+The crawl covered headline-`EVENT` stories only, so the report measures headline
+**precision**; it says so in its scope line, and adapts if non-`EVENT` stories are
+ever crawled.
+
+### Inspecting the full texts — `scripts/16_viewer.py --corpus mediacloud`
+
+Filters for quality (pass, fail, any single flag), full-text label, headline versus
+full-text agreement, route, years, shared bodies and inspected/not. The article view
+shows the quality flags with the measures behind them, links to the live page and
+the archive copy, both labels side by side, other headlines carrying the same body,
+and the body with tornado mentions highlighted; `v` switches to the exact evidence
+window the model saw, `m` jumps between mentions.
+
+Verdicts are one key each — `1` right article, `2` wrong page, `3` partial; `e`, `p`,
+`n`, `u` for a label — appended to `data/interim/fulltext_inspection.csv` with the
+active filter and whether the article was drawn at random (`r`). Stage 23's
+`compare` reports headline and full-text accuracy against them, separately for
+random draws, because only those support an estimate.
 

@@ -73,6 +73,7 @@ for module in MODULES:
 
 print("\nviewer (needs flask)")
 check("viewer.app", lambda: importlib.import_module("tornado_dataset.viewer.app"))
+check("viewer.fulltext", lambda: importlib.import_module("tornado_dataset.viewer.fulltext"))
 
 print("\nstage scripts compile")
 scripts = sorted(p for p in (REPO / "scripts").glob("*.py")
@@ -237,6 +238,51 @@ def body_key_is_content_derived() -> None:
     assert a.iloc[0] == b.iloc[0], "normalisation should make these identical"
 
 
+def kappa_corrects_for_rare_flags() -> None:
+    """Two labellers who never set a flag must not look like they agree on it."""
+    assert abs(fulltext_corpus.cohen_kappa([1, 0, 1, 0], [1, 0, 1, 0]) - 1.0) < 1e-9
+    import math
+    assert math.isnan(fulltext_corpus.cohen_kappa([0] * 5, [0] * 5)), \
+        "kappa on a never-set flag must be undefined, not perfect"
+    k = fulltext_corpus.cohen_kappa([1, 1, 0, 0], [1, 0, 1, 0])
+    assert abs(k) < 1e-9, f"independent labels should give kappa 0, got {k}"
+
+
+def fulltext_bodies_keep_both_labels_apart() -> None:
+    """Headline labels ride along under hl_; one shared body is labelled once."""
+    import pandas as pd
+    body = "A tornado touched down in Moore on Monday. " * 30
+    store = {"http://a.com/1": {"status": "ok", "text": body, "via": "direct"},
+             "http://b.com/2": {"status": "ok", "text": body, "via": "wayback"},
+             "http://c.com/3": {"status": "paywall"}}
+    pop = pd.DataFrame({"url": list(store), "title": ["Moore tornado", "Tornado hits Moore",
+                                                       "x"],
+                        "publish_date": ["2013-05-20"] * 3, "media_name": ["a", "b", "c"],
+                        "dup_group": [1, 2, 3], "year_band": ["2010-2015"] * 3,
+                        "domain_size": ["small"] * 3, "primary": ["EVENT"] * 3,
+                        "conf": [0.9] * 3, "is_outbreak": [False] * 3})
+    df = fulltext_corpus.load_bodies(store, pop)
+    assert len(df) == 2, "only retrieved bodies are rows"
+    assert {"headline", "source", "pub_date", "body", "hl_primary", "hl_is_outbreak"} \
+        <= set(df.columns)
+    assert "primary" not in df.columns, "an unprefixed label would collide with stage 23's"
+    assert df.body_key.nunique() == 1 and df.is_representative.sum() == 1
+
+
+def cross_corpus_reads_either_edge_direction() -> None:
+    import pandas as pd
+    stories = pd.DataFrame({"headline": ["Tornado hits Moore"], "pub_date": ["2013-05-20"],
+                            "hl_primary": ["EVENT"], "ft_primary": ["NOT_TORNADO_EVENT"]})
+    sid = corpora._story_id(stories.headline, stories.pub_date).iloc[0]
+    lexis = pd.DataFrame({"story_id": ["ln1", "ln2"], "primary": ["EVENT", "EVENT"]})
+    edges = pd.DataFrame({"left_story": ["ln1", sid], "right_story": [sid, "ln2"],
+                          "left_corpus": ["lexisnexis", "mediacloud"],
+                          "right_corpus": ["mediacloud", "lexisnexis"]})
+    pairs = fulltext_corpus.cross_corpus(stories, lexis, edges)
+    assert len(pairs) == 2, f"expected both edge orientations, got {len(pairs)}"
+    assert set(pairs.ln_story) == {"ln1", "ln2"}
+
+
 def archive_refetch_skips_settled_and_retries_transient() -> None:
     """A rerun must retry a connection error but never a missing snapshot."""
     log = {"a": {"outcome": "ok"}, "b": {"outcome": "no_snapshot"},
@@ -261,6 +307,9 @@ for name, fn in [
     ("dedup groups collapse syndication", dedup_groups_collapse_syndication),
     ("title similarity separates stories", title_similarity_separates_stories),
     ("body key is content-derived", body_key_is_content_derived),
+    ("kappa corrects for rare flags", kappa_corrects_for_rare_flags),
+    ("full-text bodies keep both labels apart", fulltext_bodies_keep_both_labels_apart),
+    ("cross-corpus reads either edge direction", cross_corpus_reads_either_edge_direction),
     ("archive re-fetch skips settled, retries transient",
      archive_refetch_skips_settled_and_retries_transient),
 ]:
