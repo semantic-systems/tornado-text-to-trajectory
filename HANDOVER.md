@@ -33,7 +33,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 | 19 LexisNexis labels | **complete.** 15,324 EVENT articles / 12,077 distinct bodies — but see traps |
 | 13, 20 pairwise overlap | **retired** to `legacy/` — superseded by stage 22, which counts all three in one unit. Their unique functions (the GDELT index probe, the label-agreement crosstab) are ported |
 | 22 corpus atlas | **complete.** All three corpora as a set. Run twice: `corpus_atlas_report.md` (collected) and `corpus_atlas_events_report.md` (**the usable subset — the one to read**) |
-| 21 full text | **pilot only.** Crawl built, verified resumable, never run |
+| 21 full text | **crawled 7 Oct.** 78% of the 48,741 `EVENT` stories retrieved; `report` and `quality` run offline over the store |
 
 ## Traps
 
@@ -79,23 +79,69 @@ stories **unlinkable** — `scripts/11_link_articles.py` matches toponyms in the
 body. Retrieving them would roughly triple the linkable corpus over the 12,077
 LexisNexis articles available today.
 
-Built, verified resumable, never run:
+**Crawled on 2026-10-07.** 38,058 of 48,741 retrieved = **78.1%**, close to the
+pilot's projected ceiling. 2,529 failures are transient and worth one more pass;
+the rest are settled (6,997 HTTP errors, 2,603 extraction failures, 326 robots
+disallows, 257 skipped for an excessive `Crawl-delay`).
+
+Retrieved is not the same as usable, so there is now an offline quality pass:
 
 ```bash
-python scripts/21_fetch_fulltext.py status   # what the store holds
-python scripts/21_fetch_fulltext.py crawl    # ~30 h, resumable
+python scripts/21_fetch_fulltext.py crawl --retry-failed   # the 2,529 transients
+python scripts/21_fetch_fulltext.py report                 # coverage, no network
+python scripts/21_fetch_fulltext.py quality                # is it the right article?
 ```
 
-Read `outputs/fulltext_pilot_report.md` first. The pilot measured 54% retrieval at
-a 1 s archive interval, but 250 of its 275 failures were archive *connection*
-errors and only 16 articles had no archived copy at all — so the real ceiling is
-near 85–90% and the binding constraint is patience. Retrieval bias turned out
-milder than expected (small outlets 49% vs large 57%), and HTTP 451 geo-blocking,
-which is invisible and systematic from Europe, is fully resolved by the archive.
+`quality` asks whether each body is the article its headline names, which
+extraction cannot tell. Measured before handing it over: **84.0%** of retrieved
+bodies pass every hard check — **65.6% of the 48,741 `EVENT` stories** end up with
+usable full text. The checks that do the work are a body that never mentions a
+tornado (Media Cloud's own `tornado*` query matched the page, so a correct body
+should), a direct fetch that landed on the site's front page, and one page served
+under many unrelated headlines. Failing articles have a median of 0 tornado
+mentions against 6 for passing ones, which is the property a quality filter
+should have.
+
+Two findings worth knowing before you use the text:
+
+- **Archive copies are better than live ones.** 98.5% of archive fetches pass
+  against 70.3% of direct fetches. The difference is soft 404s: dead articles that
+  now return HTTP 200 with the outlet's front page. The archive serves the page as
+  it was.
+- **Count by body, not headline.** 38,070 retrieved headlines carry 31,931 distinct
+  bodies. Media Cloud deduplicates by headline, so wire copy retitled by each
+  outlet survives as separate stories.
+
+**Correction to the pilot's claim**: the archive does *not* fully resolve HTTP 451
+geo-blocking. It recovered 10 of 10 in the pilot, but at full scale 472 articles
+remain `geo_blocked` with no archived copy. Still a minority, but not zero.
 
 Outcomes append to `data/raw/fulltext/retrievals.jsonl` as they happen; killing and
-resuming across sessions is safe. `--retry-failed` re-attempts only transient
-failures, never settled ones.
+resuming is safe. `--retry-failed` re-attempts only transient failures, never
+settled ones. The quality table (`data/interim/fulltext_quality.csv`) carries every
+raw measure, so a threshold can be moved without re-reading the bodies.
+
+**Recoverable failures — `refetch`.** 5,836 of the 6,110 bodies failing a hard
+check came from direct fetches, where a dead article now returns the front page or
+a consent wall with HTTP 200. Archive copies pass at 98.5%, so:
+
+```bash
+python scripts/21_fetch_fulltext.py refetch --dry-run   # candidates by flag and domain
+python scripts/21_fetch_fulltext.py refetch             # ~8 h at the 5 s archive interval
+python scripts/21_fetch_fulltext.py quality             # score the replaced bodies
+```
+
+An archive copy replaces the direct body only if it extracts cleanly *and*
+mentions a tornado; otherwise the direct record stays and the attempt is logged in
+`data/raw/fulltext/archive_refetch.jsonl`, which makes the command resumable and
+retries only transient errors. On a random test of 6 domains, 3 came back as
+proper articles. **The 1,070 consent-wall retrievals** (a group of TV-station
+sites — ksdk.com, wkyc.com, wnep.com, whas11.com — redirecting to a YouTube
+consent page) **are probably not recoverable this way**: the archive's own
+snapshot of those URLs is the same YouTube page, and the guard rejects it.
+
+**Then**: export the usable bodies in the shape stage 11 reads, which is what makes
+them linkable.
 
 ### 2. Re-Assess the news coverage
 Finish the GDELT crawl, then analyze the coverage in terms of events and unique headlines. If there are any gains

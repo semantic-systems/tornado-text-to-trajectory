@@ -80,6 +80,8 @@ python scripts/18_filter_media_cloud.py run    # LLM relevance labels
 python scripts/18_filter_media_cloud.py run --source gdelt   # ...and for GDELT
 python scripts/19_filter_lexisnexis.py run    # same, for the LexisNexis corpus
 python scripts/21_fetch_fulltext.py crawl      # full text for Media Cloud (long)
+python scripts/21_fetch_fulltext.py quality    # is each body the right article?
+python scripts/21_fetch_fulltext.py refetch    # archive copies for failed bodies
 python scripts/22_corpus_atlas.py --events-only  # all three corpora as a set
 ```
 

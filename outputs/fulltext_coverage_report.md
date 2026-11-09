@@ -1,8 +1,8 @@
 # Full-text coverage — Stage 21
 
-Generated 2026-08-11T09:30:07+00:00.
+Generated 2026-10-08T14:48:05+00:00.
 
-**37 of 40 attempted** = 92.5% [80.1%, 97.4%], out of 40 `EVENT` stories in the population.
+**38,383 of 48,741 attempted** = 78.7% [78.4%, 79.1%], out of 48,741 `EVENT` stories in the population.
 
 Retrieval failure and article existence are different things. A story that cannot be fetched still happened and still appeared; excluding it changes what the corpus represents, so the tables below are a coverage-bias statement rather than a technical footnote.
 
@@ -10,34 +10,40 @@ Retrieval failure and article existence are different things. A story that canno
 
 | year band | sampled | retrieved | rate | 95% CI |
 |---|---:|---:|---:|---|
-| 2010-2015 | 10 | 10 | 100% | [72%, 100%] |
-| 2016-2020 | 13 | 12 | 92% | [67%, 99%] |
-| 2021-2025 | 17 | 15 | 88% | [66%, 97%] |
+| 2010-2015 | 11128 | 6209 | 56% | [55%, 57%] |
+| 2016-2020 | 16608 | 13576 | 82% | [81%, 82%] |
+| 2021-2025 | 21005 | 18598 | 89% | [88%, 89%] |
 
 ## By domain size
 
 | domain size | sampled | retrieved | rate | 95% CI |
 |---|---:|---:|---:|---|
-| small (≤5) | 20 | 18 | 90% | [70%, 97%] |
-| medium (6-50) | 19 | 19 | 100% | [83%, 100%] |
-| large (>50) | 1 | 0 | 0% | [0%, 79%] |
+| small (≤5) | 2772 | 2249 | 81% | [80%, 83%] |
+| medium (6-50) | 13446 | 10859 | 81% | [80%, 81%] |
+| large (>50) | 32523 | 25275 | 78% | [77%, 78%] |
 
 ## Outcomes
 
 | outcome | n | share |
 |---|---:|---:|
-| `ok` | 37 | 92.5% |
-| `extraction_failed` | 2 | 5.0% |
-| `http_error` | 1 | 2.5% |
+| `ok` | 38,383 | 78.7% |
+| `http_error` | 6,745 | 13.8% |
+| `extraction_failed` | 2,531 | 5.2% |
+| `geo_blocked` | 472 | 1.0% |
+| `robots_disallowed` | 326 | 0.7% |
+| `robots_crawl_delay_too_long` | 257 | 0.5% |
+| `paywalled` | 14 | 0.0% |
+| `archive_rate_limited` | 8 | 0.0% |
+| `blocked` | 5 | 0.0% |
 
 ## Route
 
 | route | n | share |
 |---|---:|---:|
-| direct | 32 | 86.5% |
-| wayback | 5 | 13.5% |
+| direct | 19,689 | 51.3% |
+| wayback | 18,694 | 48.7% |
 
-Extracted length: median **359 words** (p10 168, p90 832).
+Extracted length: median **337 words** (p10 156, p90 955).
 
 ## Method
 

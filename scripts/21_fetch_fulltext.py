@@ -26,12 +26,15 @@ Usage::
     python scripts/21_fetch_fulltext.py crawl            # the full pass
     python scripts/21_fetch_fulltext.py crawl --retry-failed   # transients only
     python scripts/21_fetch_fulltext.py status           # progress so far
+    python scripts/21_fetch_fulltext.py report           # coverage report, offline
+    python scripts/21_fetch_fulltext.py quality          # text quality, offline
+    python scripts/21_fetch_fulltext.py refetch --dry-run   # what the archive could fix
+    python scripts/21_fetch_fulltext.py refetch          # archive copies for failed bodies
 
 ``crawl`` is resumable: every outcome is appended to the store as soon as it is
 known, and a restart skips what is already there. Expect it to take **well over
 a day** — the archive interval that avoids connection errors is 5 s, serialised
-globally, and roughly half the corpus routes through the archive. That is the
-price of the difference between ~26,000 and ~41,000 retrieved articles.
+globally, and roughly half the corpus routes through the archive.
 
 Politeness and legality are not optional extras here: ``robots.txt`` is honoured
 per domain including ``Crawl-delay``, requests to one domain are serialised, and
@@ -43,7 +46,6 @@ retrieved text may be stored for research.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -57,6 +59,7 @@ from tornado_dataset import config                              # noqa: E402
 from tornado_dataset.dat.evaluate import wilson_interval        # noqa: E402
 from tornado_dataset.llm import iter_progress                   # noqa: E402
 from tornado_dataset.text import fulltext                       # noqa: E402
+from tornado_dataset.text import fulltext_corpus                # noqa: E402
 
 MC_LABELS = config.PROCESSED_DIR / "mediacloud_filtered.csv.gz"
 PILOT_CSV = config.INTERIM_DIR / "fulltext_pilot.csv"
@@ -66,28 +69,21 @@ REPORT = config.OUTPUT_DIR / "fulltext_pilot_report.md"
 # data/raw/ because it is retrieved material, not a derived table.
 STORE = config.RAW_DIR / "fulltext" / "retrievals.jsonl"
 CRAWL_REPORT = config.OUTPUT_DIR / "fulltext_coverage_report.md"
+QUALITY_CSV = config.INTERIM_DIR / "fulltext_quality.csv"
+QUALITY_REPORT = config.OUTPUT_DIR / "fulltext_quality_report.md"
+# Every archive re-fetch attempt, successful or not; no text. Lets `refetch`
+# resume and skip what is settled without touching the store on failure.
+REFETCH_LOG = config.RAW_DIR / "fulltext" / "archive_refetch.jsonl"
 
-YEAR_BANDS = [(2010, 2015, "2010-2015"), (2016, 2020, "2016-2020"),
-              (2021, 2025, "2021-2025")]
+YEAR_BANDS = fulltext_corpus.YEAR_BANDS
 
 
 def load_events() -> pd.DataFrame:
+    """The crawl population; shared with stage 23 so the two cannot drift."""
     config.require_data(config.PROCESSED_DIR)
     if not MC_LABELS.exists():
         sys.exit(f"missing {MC_LABELS} — run scripts/18_filter_media_cloud.py apply")
-    df = pd.read_csv(MC_LABELS, keep_default_na=False, low_memory=False)
-    df = df[(df.primary == "EVENT")
-            & (df.is_representative.astype(str).str.lower() == "true")].copy()
-    df["year"] = pd.to_numeric(df.publish_date.str[:4], errors="coerce")
-    counts = df.media_name.value_counts()
-    # Domain size matters because it predicts both survival (large outlets keep
-    # their URL structure) and paywalls, in opposite directions.
-    df["domain_size"] = pd.cut(df.media_name.map(counts), [0, 5, 50, 10**9],
-                               labels=["small (≤5)", "medium (6-50)", "large (>50)"])
-    df["year_band"] = "other"
-    for lo, hi, name in YEAR_BANDS:
-        df.loc[df.year.between(lo, hi), "year_band"] = name
-    return df
+    return fulltext_corpus.load_population(MC_LABELS)
 
 
 def draw_sample(df: pd.DataFrame, size: int, seed: int) -> pd.DataFrame:
@@ -266,6 +262,12 @@ def cmd_status(args) -> None:
         print("\noutcomes so far")
         for status, n in counts.items():
             print(f"  {status:<26}{n:>8,}  ({n/len(store):>5.1%})")
+    log = fulltext.load_refetch_log(REFETCH_LOG)
+    if log:
+        counts = pd.Series([v.get("outcome", "?") for v in log.values()]).value_counts()
+        print(f"\narchive re-fetch of failed direct bodies: {len(log):,} attempted")
+        for outcome, n in counts.items():
+            print(f"  {outcome:<26}{n:>8,}  ({n/len(log):>5.1%})")
 
 
 def cmd_crawl(args) -> None:
@@ -302,13 +304,92 @@ def cmd_crawl(args) -> None:
     write_coverage_report(events)
 
 
+def refetch_candidates(events: pd.DataFrame, store: dict,
+                       flags: list[str] | None) -> list[dict]:
+    """Direct retrievals that fail a hard quality check, as crawl items.
+
+    Read against the *current* store: a record that has since been replaced (by a
+    retry or an earlier re-fetch) is no longer a direct body and is skipped, even
+    if the quality table predates the change.
+    """
+    q = fulltext_corpus.load_quality(QUALITY_CSV)
+    if q is None:
+        sys.exit(f"missing {QUALITY_CSV} — run `quality` first; it decides which "
+                 "bodies are worth re-fetching.")
+    hard = [f for f in fulltext.HARD_FLAGS if f in q.columns]
+    for col in ["quality_ok", *hard]:
+        q[col] = q[col].astype(str).str.lower().isin(("true", "1"))
+    q = q[~q.quality_ok]
+    if flags:
+        q = q[q[flags].any(axis=1)]
+    published = dict(zip(events.url, events.publish_date))
+    items = []
+    for row in q.itertuples(index=False):
+        rec = store.get(row.url, {})
+        if rec.get("status") != "ok" or rec.get("via") != "direct":
+            continue
+        items.append({"url": row.url, "publish_date": published.get(row.url),
+                      "domain": row.domain,
+                      "flags": [f for f in hard if getattr(row, f)]})
+    return items
+
+
+def cmd_refetch(args) -> None:
+    """Try the archive for direct bodies that fail a hard quality check.
+
+    A successful archive copy is appended to the store and supersedes the direct
+    record; a failure is only logged, so the direct body stays the record. Re-run
+    `quality` afterwards — the replaced bodies have not been scored yet.
+    """
+    events = load_events()
+    fulltext.set_archive_interval(args.archive_interval)
+    store = fulltext.load_store(STORE)
+    candidates = refetch_candidates(events, store, args.flags)
+    log = fulltext.load_refetch_log(REFETCH_LOG)
+    todo = fulltext.refetch_pending(candidates, log)
+    if args.limit:
+        todo = todo[:args.limit]
+
+    print(f"direct bodies failing a hard check : {len(candidates):,}"
+          f"{' (restricted to ' + ', '.join(args.flags) + ')' if args.flags else ''}")
+    print(f"  already settled in the re-fetch log: {len(candidates) - len(fulltext.refetch_pending(candidates, log)):,}")
+    print(f"  to attempt now                     : {len(todo):,}")
+    flag_counts = pd.Series([f for i in todo for f in i["flags"]]).value_counts()
+    for flag, n in flag_counts.items():
+        print(f"    {flag:<22}{n:>7,}")
+    domains = pd.Series([i["domain"] for i in todo]).value_counts().head(8)
+    if len(domains):
+        print("  largest domains: " + ", ".join(f"{d} {n:,}" for d, n in domains.items()))
+    hours = len(todo) * args.archive_interval / 3600
+    print(f"  archive interval {args.archive_interval:g}s, serialised -> ~{hours:.1f}h")
+    if args.dry_run or not todo:
+        print("\ndry run — nothing fetched." if args.dry_run else "\nnothing to do.")
+        return
+
+    print(f"\nresumable: successes append to {STORE.name}, every attempt to "
+          f"{REFETCH_LOG.name}.\n")
+    update, close = iter_progress(len(todo), "archive re-fetch")
+    counts = fulltext.refetch_many(todo, store_path=STORE, log_path=REFETCH_LOG,
+                                   timeout=args.timeout, progress=update)
+    close()
+    ok = counts.get("ok", 0)
+    print(f"\narchive copy retrieved for {ok:,} of {len(todo):,} "
+          f"({ok/len(todo):.1%}); outcomes:")
+    for outcome, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+        print(f"  {outcome:<34}{n:>7,}")
+    print("\nNext: `python scripts/21_fetch_fulltext.py quality` to score the replaced "
+          "bodies, then re-run stage 23 — only the new bodies cost model calls.")
+
+
 def write_coverage_report(events: pd.DataFrame) -> None:
     """Coverage of the crawl so far, by the strata the pilot showed matter."""
     store = fulltext.load_store(STORE)
     if not store:
         return
     rows = pd.DataFrame([{"url": k, "status": v.get("status"), "via": v.get("via"),
-                          "n_words": v.get("n_words", 0)} for k, v in store.items()])
+                          "n_words": v.get("n_words", 0),
+                          "refetched": str(v.get("note", "")).startswith("archive_refetch")}
+                         for k, v in store.items()])
     merged = events.merge(rows, on="url", how="inner")
     if merged.empty:
         return
@@ -335,6 +416,10 @@ def write_coverage_report(events: pd.DataFrame) -> None:
         lines += ["", "## Route", "", "| route | n | share |", "|---|---:|---:|"]
         for via, n in got.via.value_counts().items():
             lines.append(f"| {via} | {n:,} | {n/len(got):.1%} |")
+        refetched = int(got.refetched.sum())
+        if refetched:
+            lines += ["", f"{refetched:,} of the archive copies replaced a direct body "
+                      "that had failed a hard quality check (`refetch`)."]
         lines += ["", f"Extracted length: median **{got.n_words.median():,.0f} words** "
                   f"(p10 {got.n_words.quantile(.1):,.0f}, "
                   f"p90 {got.n_words.quantile(.9):,.0f}).", ""]
@@ -354,6 +439,162 @@ def write_coverage_report(events: pd.DataFrame) -> None:
     CRAWL_REPORT.parent.mkdir(parents=True, exist_ok=True)
     CRAWL_REPORT.write_text("\n".join(lines), encoding="utf-8")
 
+
+
+def cmd_report(args) -> None:
+    """Regenerate the coverage report from the store, without crawling.
+
+    It used to be written only at the end of an uninterrupted `crawl`, so a run
+    that was resumed or stopped left the previous report in place.
+    """
+    events = load_events()
+    write_coverage_report(events)
+    print(f"wrote {CRAWL_REPORT}")
+
+
+def cmd_quality(args) -> None:
+    """Is each retrieved body the article its headline names?
+
+    Offline: reads only the store and the stage 18 table. Writes a per-article
+    table to data/interim/ and a report to outputs/. The report is tracked in
+    git, so it names articles by URL and headline only and never quotes a body.
+    """
+    events = load_events()
+    store = fulltext.load_store(STORE)
+    print(f"store: {len(store):,} records; scoring the retrieved bodies…")
+    q = fulltext.quality_table(store, events)
+    if q.empty:
+        sys.exit("no retrieved articles in the store — run `crawl` first")
+    QUALITY_CSV.parent.mkdir(parents=True, exist_ok=True)
+    q.to_csv(QUALITY_CSV, index=False)
+
+    n, good = len(q), int(q.quality_ok.sum())
+    lo, hi = wilson_interval(good, n)
+    print(f"\nretrieved {n:,} | pass every hard check {good:,} = {good/n:.1%} "
+          f"[{lo:.1%}, {hi:.1%}]")
+    print(f"usable against the population: {good:,}/{len(events):,} = "
+          f"{good/len(events):.1%}\n")
+    print("flags (hard flags decide quality_ok; soft flags are informational)")
+    for flag in (*fulltext.HARD_FLAGS, *fulltext.SOFT_FLAGS):
+        kind = "hard" if flag in fulltext.HARD_FLAGS else "soft"
+        print(f"  {kind}  {flag:<20}{int(q[flag].sum()):>7,}  ({q[flag].mean():>5.1%})")
+    print(f"\ndistinct bodies {q.body_key.nunique():,} under {q.dup_group.nunique():,} "
+          f"distinct headlines")
+    write_quality_report(q, events)
+    print(f"\nwrote {QUALITY_CSV}\nwrote {QUALITY_REPORT}")
+
+
+def write_quality_report(q: pd.DataFrame, events: pd.DataFrame) -> None:
+    n, good = len(q), int(q.quality_ok.sum())
+    lo, hi = wilson_interval(good, n)
+
+    def flag_rows(by: str, label: str) -> list[str]:
+        out = [f"| {label} | retrieved | quality ok | rate | 95% CI |",
+               "|---|---:|---:|---:|---|"]
+        for key, grp in q.groupby(by, observed=True):
+            k = int(grp.quality_ok.sum())
+            a, b = wilson_interval(k, len(grp))
+            out.append(f"| {key} | {len(grp):,} | {k:,} | {k/len(grp):.0%} | "
+                       f"[{a:.0%}, {b:.0%}] |")
+        return out
+
+    lines = [
+        "# Full-text quality — Stage 21", "",
+        f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')} from "
+        f"`{STORE.name}`.", "",
+        "> Retrieval `ok` means extraction produced at least "
+        f"{fulltext.MIN_ARTICLE_WORDS} words that are not an obvious paywall or bot "
+        "wall. This report asks the harder question: **is the body the article the "
+        "headline names?** Every check is a flag with a stated threshold, reported "
+        "with its rate, rather than a silent filter.", "",
+        "## Result", "",
+        f"- **{n:,}** bodies retrieved; **{good:,}** pass every hard check "
+        f"= **{good/n:.1%}** [{lo:.1%}, {hi:.1%}].",
+        f"- Against the {len(events):,} `EVENT` stories crawled, that is "
+        f"**{good/len(events):.1%} usable full text**.", "",
+        "## Flags", "",
+        "| flag | kind | articles | share | what it catches |", "|---|---|---:|---:|---|",
+    ]
+    meaning = {
+        "no_tornado_mention": "Media Cloud's own `tornado*` query matched this page, so a "
+                              "correct body should mention one; most often a wrong page or a "
+                              "truncated extraction, occasionally a mention trafilatura "
+                              "dropped with a caption",
+        "title_mismatch": f"retrieved page title shares < {fulltext.TITLE_MISMATCH_CONTAINMENT:.0%} "
+                          "of the headline's content words. **Soft**: these bodies mention "
+                          "tornadoes more than passing ones — mostly the right article, "
+                          "retitled after indexing",
+        "redirected_home": "direct fetch landed on the site's front page",
+        "template_body": f"one body under ≥{fulltext.TEMPLATE_MIN_HEADLINES} headlines that "
+                         "disagree with it *and* never mentions a tornado — an error or "
+                         "landing page served for many URLs",
+        "not_english": f"English stopword share < {fulltext.MIN_ENGLISH_STOPWORD_SHARE:.0%}",
+        "high_boilerplate": f"≥{fulltext.HIGH_BOILERPLATE_SHARE:.0%} of the words are "
+                            "paragraphs that recur across most of the domain's pages",
+        "very_long": f"≥{fulltext.VERY_LONG_WORDS:,} words — live blogs and page dumps",
+    }
+    for flag in (*fulltext.HARD_FLAGS, *fulltext.SOFT_FLAGS):
+        kind = "hard" if flag in fulltext.HARD_FLAGS else "soft"
+        lines.append(f"| `{flag}` | {kind} | {int(q[flag].sum()):,} | "
+                     f"{q[flag].mean():.1%} | {meaning[flag]} |")
+    lines += ["", "Flags overlap; the shares do not sum to the failure rate.", ""]
+
+    lines += ["## By route", ""] + flag_rows("via", "route") + [""]
+    lines += ["## By year band", ""] + flag_rows("year_band", "year band") + [""]
+    lines += ["## By domain size", ""] + flag_rows("domain_size", "domain size") + [""]
+
+    body_groups = q.groupby("body_key").dup_group.nunique()
+    shared = body_groups[body_groups > 1]
+    lines += [
+        "## Shared bodies", "",
+        f"{q.body_key.nunique():,} distinct bodies sit under {q.dup_group.nunique():,} "
+        f"distinct headlines. {len(shared):,} bodies appear under more than one "
+        f"headline (largest: {int(body_groups.max()):,}). Media Cloud deduplicates by "
+        "*headline*, so syndicated copies retitled by each outlet survive as separate "
+        "stories; **count articles by body, not by headline, wherever the text is "
+        "what matters.** Shared bodies whose headlines disagree with them are flagged "
+        "`template_body` above; the rest are ordinary wire copy.", "",
+        "## Length", "",
+        f"Median {q.n_words.median():,.0f} words (p10 {q.n_words.quantile(.1):,.0f}, "
+        f"p90 {q.n_words.quantile(.9):,.0f}) for all retrieved; median "
+        f"{q[q.quality_ok].n_words.median():,.0f} for those passing.", "",
+        "## Examples to inspect", "",
+        "Five per hard flag, by URL and headline only. Open them before trusting a "
+        "threshold.", "",
+    ]
+    for flag in fulltext.HARD_FLAGS:
+        sample = q[q[flag]].sample(min(5, int(q[flag].sum())), random_state=1)
+        if not len(sample):
+            continue
+        lines.append(f"**`{flag}`**")
+        lines.append("")
+        for r in sample.itertuples():
+            lines.append(f"- [{str(r.headline)[:90]}]({r.url})")
+        lines.append("")
+
+    lines += [
+        "## Limitations", "",
+        "1. **Thresholds are judgement, not measurement.** None has been calibrated "
+        "against a human check. The per-article table "
+        f"(`{QUALITY_CSV.relative_to(config.DATA_DIR.parent) if QUALITY_CSV.is_relative_to(config.DATA_DIR.parent) else QUALITY_CSV.name}`) "
+        "carries every raw measure, so a threshold can be moved without re-reading "
+        "the bodies.",
+        "2. **`no_tornado_mention` has a known false-positive mode**: Media Cloud's "
+        "extraction may have kept a caption or related-links box that trafilatura "
+        "drops. The examples above are the way to estimate how often.",
+        "3. **`title_mismatch` is soft, on evidence.** As a hard flag it rejected "
+        "articles whose bodies mentioned tornadoes more often than passing ones: "
+        "pages are retitled as stories develop. A flag that removes the most on-topic "
+        "text is not measuring what it claims to.",
+        "4. **`not_english` also catches video pages** with little prose, not only "
+        "foreign-language articles. Both are unusable by the English-only stages "
+        "downstream, but they are different reasons.",
+        "5. **Boilerplate detection needs volume**: domains with fewer than "
+        f"{fulltext.BOILERPLATE_DOMAIN_MIN_DOCS} retrieved pages are never scored.",
+        "",
+    ]
+    QUALITY_REPORT.parent.mkdir(parents=True, exist_ok=True)
+    QUALITY_REPORT.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main() -> None:
@@ -387,6 +628,27 @@ def main() -> None:
     sp = sub.add_parser("status", help="what the store holds; safe during a crawl")
     sp.add_argument("--random-seed", type=int, default=20260807)
     sp.set_defaults(func=cmd_status)
+
+    sp = sub.add_parser("report", help="regenerate the coverage report; no network")
+    sp.add_argument("--random-seed", type=int, default=20260807)
+    sp.set_defaults(func=cmd_report)
+
+    sp = sub.add_parser("refetch", help="archive copies for direct bodies that fail a "
+                                       "hard quality check")
+    sp.add_argument("--dry-run", action="store_true",
+                    help="count and break down the candidates; fetch nothing")
+    sp.add_argument("--flags", nargs="+", choices=fulltext.HARD_FLAGS,
+                    help="only bodies failing one of these (default: any hard flag)")
+    sp.add_argument("--limit", type=int, help="attempt at most N this run")
+    sp.add_argument("--timeout", type=int, default=20)
+    sp.add_argument("--archive-interval", type=float, default=fulltext.ARCHIVE_INTERVAL)
+    sp.add_argument("--random-seed", type=int, default=20260807)
+    sp.set_defaults(func=cmd_refetch)
+
+    sp = sub.add_parser("quality", help="is each body the article its headline names? "
+                                       "No network")
+    sp.add_argument("--random-seed", type=int, default=20260807)
+    sp.set_defaults(func=cmd_quality)
 
     args = p.parse_args()
     args.func(args)

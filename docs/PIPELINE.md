@@ -475,3 +475,35 @@ tracking keys. Dropping the query wholesale merged `ktbb.com/post/?p=…` (454
 articles) and `tulsaworld.com/…/articlepath.aspx?id=…` (2,253) into single
 identifiers that then matched indiscriminately, fabricating 6,559 of 14,018
 Media Cloud ↔ GDELT edges.
+
+
+### Full-text quality — `21_fetch_fulltext.py quality`
+
+Offline. Retrieval `ok` only means extraction produced enough words that are not
+an obvious paywall; `quality` asks whether the body is the article the headline
+names. Hard flags decide `quality_ok`: `no_tornado_mention` (Media Cloud's own
+`tornado*` query matched the page, so a correct body should mention one),
+`redirected_home` (a soft 404 to the front page), `template_body` (one off-topic
+page served under many headlines) and `not_english`. Soft flags are reported only:
+`title_mismatch`, `high_boilerplate`, `very_long`.
+
+`title_mismatch` began as a hard flag and was demoted on evidence: the articles it
+rejected on its own mentioned tornadoes *more* often than passing ones, because
+pages are retitled as stories develop. The same test — do the rejected bodies
+mention a tornado? — is the one to rerun after changing any threshold.
+
+The report names articles by URL and headline only and never quotes a body: it is
+tracked in git, and the project publishes links and derived annotations, not text.
+`report` regenerates the coverage report from the store without crawling.
+
+`refetch` then tries the archive for every *direct* body failing a hard check —
+the crawl never did, because extraction had technically succeeded. It is
+sequential (archive.org is throttled globally anyway), resumable, and conservative
+about the store: a copy is appended, superseding the direct record, only when it
+extracts cleanly and mentions a tornado; anything else goes to
+`data/raw/fulltext/archive_refetch.jsonl` and the direct body stays. Records it
+writes carry `note = "archive_refetch: …"`, which the coverage report counts.
+`--flags` restricts it to bodies failing particular checks, `--dry-run` shows the
+candidates without fetching. Re-run `quality` afterwards, then stage 23 — cached
+answers mean only the replaced bodies cost model calls.
+
