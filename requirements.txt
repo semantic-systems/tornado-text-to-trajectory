@@ -27,4 +27,6 @@ en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_
 
 pyproj
 shapely
+# Kernel-density episodes (scripts/25_compare_episodes.py)
+scipy~=1.18
 mediacloud

@@ -306,6 +306,39 @@ def storm_events_times_are_standard_time() -> None:
     assert storm_events.latest_files(listing)[2025].endswith("c20260819.csv.gz")
 
 
+def mistyped_end_dates_are_repaired() -> None:
+    """A 7-minute tornado with an end date two years later must not span two years."""
+    import pandas as pd
+    from tornado_dataset.dat import episodes
+    t0 = pd.to_datetime(pd.Series(["2013-03-18T17:11:00Z", "2013-03-18T17:11:00Z",
+                                   "2013-03-18T17:11:00Z"]), utc=True)
+    t1 = pd.to_datetime(pd.Series(["2015-01-23T17:18:00Z", "2013-03-18T17:30:00Z",
+                                   "2013-03-20T05:00:00Z"]), utc=True)
+    fixed, bad = episodes.repair_end_times(t0, t1)
+    minutes = list(((fixed - t0).dt.total_seconds() / 60).round())
+    assert minutes == [7, 19, 0], f"got {minutes}"
+    assert list(bad) == [True, False, True]
+
+
+def space_time_links_across_the_day_boundary() -> None:
+    """Two tornadoes 30 min apart at 12 UTC: one episode by time gap, two by day."""
+    import pandas as pd
+    from shapely.geometry import LineString
+    from tornado_dataset.dat import episodes
+    h = pd.DataFrame({
+        "geom": [LineString([(0, 0), (1000, 0)]), LineString([(5000, 0), (6000, 0)]),
+                 LineString([(9e6, 0), (9.001e6, 0)])],
+        "t0": pd.to_datetime(["2020-04-13T11:45Z", "2020-04-13T12:15Z",
+                              "2020-04-13T12:15Z"], utc=True),
+        "convective_day": ["2020-04-12", "2020-04-13", "2020-04-13"]})
+    h["t1"] = h.t0
+    by_day = episodes.convective_day(h, 200_000)
+    by_gap = episodes.space_time(h, 200_000, 3 * 3600)
+    assert by_day[0] != by_day[1], "the day rule should cut at 12 UTC"
+    assert by_gap[0] == by_gap[1] != by_gap[2], "time gap should join near, keep far apart"
+    assert abs(episodes.adjusted_rand(by_gap, by_gap) - 1.0) < 1e-9
+
+
 def county_segments_chain_into_tornadoes_and_link_offices() -> None:
     """A tornado crossing from one office into another joins both offices' episodes."""
     import pandas as pd
@@ -392,6 +425,54 @@ def dat_clock_errors_are_repaired_on_the_hour() -> None:
     assert spc.event_id_dates("ilx061921;Erath 121322") == set()
 
 
+def dat_reference_extends_through_spc() -> None:
+    """A DAT hazard with no Storm Events match of its own takes its SPC track's."""
+    import pandas as pd
+    from tornado_dataset.dat import episodes
+    dat = pd.Series(["h1", "h2", "h3"])
+    direct = pd.DataFrame({"hazard_uid": dat, "EPISODE_ID": [10, None, None],
+                           "WFO": ["OUN", None, None]})
+    spc_links = pd.DataFrame({"hazard_uid": ["h1", "h2"], "spc_id": ["s1", "s2"],
+                              "rank_for_hazard": [1, 1]})
+    spc_se = pd.DataFrame({"spc_id": ["s1", "s2"], "EPISODE_ID": [10, 20],
+                           "WFO": ["OUN", "TSA"], "EVENT_ID": [1, 2],
+                           "rank_for_hazard": [1, 1]})
+    via = episodes.reference_via_spc(dat, spc_links, spc_se)
+    ref, stats = episodes.combine_references(direct, via)
+    assert ref.EPISODE_ID.tolist()[:2] == [10, 20] and pd.isna(ref.EPISODE_ID[2])
+    assert ref.ref_source.tolist()[:2] == ["direct", "via_spc"] and pd.isna(ref.ref_source[2])
+    assert stats["via_spc_only"] == 1 and stats["agree_episode"] == 1.0
+    assert ref.WFO[1] == "TSA"
+
+
+def spc_episodes_carry_to_dat_hazards() -> None:
+    """DAT hazards take their closest SPC track's episode; unmatched ones stand alone."""
+    import pandas as pd
+    from tornado_dataset.dat import episodes
+    labels = pd.Series([0, 0, 1])
+    spc_uid = pd.Series(["spc_a", "spc_b", "spc_c"])
+    dat_uid = pd.Series(["h1", "h2", "h3", "h4"])
+    links = pd.DataFrame({"hazard_uid": ["h1", "h2", "h2", "h3"],
+                          "spc_id": ["spc_a", "spc_c", "spc_b", "spc_c"],
+                          "rank_for_hazard": [1, 2, 1, 1]})
+    lab, matched = episodes.project_labels(labels, spc_uid, dat_uid, links)
+    assert lab[0] == lab[1] != lab[2], f"got {lab.tolist()}"
+    assert list(matched) == [True, True, True, False]
+    assert lab[3] not in set(lab[:3]), "an unmatched hazard must be its own episode"
+
+
+def episode_counts_cover_all_spc_tornadoes() -> None:
+    """Counts come from SPC membership; EF-U is neither EF0 nor EF1+; DAT goes by its track."""
+    import pandas as pd
+    from tornado_dataset.dat import episodes
+    h = pd.DataFrame({"hazard_uid": ["s1", "s2", "s3", "s4"], "mag": [0, 1, -9, 2]})
+    labels = pd.Series([0, 0, 0, 1])
+    dat_spc = pd.Series(["s1", "s4", "s4", None])     # one DAT hazard has no SPC track
+    c = episodes.episode_counts(labels, h, dat_spc).set_index("episode")
+    assert c.n_spc.tolist() == [3, 1] and c.n_spc_ef1plus.tolist() == [1, 1], c
+    assert c.n_spc_unrated.tolist() == [1, 0] and c.n_dat.tolist() == [1, 2], c
+
+
 for name, fn in [
     ("evidence windows reach late mentions", evidence_windows_reach_late_mentions),
     ("paywall stub is a failure, not an article", paywall_stub_is_a_failure_not_an_article),
@@ -412,10 +493,15 @@ for name, fn in [
     ("archive re-fetch skips settled, retries transient",
      archive_refetch_skips_settled_and_retries_transient),
     ("storm events times are standard time", storm_events_times_are_standard_time),
+    ("mistyped end dates are repaired", mistyped_end_dates_are_repaired),
+    ("space-time links across the day boundary", space_time_links_across_the_day_boundary),
     ("county segments chain and link offices",
      county_segments_chain_into_tornadoes_and_link_offices),
     ("spc records are CST and whole tracks", spc_records_are_cst_and_whole_tracks),
     ("DAT clock errors are repaired on the hour", dat_clock_errors_are_repaired_on_the_hour),
+    ("DAT reference extends through SPC", dat_reference_extends_through_spc),
+    ("spc episodes carry to DAT hazards", spc_episodes_carry_to_dat_hazards),
+    ("episode counts cover all SPC tornadoes", episode_counts_cover_all_spc_tornadoes),
 ]:
     check(name, fn)
 

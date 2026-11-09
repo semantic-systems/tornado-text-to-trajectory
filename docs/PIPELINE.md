@@ -603,3 +603,59 @@ SPC's `om` is a per-year number up to September 2007 and a text identifier
 (`YYMMDDHHMM-NN`, start time in CST plus a sequence) after; `spc_id` keeps it as text.
 `--spc-file` uses a file from elsewhere; without one, the SPC part is skipped.
 
+### Comparing episode definitions — `scripts/25_compare_episodes.py`
+
+Offline and read-only towards the pipeline. Runs stage 3's rule (re-implemented
+and checked to reproduce its episodes exactly) and the alternatives in
+`tornado_dataset.dat.episodes` on the same hazards: space-time single linkage
+(no day boundary; with unlimited distance and a 6 h gap, a variant of the
+outbreak-sequence rule of Fuhrmann et al. 2014 — all ratings chain, the gap runs
+end to start, no minimum count), ST-DBSCAN (Birant & Kut 2007) and kernel-density
+regions per convective day (Shafer & Doswell 2011) or over overlapping windows
+(Shafer, Grondin & Doswell 2015). Each is scored against Storm Events episodes —
+recall of forecaster-grouped pairs, within-office precision, share of Storm
+Events episodes split — and described by size, extent, duration and multi-day
+count. Outputs: `../local/archive/episode_comparison_report.md`,
+`data/interim/episode_comparison_metrics.csv` and `..._assignments.csv` (one
+column of episode labels per method). Implausible DAT end times are repaired in
+memory first; see HANDOVER's traps.
+
+`--anchor spc` runs the same methods on SPC's whole tracks (stage 24) instead of
+DAT hazards — the complete, reviewed tornado list, so tornadoes DAT lacks cannot
+cut an outbreak — scored against each track's closest Storm Events row. Its
+episodes are then carried to DAT hazards (each takes its closest SPC track's
+episode; a hazard without an SPC match is its own) and scored against the DAT
+reference, with the ARI against stage 3's published episodes. Outputs carry an
+`_spc` suffix. SPC geometry is a straight start→end line, so distances between
+long curved tracks are approximate.
+
+No grouping applies a minimum size. `--anchor spc` therefore also writes
+`data/interim/episode_counts_spc.csv`: per method and episode, its SPC tornadoes
+(`n_spc`), those rated EF1+ (`n_spc_ef1plus`) and unrated (`n_spc_unrated`, EF-U),
+and the DAT hazards carried into it (`n_dat`). These are the counts a dataset user
+cannot recompute from DAT, which lacks many SPC tornadoes; an outbreak threshold
+such as ≥6 EF1+ (Fuhrmann et al.) is a filter on them. The report shows what that
+threshold keeps per method. They become episode columns when stage 3 switches to
+SPC-built episodes.
+
+The DAT hazards' reference is their own Storm Events match, **extended through
+SPC** where they have none: DAT hazard → closest SPC track (including stage 24's
+time-repaired links) → that track's closest Storm Events row
+(`episodes.reference_via_spc`, `combine_references`). This reaches the hazards
+whose DAT time is off by hours, which can never match Storm Events directly.
+Where both routes exist they name the same episode for 98.6% of hazards; the
+report states the counts. `--dat-reference direct` scores against the hazards'
+own matches only, as before.
+
+With stage 26's `spc_watch_systems_<tag>.csv` present, every method is also
+scored against SPC watches (DAT hazards through their closest SPC track), on
+watched tornadoes only: **within systems** — of pairs a method groups, the
+share inside one watch system, and the part on pairs from two offices — as an
+upper bound, and **sequences kept** — of pairs in one watch sequence, the share
+the method keeps — as a lower bound. F1 against each is in the metrics CSV.
+Where stage 26's `no-motion` variant exists as well (`link --no-motion-check`),
+every method is scored against it too (`alt_` columns), and the report sets both
+side by side, with the largest change and Kendall's τ of the method order per
+score: whether a conclusion depends on the motion check. `--watch-variant`
+names another variant, `''` turns this off.
+

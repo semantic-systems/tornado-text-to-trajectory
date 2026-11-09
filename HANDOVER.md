@@ -36,6 +36,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 | 21 full text | **crawled 7 Oct.** 78% of the 48,741 `EVENT` stories retrieved; `report` and `quality` run offline over the store |
 | 23 full-text labels | **built, not run.** Stage 19's prompt over the retrieved bodies, compared with stage 18's headline labels |
 | 24 Storm Events + SPC | **run, 2010–2025.** SPC's reviewed whole-track tornado file matched to DAT as the tornado-level reference (98.3% of Storm Events chains match one SPC track); NCEI Storm Events tornado rows chained into whole tornadoes through `TOR_OTHER_*` and cross-checked against SPC, matched to DAT hazards by space and time, episodes linked across offices where a tornado crossed between them; DAT completeness rises from 1% of tornadoes (2010) to 85% (2025) |
+| 25 episode comparison | **run on DAT; `--anchor spc` built, tested on the real data in a scratch copy, not run by you.** Stage 3's convective-day rule against space-time, ST-DBSCAN and kernel-density alternatives, scored on Storm Events episodes; `--anchor spc` groups SPC's complete tornado list and carries the episodes to DAT hazards |
 
 ## Traps
 

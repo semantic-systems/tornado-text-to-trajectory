@@ -85,6 +85,8 @@ python scripts/21_fetch_fulltext.py quality    # is each body the right article?
 python scripts/21_fetch_fulltext.py refetch    # archive copies for failed bodies
 python scripts/23_label_fulltext.py run        # label bodies, compare with headlines
 python scripts/24_storm_events.py run         # NCEI Storm Events, matched to DAT
+python scripts/25_compare_episodes.py         # episode definitions compared
+python scripts/25_compare_episodes.py --anchor spc  # ...grouping SPC's complete tornado list
 python scripts/22_corpus_atlas.py --events-only  # all three corpora as a set
 ```
 
