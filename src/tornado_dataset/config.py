@@ -134,7 +134,7 @@ LINK_SEARCH_MAX_DATE_DELTA_DAYS = 2
 
 # Accepted link: gap threshold, which also sets the scale on which proximity
 # decays in link_confidence. 200 m is the operating point chosen in
-# outputs/dat_qa_report.md from the sweep against the path_guid gold set.
+# outputs/events_qa_report.md from the sweep against the path_guid gold set.
 LINK_GAP_THRESHOLD_M = 200.0
 # Buffer applied to the polygon when measuring how much of the line lies inside
 # it, absorbing digitising jitter between two independently drawn features.

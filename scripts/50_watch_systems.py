@@ -151,7 +151,7 @@ def cmd_probe(args) -> None:
                                                 sw.polygon_hits(tracks, polygons))
         print(f"tornadoes: {result['tornadoes']}")
     else:
-        print(f"no {SPC_TRACKS.name} — run scripts/14_match_references.py join; "
+        print(f"no {SPC_TRACKS.name} — run scripts/14_match_references.py; "
               "skipping the tornado comparison")
 
     # 5. Watch texts: the season month by month (under IEM's per-request cap),

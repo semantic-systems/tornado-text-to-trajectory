@@ -15,7 +15,7 @@ bounds and are marked as such.
 
 | report | headline finding |
 |---|---|
-| [dat_qa_report.md](../outputs/dat_qa_report.md) | The line↔polygon linker scores **99.3% precision** [97.4, 99.8] and **96.2% recall** [93.3, 97.9] against DAT's own `path_guid` key. Only 289 of 9,989 polygons carry a real `path_guid` — the rest hold an all-zero placeholder — so this is a sanity check, not a dataset-wide error rate. |
+| [events_qa_report.md](../outputs/events_qa_report.md) | The line↔polygon linker scores **99.3% precision** [97.4, 99.8] and **96.2% recall** [93.3, 97.9] against DAT's own `path_guid` key. Only 289 of 9,989 polygons carry a real `path_guid` — the rest hold an all-zero placeholder — so this is a sanity check, not a dataset-wide error rate. |
 | [hazard_analysis_report.md](../outputs/hazard_analysis_report.md) | 9,982 surveyed tornado tracks across 2,795 outbreak days, 2010–2025, with the EF, casualty and seasonality distributions. |
 
 ## Text layer

@@ -1,9 +1,13 @@
-"""Stage 17 — evaluate the linkage and write the Stage A QA report.
+"""Stage 17 — the events quality report: DAT linkage and the official records.
 
-Produces ``outputs/dat_qa_report.md`` plus figures. The report is written to be
-read by someone deciding whether to trust the dataset: every headline number is
-accompanied by its denominator, its confidence interval where it is an estimate,
-and the caveat that limits it.
+Produces ``outputs/events_qa_report.md`` plus figures: what was downloaded from
+DAT, how lines and polygons were linked and how well (against the ``path_guid``
+gold set), the hazards and episodes built from them, and — once stages 13–14
+have run — how DAT compares with NCEI Storm Events and SPC's tornado database
+(completeness per year, episodes, the time-repaired matches). The report is
+written to be read by someone deciding whether to trust the dataset: every
+headline number is accompanied by its denominator, its confidence interval where
+it is an estimate, and the caveat that limits it.
 
     python scripts/17_qa_events.py
 """
@@ -23,6 +27,7 @@ import pandas as pd
 
 from tornado_dataset import config
 from tornado_dataset.dat import evaluate, link
+from tornado_dataset.dat import references as refs
 
 plt.rcParams.update({
     "figure.facecolor": "white", "axes.facecolor": "white",
@@ -159,7 +164,12 @@ def main() -> None:
                                    ("> 100 km", 100_000, float("inf"))]],
     ])
 
-    report = f"""# NOAA DAT geometry — Stage A quality report
+    reference_lines = refs.report_lines(tag)
+    references_md = "\n".join(reference_lines) if reference_lines is not None else (
+        "Not available: run `scripts/13_fetch_references.py` and "
+        "`scripts/14_match_references.py`, then this stage again.\n")
+
+    report = f"""# Events — quality report (stage 17)
 
 Window **{config.WINDOW_START} … {config.WINDOW_END}**, retrieved
 {fetch_manifest.get('written_at', 'n/a')} (code {str(fetch_manifest.get('git_sha'))[:8]}).
@@ -309,7 +319,10 @@ Merge evidence for multi-line hazards (why segments were joined):
 Hazards per year and polygon-field population: `figures/dat_coverage.png`.
 Calibration and operating points: `figures/dat_linker_evaluation.png`.
 
-## 6. Limitations to carry into the dataset documentation
+## 6. Against the official records (NCEI Storm Events, SPC)
+
+{references_md}
+## 7. Limitations to carry into the dataset documentation
 
 1. **Ground truth is a survey estimate.** DAT geometries are drawn by NWS field
    surveyors; coverage varies by office and surveyors cannot reach every
@@ -325,7 +338,7 @@ Calibration and operating points: `figures/dat_linker_evaluation.png`.
 """
 
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    report_path = config.OUTPUT_DIR / "dat_qa_report.md"
+    report_path = config.OUTPUT_DIR / "events_qa_report.md"
     report_path.write_text(report, encoding="utf-8")
 
     sweep.to_csv(config.OUTPUT_DIR / "dat_linker_sweep.csv", index=False)

@@ -551,12 +551,12 @@ active filter and whether the article was drawn at random (`r`). Stage 34's
 `compare` reports headline and full-text accuracy against them, separately for
 random draws, because only those support an estimate.
 
-### NCEI Storm Events — `scripts/14_match_references.py`
+### Official tornado records — `scripts/13_fetch_references.py`, `14_match_references.py`
 
-`fetch` downloads the newest `StormEvents_details-*.csv.gz` per year from
+Stage 13 downloads the newest `StormEvents_details-*.csv.gz` per year from
 <https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/> into
 `data/raw/storm_events/` (NCEI revises files in place, so the newest creation
-stamp is discovered from the listing; provenance in `provenance.jsonl`). `join`
+stamp is discovered from the listing; provenance in `provenance.jsonl`). Stage 14
 matches every tornado row to DAT hazards within 5 km of the track and 30 min of
 its interval — Storm Data times are local *standard* time all year and converted
 with `CZ_TIMEZONE` — and writes `data/processed/storm_events_links_<tag>.csv`
@@ -565,19 +565,19 @@ Rows are county segments; `load_tornadoes` chains them into whole tornadoes by
 following each row's `TOR_OTHER_*` pointer to the row in the named office and
 county within 30 min (`TORNADO_KEY`), and joins episodes that share a tornado
 (`LINKED_EPISODE`) — which spans offices only where a tornado crossed between
-them. `report` writes `../local/archive/storm_events_report.md`: per-year completeness in
-tornadoes, both directions. One hazard can match several rows; the closest
+them. Stage 17's `outputs/events_qa_report.md` reports per-year completeness in
+tornadoes, both directions, in its section on the official records. One hazard can match several rows; the closest
 (`rank_for_hazard == 1`) gives the hazard's reference episode, and stage 51
 scores against both `EPISODE_ID` and `LINKED_EPISODE`.
 `--from-dir` reads details files from elsewhere, e.g. ones downloaded by hand.
 
-The same stage fetches SPC's `*_actual_tornadoes.csv` (one reviewed record per
-whole track, from <https://www.spc.noaa.gov/wcm/>) into `data/raw/spc/`, keeps
+Stage 13 also fetches SPC's `*_actual_tornadoes.csv` (one reviewed record per
+whole track, from <https://www.spc.noaa.gov/wcm/>) into `data/raw/spc/`; stage 14 keeps
 `sg == 1` records in the window, converts SPC's CST to UTC, and matches them to
 DAT hazards by the same rule (`data/processed/spc_tornado_links_<tag>.csv`). It
 also matches every Storm Events row to its closest SPC track, which checks the
 `TOR_OTHER_*` chaining: a chain should land on exactly one SPC tornado
-(`data/interim/spc_chain_crosscheck_<tag>.json`, and a section of the report).
+(`data/interim/spc_chain_crosscheck_<tag>.json`, and stage 17's report).
 Those row ↔ track pairs are kept (`data/processed/spc_storm_events_links_<tag>.csv`):
 they give each SPC track its Storm Events episode for stage 51's `--anchor spc`.
 A **second pass** takes the DAT hazards the strict rule leaves without an SPC
@@ -593,7 +593,7 @@ the same file with `link_method = time_repaired`, `time_offset_h`,
 second survey) and `ef_agrees`; first-pass rows carry the same columns with
 offset 0, and every row an `id_date` check (does a date written in DAT's
 free-text `event_id` side with SPC or with DAT). DAT's own times are not
-changed. The report checks the pass three ways that do not use the time field:
+changed. Stage 17's report checks the pass three ways that do not use the time field:
 the residual distribution against its far-from-the-hour density (an upper
 bound on chance pairs), rating agreement against the first pass and against
 chance (from which the share of wrong pairs follows), and the `event_id` dates.

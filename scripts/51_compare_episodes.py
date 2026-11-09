@@ -25,7 +25,7 @@ with its ``no-motion`` variant present as well (``50_watch_systems.py link
 conclusion depends on the motion check (``--watch-variant`` names another).
 
 Methods and their sources are described in :mod:`tornado_dataset.dat.episodes`.
-Needs ``scripts/14_match_references.py join`` for the reference; without it the
+Needs ``scripts/14_match_references.py`` for the reference; without it the
 descriptive columns are still produced and the scores are left empty.
 """
 
@@ -90,7 +90,7 @@ def reference_for(frame: pd.DataFrame, tag: str, anchor: str = "dat",
     """
     path = se_links_path(tag, anchor)
     if not path.exists():
-        print(f"no {path.name} — scores will be empty; run scripts/14_match_references.py join")
+        print(f"no {path.name} — scores will be empty; run scripts/14_match_references.py")
         return None
     links = pd.read_csv(path)
     if anchor == "spc":
@@ -155,8 +155,8 @@ def load_frame(tag: str, anchor: str) -> pd.DataFrame:
     if anchor == "dat":
         return ep.load_hazard_frame(tag)
     if not SPC_TRACKS.exists():
-        raise SystemExit(f"no {SPC_TRACKS.name} — run scripts/14_match_references.py join "
-                         "with the SPC file present")
+        raise SystemExit(f"no {SPC_TRACKS.name} — run scripts/13_fetch_references.py and "
+                         "scripts/14_match_references.py")
     links = se_links_path(tag, "spc")
     return ep.load_spc_frame(SPC_TRACKS, links if links.exists() else None)
 
@@ -172,7 +172,7 @@ class Projection:
         self.stage3 = pd.Series(pd.factorize(hz.episode_uid)[0], index=hz.index)
         path = config.PROCESSED_DIR / f"spc_tornado_links_{tag}.csv"
         if not path.exists():
-            raise SystemExit(f"no {path.name} — run scripts/14_match_references.py join")
+            raise SystemExit(f"no {path.name} — run scripts/14_match_references.py")
         self.links = pd.read_csv(path)
         best = self.links[self.links.rank_for_hazard == 1].drop_duplicates("hazard_uid")
         self.spc_id = hz.hazard_uid.map(best.set_index("hazard_uid").spc_id)

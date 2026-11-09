@@ -70,9 +70,10 @@ python scripts/00_selftest.py          # no network, no data — check the envir
 python scripts/10_fetch_dat.py         # DAT lines+polygons for the configured window
 python scripts/11_link_geometry.py     # candidate + accepted line<->polygon links
 python scripts/12_build_hazards.py     # hazards (tornadoes) and episodes (outbreaks)
-python scripts/14_match_references.py run   # NCEI Storm Events + SPC, matched to DAT
+python scripts/13_fetch_references.py  # NCEI Storm Events + SPC tornado files
+python scripts/14_match_references.py  # ...matched to DAT hazards
 python scripts/16_enrich_geography.py  # counties, states, WFO backfill, place names
-python scripts/17_qa_events.py         # evaluation + outputs/dat_qa_report.md
+python scripts/17_qa_events.py         # outputs/events_qa_report.md
 python scripts/18_analyze_events.py    # descriptive report + figures
 python scripts/19_event_map.py         # interactive map (self-contained HTML)
 
@@ -109,7 +110,7 @@ python scripts/viewer.py               # browse the corpus at localhost:8799
 python scripts/viewer.py --corpus mediacloud  # inspect retrieved full texts
 ```
 
-Numbers are not contiguous: gaps leave room for stages to come (13, 15 and 23
+Numbers are not contiguous: gaps leave room for stages to come (15 and 23
 are planned). The pairwise overlap stages of the old numbering (13 and 20) are
 retired — the three-way atlas (stage 43) replaces both; see
 [legacy/README.md](legacy/README.md). [HANDOVER.md](HANDOVER.md) has the

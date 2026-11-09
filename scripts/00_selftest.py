@@ -82,11 +82,11 @@ scripts = sorted(p for p in (REPO / "scripts").glob("*.py")
                  if p.name[0].isdigit() or p.stem in ("_bootstrap", "viewer"))
 for path in scripts:
     check(path.name, lambda p=path: py_compile.compile(str(p), doraise=True))
-if len(scripts) < 26:
-    failures.append(f"only {len(scripts)} stage scripts found — expected 26 "
-                    "(00, 10-12, 14, 16-22, 30-35, 40-43, 50-51, viewer, _bootstrap). "
+if len(scripts) < 27:
+    failures.append(f"only {len(scripts)} stage scripts found — expected 27 "
+                    "(00, 10-14, 16-22, 30-35, 40-43, 50-51, viewer, _bootstrap). "
                     "Some are probably untracked.")
-    print(f"  FAIL  expected 26 stage scripts, found {len(scripts)}")
+    print(f"  FAIL  expected 27 stage scripts, found {len(scripts)}")
 
 # ── 2. configuration ────────────────────────────────────────────────────────
 print("\nconfiguration")

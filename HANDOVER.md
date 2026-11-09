@@ -23,7 +23,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 | stage | state |
 |---|---|
 | 10–12, 16–17 DAT (fetch, link, hazards, geography, QA) | **complete.** 11,520 lines + 9,989 polygons → 9,982 hazards in 2,795 episodes. Geometry linker validated at 99.3% precision / 96.2% recall on the 289-polygon `path_guid` gold set |
-| 14 Storm Events + SPC | **run, 2010–2025.** SPC's reviewed whole-track tornado file matched to DAT as the tornado-level reference (98.3% of Storm Events chains match one SPC track); NCEI Storm Events tornado rows chained into whole tornadoes through `TOR_OTHER_*` and cross-checked against SPC, matched to DAT hazards by space and time, episodes linked across offices where a tornado crossed between them; DAT completeness rises from 1% of tornadoes (2010) to 85% (2025) |
+| 13–14 Storm Events + SPC | **run, 2010–2025.** SPC's reviewed whole-track tornado file matched to DAT as the tornado-level reference (98.3% of Storm Events chains match one SPC track); NCEI Storm Events tornado rows chained into whole tornadoes through `TOR_OTHER_*` and cross-checked against SPC, matched to DAT hazards by space and time, episodes linked across offices where a tornado crossed between them; DAT completeness rises from 1% of tornadoes (2010) to 85% (2025) |
 | 35, 18–19 QA, analysis, map | 35 refreshed 12 Aug against the rebuilt GDELT tables; 18–19 read DAT tables that have not changed |
 | 20 NWS text (IEM) | **complete.** 15,687 LSRs + 14,956 survey products; 7,314 hazards (73.3%) have survey text |
 | 21 GDELT | **rebuilt from cache 12 Aug; partial by construction.** The sweep stopped at 5,155/6,615 queries (78%), so 1,442 queries were never fetched and 57 episodes have no cached slice at all. From what *was* fetched: **83,778 unique URLs** (was 66,034), 100,661 links, **1,857 episodes covered** — 66.4% of all episodes, 84.2% within GDELT's own 2017+ era |
@@ -55,7 +55,9 @@ and notes use the old numbers:
 | 08 | 35_qa_text | | 17 | 22_fetch_media_cloud | | 26 | 50_watch_systems |
 
 Old 13 and 20 (pairwise overlap) are `legacy/overlap_report.py` and
-`legacy/corpus_overlap.py`. Free numbers (13, 15, 23) are planned stages.
+`legacy/corpus_overlap.py`. Free numbers (15, 23) are planned stages. Old 24 is now split: 13 downloads,
+14 matches, and its report is part of 17's `events_qa_report.md`, which replaces
+`dat_qa_report.md` and `storm_events_report.md`.
 
 ## Traps
 
@@ -327,7 +329,9 @@ not a measurement. Stage 51 compares the alternatives from the literature on the
 same hazards, scored against NCEI Storm Events episodes:
 
 ```bash
-python scripts/14_match_references.py run       # download (~16 files), join, coverage report
+python scripts/13_fetch_references.py      # download (~16 files)
+python scripts/14_match_references.py      # match to DAT
+python scripts/17_qa_events.py             # coverage report (outputs/events_qa_report.md)
 python scripts/51_compare_episodes.py       # ~1 min; outputs/episode_comparison_report.md
 python scripts/51_compare_episodes.py --anchor spc   # ~5 min; ..._spc_report.md
 ```
