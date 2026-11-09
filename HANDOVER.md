@@ -35,6 +35,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 | 22 corpus atlas | **complete.** All three corpora as a set. Run twice: `corpus_atlas_report.md` (collected) and `corpus_atlas_events_report.md` (**the usable subset — the one to read**) |
 | 21 full text | **crawled 7 Oct.** 78% of the 48,741 `EVENT` stories retrieved; `report` and `quality` run offline over the store |
 | 23 full-text labels | **built, not run.** Stage 19's prompt over the retrieved bodies, compared with stage 18's headline labels |
+| 24 Storm Events + SPC | **run, 2010–2025.** SPC's reviewed whole-track tornado file matched to DAT as the tornado-level reference (98.3% of Storm Events chains match one SPC track); NCEI Storm Events tornado rows chained into whole tornadoes through `TOR_OTHER_*` and cross-checked against SPC, matched to DAT hazards by space and time, episodes linked across offices where a tornado crossed between them; DAT completeness rises from 1% of tornadoes (2010) to 85% (2025) |
 
 ## Traps
 
@@ -51,6 +52,30 @@ Finishing the remaining 1,442 queries is possible but was abandoned deliberately
 the sweep's rate had collapsed roughly tenfold, most likely because the 45 s ×
 attempt backoff in `config.HTTP_RATE_LIMIT_BACKOFF` over-corrects against
 sustained 429s. Tune that before restarting, or the last 22% will take weeks.
+
+**DAT start times are off by whole hours for ~7% of hazards.** Of 1,114 DAT
+hazards with no SPC track by the strict rule (5 km, 30 min), 690 have one within
+5 km whose start differs by a whole number of hours to within 10 min — mostly
+to the minute: the local clock saved as UTC (+4…+7 h; nearly all of 2012's
+gap, which is why 73% of 2012 was unmatched), daylight saving (±1 h) or the
+wrong date (±24 h). Stage 24's second pass links them (`link_method =
+time_repaired`, offset and cause on each link); ratings agree on 97% of them,
+as on the first pass, against 38% by chance. **DAT's `time_begin_utc` itself is
+not corrected** — anything that reads DAT times directly (stage 3's convective
+day, the news-timing analysis) still sees the wrong hour for these hazards.
+
+**DAT end times are often wrong — 561 of 9,982 hazards.** `time_end_utc` in the
+stage 3 tables is hand-entered and frequently carries a mistyped *date* with a
+plausible clock time: 427 hazards "last" over a day (one 6.6 years) and 61 end
+before they start. Stage 3's episode grouping does not use end times, but its
+`time_end_utc` columns and episode durations are wrong for these rows. Stages 24
+and 25 repair them in memory (`episodes.repair_end_times`: keep the clock time
+when it gives ≤5 h, else set the end to the start); stage 3 itself is unchanged.
+
+**DAT is incomplete before ~2020.** Against NCEI Storm Events, 2015 DAT holds 37%
+of the officially recorded tornadoes, 2025 DAT 85%. Every count of
+tornadoes or episodes from DAT is a lower bound that grows with time for reasons
+of adoption, not climate. Stage 24's report gives the per-year figure.
 
 **`--limit` bounds reads, not writes.** On stages 18 and 19 it caps how much of the
 corpus is *read*, so a "small test" happily reuses a full labels file and then

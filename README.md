@@ -84,6 +84,7 @@ python scripts/21_fetch_fulltext.py crawl      # full text for Media Cloud (long
 python scripts/21_fetch_fulltext.py quality    # is each body the right article?
 python scripts/21_fetch_fulltext.py refetch    # archive copies for failed bodies
 python scripts/23_label_fulltext.py run        # label bodies, compare with headlines
+python scripts/24_storm_events.py run         # NCEI Storm Events, matched to DAT
 python scripts/22_corpus_atlas.py --events-only  # all three corpora as a set
 ```
 

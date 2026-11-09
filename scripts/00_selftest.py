@@ -36,7 +36,8 @@ MODULES = [
     "tornado_dataset.llm", "tornado_dataset.viz",
     "tornado_dataset.dat.fetch", "tornado_dataset.dat.geometry",
     "tornado_dataset.dat.link", "tornado_dataset.dat.evaluate",
-    "tornado_dataset.dat.hazards",
+    "tornado_dataset.dat.hazards", "tornado_dataset.dat.storm_events",
+    "tornado_dataset.dat.episodes", "tornado_dataset.dat.spc_tornadoes",
     "tornado_dataset.geo.gazetteer", "tornado_dataset.geo.pixels",
     "tornado_dataset.text.tiering", "tornado_dataset.text.iem",
     "tornado_dataset.text.gdelt", "tornado_dataset.text.lexisnexis",
@@ -293,6 +294,104 @@ def archive_refetch_skips_settled_and_retries_transient() -> None:
     assert todo == ["d", "e"], f"expected the transient and the untried, got {todo}"
 
 
+def storm_events_times_are_standard_time() -> None:
+    """Storm Data is local *standard* time all year; "CST-6" means UTC-6 in July too."""
+    import pandas as pd
+    from tornado_dataset.dat import storm_events
+    utc = storm_events.to_utc(pd.Series(["15-JUL-25 15:52:00", "15-JAN-25 15:52:00"]),
+                              pd.Series(["CST-6", "CST"]))
+    assert list(utc.dt.hour) == [21, 21], f"got {list(utc.dt.hour)}"
+    listing = ("StormEvents_details-ftp_v1.0_d2025_c20260316.csv.gz "
+               "StormEvents_details-ftp_v1.0_d2025_c20260819.csv.gz")
+    assert storm_events.latest_files(listing)[2025].endswith("c20260819.csv.gz")
+
+
+def county_segments_chain_into_tornadoes_and_link_offices() -> None:
+    """A tornado crossing from one office into another joins both offices' episodes."""
+    import pandas as pd
+    from tornado_dataset.dat import storm_events
+    t = pd.DataFrame({
+        "EVENT_ID": [10, 11, 12, 20], "EPISODE_ID": [1, 2, 2, 3],
+        "WFO": ["MEG", "LZK", "LZK", "LZK"], "STATE": ["ARKANSAS"] * 4,
+        "CZ_FIPS": [55, 31, 31, 99],
+        "TOR_OTHER_WFO": ["LZK", None, None, None], "TOR_OTHER_CZ_STATE": ["AR", None, None, None],
+        "TOR_OTHER_CZ_FIPS": [31, None, None, None],
+        "BEGIN_LAT": [35.0, 35.1, 35.1, 36.0], "BEGIN_LON": [-90.0, -90.1, -90.5, -91.0],
+        "END_LAT": [35.1, 35.2, 35.2, 36.1], "END_LON": [-90.1, -90.2, -90.6, -91.1],
+        "begin_utc": pd.to_datetime(["2025-03-14T20:00Z", "2025-03-14T20:10Z",
+                                     "2025-03-15T09:00Z", "2025-03-14T20:10Z"], utc=True)})
+    t["end_utc"] = t.begin_utc + pd.Timedelta(minutes=10)
+    t["TORNADO_KEY"] = storm_events.chain_segments(t)
+    assert t.TORNADO_KEY.tolist()[:2] == ["setor_10", "setor_10"], t.TORNADO_KEY.tolist()
+    assert t.TORNADO_KEY[2] != "setor_10", "a later tornado in the same county must not chain"
+    linked = storm_events.link_episodes(t)
+    assert linked[0] == linked[1] == linked[2] == "selep_1", linked.tolist()
+    assert linked[3] == "selep_3"
+
+
+def spc_records_are_cst_and_whole_tracks() -> None:
+    """SPC times are CST (UTC-6) year round; only sg == 1 rows are whole tracks."""
+    import tempfile
+    from pathlib import Path
+    from tornado_dataset.dat import spc_tornadoes
+    csv = ("om,yr,mo,dy,date,time,tz,st,slat,slon,elat,elon,ns,sn,sg,edat,etime\n"
+           "12,2025,7,15,2025-07-15,15:52:00,3,OK,35.0,-97.0,35.1,-96.9,1,1,1,"
+           "2025-07-15,16:01:00\n"
+           "12,2025,7,15,2025-07-15,15:52:00,3,OK,35.0,-97.0,35.1,-96.9,1,0,-9,,\n")
+    path = Path(tempfile.mkdtemp()) / "2010-2025_actual_tornadoes.csv"
+    path.write_text(csv)
+    df, notes = spc_tornadoes.load(path, [2025])
+    assert len(df) == 1 and notes["dropped_not_whole_track"] == 1
+    assert df.begin_utc.iloc[0].hour == 21 and df.spc_id.iloc[0] == "spc_2025_12"
+    assert (df.end_utc.iloc[0] - df.begin_utc.iloc[0]).total_seconds() == 540
+    page = "1950-2024_actual_tornadoes.csv 1950-2025_actual_tornadoes.csv"
+    assert spc_tornadoes.latest_file(page) == "1950-2025_actual_tornadoes.csv"
+
+
+def dat_clock_errors_are_repaired_on_the_hour() -> None:
+    """A DAT time off by whole hours links to its SPC track; one off by 5h17m does not."""
+    import pandas as pd
+    from shapely.geometry import LineString
+    from tornado_dataset.dat import spc_tornadoes as spc
+    t = pd.Timestamp("2012-04-14 21:00", tz="UTC")
+    tracks = pd.DataFrame({"spc_id": ["spc_a", "spc_b", "spc_c"],
+                           "begin_utc": [t, t + pd.Timedelta(hours=30), t],
+                           "end_utc": [t + pd.Timedelta(minutes=10)] * 3,
+                           "mag": [2, 1, 0]})
+    geoms = [LineString([(0, 0), (5000, 0)]), LineString([(100_000, 0), (105_000, 0)]),
+             LineString([(200_000, 0), (205_000, 0)])]
+    line = lambda x: LineString([(x, 300), (x + 5000, 300)])  # noqa: E731
+    hazards = pd.DataFrame({
+        "hazard_uid": ["local", "date", "jitter", "first"],
+        # local clock stored as UTC (CDT, 5 h early); wrong date (+1 day) plus
+        # 6 h early; 5 h 17 min early (no clock error does that); already linked.
+        "t0": [t - pd.Timedelta(hours=5), t + pd.Timedelta(hours=30 - 24 - 6),
+               t - pd.Timedelta(hours=5, minutes=17), t],
+        "track": [line(0), line(100_000), line(200_000), line(0)],
+        "efscale": ["EF2", "EF1", "EF0", "EF2"],
+        "dat_event_ids": [None, "greenwood_20120415", None, None]})
+    first = spc.with_first_pass_columns(pd.DataFrame({
+        "spc_id": ["spc_a"], "hazard_uid": ["first"], "distance_m": [300.0], "gap_s": [0.0],
+        "rank_for_event": [1], "rank_for_hazard": [1],
+        "link_method": ["spatial_temporal_join"]}), tracks, hazards)
+    fixed, stats = spc.repair_time_links(tracks, geoms, hazards, first)
+    got = fixed.set_index("hazard_uid")
+    assert set(got.index) == {"local", "date"}, f"got {sorted(got.index)}"
+    assert got.loc["local", "time_offset_h"] == 5
+    assert got.loc["local", "offset_class"] == "local_as_utc"
+    assert got.loc["date", "offset_class"] == "date+1+local_as_utc", got.loc["date", "offset_class"]
+    assert bool(got.loc["local", "spc_already_linked"]) and not bool(got.loc["date", "spc_already_linked"])
+    assert bool(got.loc["local", "ef_agrees"]) and stats["candidates"] == 3
+    both = pd.concat([first, fixed], ignore_index=True)
+    assert spc.event_id_date_check(both, tracks, hazards).tolist() == [None, "spc", None]
+    assert spc.offset_class(-1) == "dst" and spc.offset_class(-24) == "date-1"
+    assert spc.offset_class(3) == "unexplained"
+    import datetime as dt
+    assert spc.event_id_dates("7/12/16 Chip Falls") == {dt.date(2016, 7, 12)}
+    assert spc.event_id_dates("UNR-2019-0629-Allen") == {dt.date(2019, 6, 29)}
+    assert spc.event_id_dates("ilx061921;Erath 121322") == set()
+
+
 for name, fn in [
     ("evidence windows reach late mentions", evidence_windows_reach_late_mentions),
     ("paywall stub is a failure, not an article", paywall_stub_is_a_failure_not_an_article),
@@ -312,6 +411,11 @@ for name, fn in [
     ("cross-corpus reads either edge direction", cross_corpus_reads_either_edge_direction),
     ("archive re-fetch skips settled, retries transient",
      archive_refetch_skips_settled_and_retries_transient),
+    ("storm events times are standard time", storm_events_times_are_standard_time),
+    ("county segments chain and link offices",
+     county_segments_chain_into_tornadoes_and_link_offices),
+    ("spc records are CST and whole tracks", spc_records_are_cst_and_whole_tracks),
+    ("DAT clock errors are repaired on the hour", dat_clock_errors_are_repaired_on_the_hour),
 ]:
     check(name, fn)
 

@@ -551,3 +551,55 @@ active filter and whether the article was drawn at random (`r`). Stage 23's
 `compare` reports headline and full-text accuracy against them, separately for
 random draws, because only those support an estimate.
 
+### NCEI Storm Events — `scripts/24_storm_events.py`
+
+`fetch` downloads the newest `StormEvents_details-*.csv.gz` per year from
+<https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/> into
+`data/raw/storm_events/` (NCEI revises files in place, so the newest creation
+stamp is discovered from the listing; provenance in `provenance.jsonl`). `join`
+matches every tornado row to DAT hazards within 5 km of the track and 30 min of
+its interval — Storm Data times are local *standard* time all year and converted
+with `CZ_TIMEZONE` — and writes `data/processed/storm_events_links_<tag>.csv`
+(`EVENT_ID`, `EPISODE_ID`, `WFO`, `hazard_uid`, distance, gap, ranks).
+Rows are county segments; `load_tornadoes` chains them into whole tornadoes by
+following each row's `TOR_OTHER_*` pointer to the row in the named office and
+county within 30 min (`TORNADO_KEY`), and joins episodes that share a tornado
+(`LINKED_EPISODE`) — which spans offices only where a tornado crossed between
+them. `report` writes `../local/archive/storm_events_report.md`: per-year completeness in
+tornadoes, both directions. One hazard can match several rows; the closest
+(`rank_for_hazard == 1`) gives the hazard's reference episode, and stage 25
+scores against both `EPISODE_ID` and `LINKED_EPISODE`.
+`--from-dir` reads details files from elsewhere, e.g. ones downloaded by hand.
+
+The same stage fetches SPC's `*_actual_tornadoes.csv` (one reviewed record per
+whole track, from <https://www.spc.noaa.gov/wcm/>) into `data/raw/spc/`, keeps
+`sg == 1` records in the window, converts SPC's CST to UTC, and matches them to
+DAT hazards by the same rule (`data/processed/spc_tornado_links_<tag>.csv`). It
+also matches every Storm Events row to its closest SPC track, which checks the
+`TOR_OTHER_*` chaining: a chain should land on exactly one SPC tornado
+(`data/interim/spc_chain_crosscheck_<tag>.json`, and a section of the report).
+Those row ↔ track pairs are kept (`data/processed/spc_storm_events_links_<tag>.csv`):
+they give each SPC track its Storm Events episode for stage 25's `--anchor spc`.
+A **second pass** takes the DAT hazards the strict rule leaves without an SPC
+track and links each to an SPC track within the same 5 km whose start differs
+by a whole number of hours, 1 ≤ |k| ≤ 48, to within 10 min
+(`--repair-max-residual-min`, `--repair-max-offset-h`; `--no-time-repair`
+skips it). These are DAT clock and date errors — the local clock stored as UTC
+(+4…+7 h), daylight saving (±1 h), a wrong date (±24 h) — and the offsets pile
+up on the minute, which random coincidences do not. The links are appended to
+the same file with `link_method = time_repaired`, `time_offset_h`,
+`offset_class` (its cause, `spc_tornadoes.offset_class`), `residual_min`,
+`spc_already_linked` (the SPC track also has a first-pass DAT hazard: probably a
+second survey) and `ef_agrees`; first-pass rows carry the same columns with
+offset 0, and every row an `id_date` check (does a date written in DAT's
+free-text `event_id` side with SPC or with DAT). DAT's own times are not
+changed. The report checks the pass three ways that do not use the time field:
+the residual distribution against its far-from-the-hour density (an upper
+bound on chance pairs), rating agreement against the first pass and against
+chance (from which the share of wrong pairs follows), and the `event_id` dates.
+What is still unmatched goes to `data/interim/spc_unmatched_dat_<tag>.csv`
+with its nearest SPC track within 20 km and 72 h, for a hand check.
+SPC's `om` is a per-year number up to September 2007 and a text identifier
+(`YYMMDDHHMM-NN`, start time in CST plus a sequence) after; `spc_id` keeps it as text.
+`--spc-file` uses a file from elsewhere; without one, the SPC part is skipped.
+
