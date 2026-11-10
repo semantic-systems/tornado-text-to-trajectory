@@ -20,6 +20,10 @@ tabulate~=0.9      # pandas.DataFrame.to_markdown in the QA report
 # Corpus viewer (scripts/16_viewer.py) — local, single-user Flask app
 flask~=3.1
 
+# Browsing the Wikipedia tables (scripts/browse_wikipedia.py)
+datasette~=0.65
+sqlite-utils~=3.38
+
 # Article full-text extraction (scripts/21_fetch_fulltext.py)
 trafilatura~=2.2
 

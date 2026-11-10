@@ -520,7 +520,15 @@ python scripts/24_wikipedia_reference_coverage.py fetch      # resumable, hours
 python scripts/24_wikipedia_reference_coverage.py match
 python scripts/25_wikipedia_passages.py                      # no network
 python scripts/26_wikipedia_cited_news.py                    # no network
+python scripts/browse_wikipedia.py                           # browse it all at localhost:8001
 ```
+
+`browse_wikipedia.py` loads the Wikipedia tables (passages, cited news, the
+citations between them, pages, refs, census) into one SQLite file,
+`data/processed/wikipedia_browse.db`, with full-text search on the texts, and
+serves it with [Datasette](https://datasette.io): click a value to filter,
+facet counts above each table, one page per record with its full text. It binds
+to 127.0.0.1 only, since the cited news texts are copyrighted.
 
 Linking the passages and cited articles to DAT hazards is not done yet; it needs
 the hazard tables.
