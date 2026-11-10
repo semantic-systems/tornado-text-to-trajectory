@@ -98,7 +98,8 @@ def load_events(tag: str):
     """Episode and hazard records, indexed by convective day."""
     hazards = episode_table.hazards_with_episodes(tag)
     episodes = pd.read_csv(config.PROCESSED_DIR / f"episodes_{tag}.csv")
-    geography = pd.read_csv(config.PROCESSED_DIR / f"hazard_geography_{tag}.csv")
+    # DAT hazards only until this stage is revisited for SPC hazards (stage 15).
+    geography = episode_table.geography(tag)
 
     index = linking.ToponymIndex(geography.to_dict("records"))
 

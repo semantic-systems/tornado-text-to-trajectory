@@ -46,29 +46,160 @@ def ci(bounds: tuple[float, float]) -> str:
     return f"[{bounds[0]:.1%}, {bounds[1]:.1%}]"
 
 
-def episode_lines(episodes: pd.DataFrame | None) -> str:
-    """The episodes stage 15 built, for section 5."""
-    if episodes is None or "n_spc" not in episodes.columns:
+STATUS_TEXT = {
+    "time_mismatch": "lies on an SPC track (≤5 km), at another time",
+    "probable_duplicate": "lies on an SPC track that already has a DAT hazard",
+    "spc_far": "nearest SPC track 5–20 km away",
+    "no_spc_nearby": "no SPC track within 20 km and 72 h",
+    "untimed_no_spc": "no time, no SPC track within 5 km on the date ±1 day",
+}
+
+
+def episode_lines(episodes: pd.DataFrame | None, manifest: dict | None,
+                  tag: str) -> str:
+    """The episodes and hazards stage 15 built, for section 5."""
+    if episodes is None or "has_dat" not in episodes.columns or manifest is None:
         return ("### Episodes\n\nNot available: run `scripts/15_build_episodes.py`, then "
                 "this stage again.\n")
-    spc = episodes[episodes.in_spc.astype(bool)]
+    c = manifest["counts"]
+    with_dat = episodes[episodes.has_dat.astype(bool)]
     days = episodes.convective_days.fillna("").str.count(";") + 1
-    sizes = spc.n_dat.describe(percentiles=[.5, .9])
+    roles = c.get("spc_track_roles", {})
+    status = c.get("dat_match_status", {})
+    left = {k: v for k, v in status.items() if k != "linked"}
+    n_left = sum(left.values())
+    member_path = config.PROCESSED_DIR / f"hazard_episodes_{tag}.csv"
+    with_se = None
+    if member_path.exists() and refs.se_links_path(tag).exists():
+        member = pd.read_csv(member_path)
+        no_spc = set(member.hazard_uid[(member.hazard_source == "dat") & ~member.in_spc])
+        with_se = len(no_spc & set(pd.read_csv(refs.se_links_path(tag)).hazard_uid))
+    se_sentence = ("" if with_se is None else
+                   f"{with_se:,} of them {'has' if with_se == 1 else 'have'} a Storm Events row: "
+                   "at DAT's time and place, the others are not in the official record as a "
+                   "tornado either. ")
+    status_rows = "\n".join(f"| `{k}` | {STATUS_TEXT.get(k, '')} | {v:,} |"
+                            for k, v in sorted(left.items(), key=lambda kv: -kv[1]))
+
+    def sizes(f: pd.DataFrame, col: str) -> str:
+        d = f[col].describe(percentiles=[.5, .9])
+        return f"{d['50%']:.0f} / {d['90%']:.0f} / {d['max']:.0f}"
+
     return f"""### Episodes (stage 15)
 
 Stage 15 groups SPC's complete tornado list by single linkage within
-{config.EPISODE_MAX_DISTANCE_M / 1000:g} km and {config.EPISODE_MAX_GAP_H:g} h (no day boundary)
-and carries the groups to these hazards: **{len(episodes):,} episodes**,
-{len(spc):,} built from SPC tracks and {len(episodes) - len(spc):,} single hazards with no
-SPC track (`in_spc` false).
+{config.EPISODE_MAX_DISTANCE_M / 1000:g} km and {config.EPISODE_MAX_GAP_H:g} h (no day boundary).
+SPC is the population: **all {len(episodes):,} episodes are published**, {len(with_dat):,} of
+them (`has_dat`) holding at least one DAT survey.
 
-| | value |
-|---|---:|
-| hazards per SPC-built episode, median / p90 / max | {sizes['50%']:.0f} / {sizes['90%']:.0f} / {sizes['max']:.0f} |
-| SPC tornadoes per SPC-built episode, max | {int(spc.n_spc.max()):,} |
-| episodes spanning several convective days | {int((days > 1).sum()):,} |
-| episodes with ≥6 EF1+ SPC tornadoes (Fuhrmann et al.'s threshold) | {int((spc.n_spc_ef1plus >= 6).sum()):,} |
-| SPC tornadoes / DAT hazards in the SPC-built episodes | {int(spc.n_spc.sum()):,} / {int(spc.n_dat.sum()):,} |
+| | all episodes | with a DAT survey |
+|---|---:|---:|
+| episodes | {len(episodes):,} | {len(with_dat):,} |
+| SPC tornadoes per episode, median / p90 / max | {sizes(episodes, 'n_spc')} | {sizes(with_dat, 'n_spc')} |
+| single-tornado episodes | {int((episodes.n_spc == 1).sum()):,} | {int((with_dat.n_spc == 1).sum()):,} |
+| episodes spanning several convective days | {int((days > 1).sum()):,} | {int((days[with_dat.index] > 1).sum()):,} |
+| episodes with ≥6 EF1+ SPC tornadoes (Fuhrmann et al.'s threshold) | {int((episodes.n_spc_ef1plus >= 6).sum()):,} | {int((with_dat.n_spc_ef1plus >= 6).sum()):,} |
+| SPC fatalities | {int(episodes.spc_fatalities.sum()):,} | {int(with_dat.spc_fatalities.sum()):,} |
+
+**Hazards.** The {c['spc_tracks']:,} SPC tornadoes are, in DAT terms:
+{roles.get('dat_closest', 0):,} the closest SPC track of a DAT hazard,
+{roles.get('dat_secondary', 0):,} linked to a DAT hazard without being its closest (mostly a
+piece of the same tornado; not a hazard, or one tornado would count twice) and
+**{roles.get('spc_hazard', 0):,} with no DAT link at all, which become hazards of their own**
+(`hazard_source = spc`): SPC's straight start→end line, or a point (`spc_point`) for the
+{c.get('spc_hazard_geometry', {}).get('spc_point', 0):,} SPC records no end for.
+Together with the {c['dat_hazards_in_episodes']:,} DAT hazards that have an SPC track, the
+episodes hold {c['dat_hazards_in_episodes'] + c['spc_hazards']:,} hazards.
+
+**DAT hazards without an SPC track: {n_left:,}.** They are in no episode and stay in the
+hazards table, `in_spc` false, so they neither count as episodes nor disappear:
+
+| `spc_match_status` | meaning | hazards |
+|---|---|---:|
+{status_rows}
+
+{se_sentence}`time_mismatch` and `probable_duplicate` are most
+likely tornadoes that are in SPC, with a DAT time error beyond stage 14's repair rule
+or a second survey; the rest are candidates for tornadoes reclassified, never
+submitted, or entered in error. The nearest SPC track and its offset are in
+`hazard_episodes_<tag>.csv`.
+"""
+
+
+def geography_lines(manifest: dict | None) -> str:
+    """Stage 16's counties, offices and places, for section 5."""
+    if manifest is None or "dat" not in manifest.get("counts", {}):
+        return ("### Geography (stage 16)\n\nNot available: run "
+                "`scripts/16_enrich_geography.py`, then this stage again.\n")
+    c = manifest["counts"]
+    agree = c["wfo_agreement_dat_hazards"]
+    check = c["spc_line_check"]
+    pop = c.get("population_join", {})
+    s = c["settings"]
+
+    def source_row(src: str) -> str:
+        d = c.get(src)
+        if not d:
+            return ""
+        w = d["wfo_source"]
+        return (f"| {src.upper()} | {d['hazards']:,} | {pct(d['wfo_known'], d['hazards'])} | "
+                f"{w.get('dat', 0):,} | {w.get('storm_events', 0):,} | "
+                f"{w.get('spatial_join', 0):,} | {d['county_fallback']:,} | "
+                f"{pct(d['hazards_with_places'], d['hazards'])} | "
+                f"{pct(d['hazards_with_a_town_over_20k'], d['hazards'])} |")
+
+    def pair(name: str, label: str) -> str:
+        v = agree[name]
+        return (f"| {label} | {v['hazards']:,} | {pct(v['any_office_shared'] or 0, 1)} | "
+                f"{pct(v['same_offices'] or 0, 1)} |")
+
+    def check_row(label: str, v: dict) -> str:
+        return (f"| {label} | {v['pairs']:,} | {pct(v['county_recall_mean'], 1)} | "
+                f"{pct(v['county_sets_equal'], 1)} | {pct(v['near_place_recall_mean'], 1)} | "
+                f"{pct(v['matching_place_recall_mean'], 1)} | {pct(v['spatial_wfo_equal'], 1)} |")
+
+    return f"""### Geography (stage 16)
+
+Counties come from the NWS county polygons of the hazard's year; a county counts when
+it holds {s['county_min_share']:.0%} of the track (or {s['county_min_track_m'] / 1000:g} km of it; of the damage
+area for a hazard without a track line), and the one with most of it always counts.
+The office is DAT's own, else that of the linked Storm Events segments (the one where
+the tornado began first), else the county join's; `wfo_all` keeps every office of
+every source.
+
+| hazards | n | office known | from DAT | from Storm Events | from county join | nearest-county fallback | with place names | with a town ≥20k |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+{source_row('dat')}
+{source_row('spc')}
+
+Agreement of the three office sources on DAT hazards where both have one:
+
+| sources | hazards | share an office | same offices |
+|---|---:|---:|---:|
+{pair('dat_vs_storm_events', 'DAT vs Storm Events')}
+{pair('dat_vs_spatial_join', 'DAT vs county join')}
+{pair('storm_events_vs_spatial_join', 'Storm Events vs county join')}
+
+Hazards with several offices: DAT {agree['several_offices']['dat']:,}, Storm Events
+{agree['several_offices']['storm_events']:,}, county join {agree['several_offices']['spatial_join']:,}.
+
+**Places** are GNIS populated places, ranked by Census 2024 population. Each Census
+place's population goes to the same-named GNIS place nearest its Census Gazetteer
+point ({pop.get('assigned', 0):,} of {pop.get('census_places', 0):,} incorporated places). For
+{pop.get('ambiguous_names_resolved', 0):,} of them the name occurs more than once in the state; the
+namesakes get no population, where a join by name gave it to all of them. Names and
+populations are today's, not the event year's.
+
+**How well a straight SPC line stands in for a surveyed track.** For each DAT hazard
+with an SPC track, the geography of the SPC line against that of the DAT geometry:
+
+| SPC geometry | pairs | counties found (mean) | same counties | places ≤{s['place_match_radius_m'] / 1000:g} km found (mean) | matching set found (mean) | same county-join office |
+|---|---:|---:|---:|---:|---:|---:|
+{check_row('line', check['spc_lines'])}
+{check_row('point (no end)', check['spc_points'])}
+{check_row('all', check['all'])}
+
+This is the accuracy to expect of the {c.get('spc', {}).get('hazards', 0):,} SPC hazards' geography.
 """
 
 
@@ -89,6 +220,12 @@ def main() -> None:
     hazards = pd.read_csv(config.PROCESSED_DIR / f"hazards_{tag}.csv")
     episodes_csv = config.PROCESSED_DIR / f"episodes_{tag}.csv"
     episodes = pd.read_csv(episodes_csv) if episodes_csv.exists() else None
+
+    def manifest(name: str) -> dict | None:
+        path = config.PROCESSED_DIR / f"manifest_{name}_{tag}.json"
+        return json.loads(path.read_text()) if path.exists() else None
+
+    episode_manifest, geography_manifest = manifest("episodes"), manifest("geography")
     fetch_manifest = json.loads((config.INTERIM_DIR / f"manifest_fetch_{tag}.json").read_text())
     link_manifest = json.loads((config.INTERIM_DIR / f"manifest_link_{tag}.json").read_text())
     hazard_counts = json.loads((config.PROCESSED_DIR / f"manifest_hazards_{tag}.json")
@@ -214,7 +351,16 @@ used nowhere. {hazard_counts.get('polygons_in_polygon_hazards', 0):,} polygons w
 line form the {int(by_source.get('polygon', 0)):,} polygon-only hazards
 ({hazard_counts.get('polygon_hazards_date_only', 0):,} of them with a date but no time).
 """)
-    episodes_md = episode_lines(episodes)
+    episodes_md = episode_lines(episodes, episode_manifest, tag)
+    geography_md = geography_lines(geography_manifest)
+    dat_geo = (geography_manifest or {}).get("counts", {}).get("dat")
+    wfo_limitation = (
+        f"**WFO is missing from DAT on {pct(len(hazards) - hazards.wfo_known.sum(), len(hazards))} "
+        f"of hazards**; stage 16 fills it from Storm Events and the county join, leaving "
+        f"{pct(dat_geo['hazards'] - dat_geo['wfo_known'], dat_geo['hazards'])} without one."
+        if dat_geo else
+        f"**WFO is missing on {pct(len(hazards) - hazards.wfo_known.sum(), len(hazards))} of "
+        "hazards**, which will constrain the NWS/IEM text retrieval until stage 16 fills it.")
     reference_lines = refs.report_lines(tag)
     references_md = "\n".join(reference_lines) if reference_lines is not None else (
         "Not available: run `scripts/13_fetch_references.py` and "
@@ -371,6 +517,7 @@ Merge evidence for multi-line hazards (why segments were joined):
 {hazards[hazards.n_lines > 1].merge_evidence.fillna('(none recorded)').value_counts().rename_axis('evidence').reset_index(name='hazards').to_markdown(index=False)}
 
 {episodes_md}
+{geography_md}
 Hazards per year and polygon-field population: `figures/dat_coverage.png`.
 Calibration and operating points: `figures/dat_linker_evaluation.png`.
 
@@ -386,9 +533,10 @@ Calibration and operating points: `figures/dat_linker_evaluation.png`.
    {', '.join(gold_years)}, an editing-practice subsample rather than a random one.
 3. **{pct(len(unlinked), len(polygons))} of polygons carry no track line** — mostly by design, but this
    limits how many hazards have both geometry roles ({pct(hazards.has_polygon.sum(), len(hazards))} do).
-4. **WFO is missing on {pct(len(hazards) - hazards.wfo_known.sum(), len(hazards))} of hazards**, which will constrain the NWS/IEM
-   text retrieval in Stage B until it is backfilled from the CWA polygons.
-5. **The window is fixed at {config.WINDOW_START.year}-{config.WINDOW_END.year}.** DAT is edited retroactively, so a
+4. {wfo_limitation}
+5. **SPC hazards have SPC's straight start→end line**, not a surveyed track; their
+   geography is as accurate as the SPC-line check in section 5 says.
+6. **The window is fixed at {config.WINDOW_START.year}-{config.WINDOW_END.year}.** DAT is edited retroactively, so a
    later rerun may differ; `retrieved_at` in each manifest pins this snapshot.
 """
 

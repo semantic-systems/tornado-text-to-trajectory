@@ -267,18 +267,88 @@ Merge evidence for multi-line hazards (why segments were joined):
 ### Episodes (stage 15)
 
 Stage 15 groups SPC's complete tornado list by single linkage within
-400 km and 6 h (no day boundary)
-and carries the groups to these hazards: **2,585 episodes**,
-2,130 built from SPC tracks and 455 single hazards with no
-SPC track (`in_spc` false).
+400 km and 6 h (no day boundary).
+SPC is the population: **all 4,325 episodes are published**, 2,130 of
+them (`has_dat`) holding at least one DAT survey.
 
-| | value |
-|---|---:|
-| hazards per SPC-built episode, median / p90 / max | 2 / 12 / 130 |
-| SPC tornadoes per SPC-built episode, max | 297 |
-| episodes spanning several convective days | 145 |
-| episodes with ≥6 EF1+ SPC tornadoes (Fuhrmann et al.'s threshold) | 347 |
-| SPC tornadoes / DAT hazards in the SPC-built episodes | 15,338 / 10,861 |
+| | all episodes | with a DAT survey |
+|---|---:|---:|
+| episodes | 4,325 | 2,130 |
+| SPC tornadoes per episode, median / p90 / max | 1 / 10 / 297 | 2 / 19 / 297 |
+| single-tornado episodes | 2,259 | 786 |
+| episodes spanning several convective days | 160 | 145 |
+| episodes with ≥6 EF1+ SPC tornadoes (Fuhrmann et al.'s threshold) | 386 | 347 |
+| SPC fatalities | 1,318 | 1,101 |
+
+**Hazards.** The 20,164 SPC tornadoes are, in DAT terms:
+10,711 the closest SPC track of a DAT hazard,
+1,009 linked to a DAT hazard without being its closest (mostly a
+piece of the same tornado; not a hazard, or one tornado would count twice) and
+**8,444 with no DAT link at all, which become hazards of their own**
+(`hazard_source = spc`): SPC's straight start→end line, or a point (`spc_point`) for the
+1,533 SPC records no end for.
+Together with the 10,861 DAT hazards that have an SPC track, the
+episodes hold 19,305 hazards.
+
+**DAT hazards without an SPC track: 455.** They are in no episode and stay in the
+hazards table, `in_spc` false, so they neither count as episodes nor disappear:
+
+| `spc_match_status` | meaning | hazards |
+|---|---|---:|
+| `no_spc_nearby` | no SPC track within 20 km and 72 h | 201 |
+| `time_mismatch` | lies on an SPC track (≤5 km), at another time | 112 |
+| `untimed_no_spc` | no time, no SPC track within 5 km on the date ±1 day | 52 |
+| `spc_far` | nearest SPC track 5–20 km away | 46 |
+| `probable_duplicate` | lies on an SPC track that already has a DAT hazard | 44 |
+
+1 of them has a Storm Events row: at DAT's time and place, the others are not in the official record as a tornado either. `time_mismatch` and `probable_duplicate` are most
+likely tornadoes that are in SPC, with a DAT time error beyond stage 14's repair rule
+or a second survey; the rest are candidates for tornadoes reclassified, never
+submitted, or entered in error. The nearest SPC track and its offset are in
+`hazard_episodes_<tag>.csv`.
+
+### Geography (stage 16)
+
+Counties come from the NWS county polygons of the hazard's year; a county counts when
+it holds 5% of the track (or 1 km of it; of the damage
+area for a hazard without a track line), and the one with most of it always counts.
+The office is DAT's own, else that of the linked Storm Events segments (the one where
+the tornado began first), else the county join's; `wfo_all` keeps every office of
+every source.
+
+| hazards | n | office known | from DAT | from Storm Events | from county join | nearest-county fallback | with place names | with a town ≥20k |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| DAT | 11,316 | 100.0% | 4,425 | 5,790 | 1,101 | 16 | 99.9% | 72.6% |
+| SPC | 8,444 | 100.0% | 0 | 8,367 | 77 | 49 | 99.8% | 58.0% |
+
+Agreement of the three office sources on DAT hazards where both have one:
+
+| sources | hazards | share an office | same offices |
+|---|---:|---:|---:|
+| DAT vs Storm Events | 4,024 | 100.0% | 98.5% |
+| DAT vs county join | 4,425 | 99.9% | 98.6% |
+| Storm Events vs county join | 9,814 | 99.9% | 99.0% |
+
+Hazards with several offices: DAT 139, Storm Events
+282, county join 286.
+
+**Places** are GNIS populated places, ranked by Census 2024 population. Each Census
+place's population goes to the same-named GNIS place nearest its Census Gazetteer
+point (19,362 of 19,479 incorporated places). For
+1,670 of them the name occurs more than once in the state; the
+namesakes get no population, where a join by name gave it to all of them. Names and
+populations are today's, not the event year's.
+
+**How well a straight SPC line stands in for a surveyed track.** For each DAT hazard
+with an SPC track, the geography of the SPC line against that of the DAT geometry:
+
+| SPC geometry | pairs | counties found (mean) | same counties | places ≤25 km found (mean) | matching set found (mean) | same county-join office |
+|---|---:|---:|---:|---:|---:|---:|
+| line | 10,701 | 98.6% | 95.8% | 98.0% | 98.1% | 99.5% |
+| point (no end) | 160 | 97.8% | 95.0% | 96.6% | 96.9% | 100.0% |
+| all | 10,861 | 98.6% | 95.8% | 98.0% | 98.1% | 99.5% |
+
+This is the accuracy to expect of the 8,444 SPC hazards' geography.
 
 Hazards per year and polygon-field population: `figures/dat_coverage.png`.
 Calibration and operating points: `figures/dat_linker_evaluation.png`.
@@ -406,7 +476,8 @@ Most common class per year (repaired hazards): 2010 dst (2), 2011 local_as_utc (
    2017, 2020, 2021, 2022, 2023, 2024, 2025, an editing-practice subsample rather than a random one.
 3. **29.5% of polygons carry no track line** — mostly by design, but this
    limits how many hazards have both geometry roles (38.4% do).
-4. **WFO is missing on 60.9% of hazards**, which will constrain the NWS/IEM
-   text retrieval in Stage B until it is backfilled from the CWA polygons.
-5. **The window is fixed at 2010-2025.** DAT is edited retroactively, so a
+4. **WFO is missing from DAT on 60.9% of hazards**; stage 16 fills it from Storm Events and the county join, leaving 0.0% without one.
+5. **SPC hazards have SPC's straight start→end line**, not a surveyed track; their
+   geography is as accurate as the SPC-line check in section 5 says.
+6. **The window is fixed at 2010-2025.** DAT is edited retroactively, so a
    later rerun may differ; `retrieved_at` in each manifest pins this snapshot.

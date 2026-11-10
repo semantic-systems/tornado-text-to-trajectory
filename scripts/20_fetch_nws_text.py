@@ -55,8 +55,9 @@ def load_hazards(tag: str) -> list[dict]:
         if geom is None:
             continue
         info = geography.get(props["hazard_uid"], {})
-        wfos = {w for w in str(info.get("wfo_dat") or "").split(";") if w}
-        wfos |= {w for w in str(info.get("wfo_spatial") or "").split(";") if w}
+        # Every office of every source (stage 16); older tables had two columns.
+        wfos = {w for col in ("wfo_all", "wfo_dat", "wfo_spatial")
+                for w in str(info.get(col) or "").split(";") if w and w != "nan"}
         names = {n.strip() for n in str(info.get("places") or "").split(";") if len(n.strip()) > 3}
         names |= {c.split(",")[0].strip() for c in str(info.get("counties") or "").split(";")
                   if len(c.split(",")[0].strip()) > 3}

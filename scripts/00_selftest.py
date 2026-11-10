@@ -476,37 +476,104 @@ def episode_counts_cover_all_spc_tornadoes() -> None:
     assert c.n_spc_unrated.tolist() == [1, 0] and c.n_dat.tolist() == [1, 2], c
 
 
-def episodes_come_from_spc_and_keep_every_hazard() -> None:
-    """SPC groups carried to DAT; an unmatched hazard stands alone; no-DAT groups unpublished."""
+def every_spc_episode_is_published_with_its_hazards() -> None:
+    """All SPC groups published; DAT hazards carried over, unlinked SPC tornadoes as hazards."""
     import pandas as pd
     from tornado_dataset.dat import episode_table as et
-    t = pd.to_datetime(["2020-04-12T11:00", "2020-04-12T13:00", "2020-05-01T20:00"], utc=True)
-    frame = pd.DataFrame({"hazard_uid": ["s1", "s2", "s3"], "t0": t, "t1": t,
-                          "convective_day": ["2020-04-11", "2020-04-12", "2020-05-01"],
-                          "mag": [1, -9, 2]})
-    tracks = pd.DataFrame({"spc_id": ["s1", "s2", "s3"], "fat": [1, 0, 0], "inj": [2, 0, 5]})
-    labels = pd.Series([0, 0, 1])                    # s1 + s2 one episode across 12 UTC
-    hazards = pd.DataFrame({"hazard_uid": ["h1", "h2", "h3"], "convective_day": ["2020-04-11"] * 3,
-                            "time_begin_utc": ["2020-04-12T11:00+00:00"] * 3,
-                            "time_end_utc": [None] * 3, "efscale": ["EF1", "EF2", "EF0"],
-                            "fatalities": [1, 0, 0], "injuries": [0, 0, 0],
-                            "wfo_all": ["OUN", "OUN;TSA", None]})
-    links = pd.DataFrame({"hazard_uid": ["h1", "h2"], "spc_id": ["s1", "s1"],
-                          "rank_for_hazard": [1, 1], "link_method": ["spatial_temporal_join",
-                                                                     "time_repaired"]})
-    episodes, member, grouping = et.build(frame, labels, tracks, hazards, links)
-    assert len(episodes) == 2 and member.hazard_uid.tolist() == ["h1", "h2", "h3"]
-    big = episodes[episodes.in_spc].iloc[0]
-    assert (big.n_dat, big.n_spc, big.n_spc_ef1plus, big.n_spc_unrated) == (2, 2, 1, 1), big
+    t = pd.to_datetime(["2020-04-12T11:00", "2020-04-12T13:00", "2020-05-01T20:00",
+                        "2020-04-12T12:00"], utc=True)
+    frame = pd.DataFrame({"hazard_uid": ["s1", "s2", "s3", "s4"], "t0": t, "t1": t,
+                          "convective_day": ["2020-04-11", "2020-04-12", "2020-05-01",
+                                             "2020-04-12"], "mag": [1, -9, 2, 0]})
+    tracks = pd.DataFrame({"spc_id": ["s1", "s2", "s3", "s4"], "fat": [1, 0, 3, 0],
+                           "inj": [2, 0, 5, 0], "len": [1.0] * 4, "wid": [50] * 4,
+                           "st": ["OK"] * 4})
+    labels = pd.Series([0, 0, 1, 0])          # s1, s2, s4 one episode across 12 UTC; s3 alone
+    hazards = pd.DataFrame({"hazard_uid": ["h1", "h2", "h3", "h4"],
+                            "convective_day": ["2020-04-11"] * 4,
+                            "time_begin_utc": ["2020-04-12T11:00+00:00"] * 3 + [None],
+                            "time_end_utc": [None] * 4, "efscale": ["EF1", "EF2", "EF0", "EF0"],
+                            "fatalities": [1, 0, 0, 0], "injuries": [0, 0, 0, 0],
+                            "wfo_all": ["OUN", "OUN;TSA", None, None]})
+    links = pd.DataFrame({"hazard_uid": ["h1", "h2", "h1"], "spc_id": ["s1", "s1", "s4"],
+                          "rank_for_hazard": [1, 1, 2],
+                          "link_method": ["spatial_temporal_join", "time_repaired",
+                                          "spatial_temporal_join"]})
+    unmatched = pd.DataFrame({"hazard_uid": ["h3", "h4"],
+                              "time_begin_utc": ["2020-04-12T11:00+00:00", None],
+                              "nearest_spc_id": ["s1", None], "nearest_distance_km": [0.0, None],
+                              "nearest_offset_h": [24.0, None]})
+    episodes, member, grouping, spc_hazards = et.build(frame, labels, tracks, hazards, links,
+                                                       unmatched=unmatched)
+    assert len(episodes) == 2, "every SPC group is published, with or without DAT"
+    big = episodes[episodes.has_dat].iloc[0]
+    assert (big.n_dat, big.n_spc_hazards, big.n_spc, big.n_spc_ef1plus, big.n_spc_unrated) \
+        == (2, 1, 3, 1, 1), big
     assert big.convective_days == "2020-04-11;2020-04-12" and big.max_efscale == "EF2"
     assert big.wfos == "OUN;TSA" and big.spc_fatalities == 1
-    alone = episodes[~episodes.in_spc].iloc[0]
-    assert alone.hazard_uids == "h3" and alone.n_spc == 0
-    assert member.set_index("hazard_uid").spc_link_method.to_dict() == {
-        "h1": "spatial_temporal_join", "h2": "time_repaired", "h3": "none"}
-    assert grouping.set_index("spc_id").has_dat.to_dict() == {"s1": True, "s2": True, "s3": False}
-    again, _, _ = et.build(frame, labels, tracks, hazards.iloc[:2], links)
+    lone = episodes[~episodes.has_dat].iloc[0]
+    assert lone.n_spc_hazards == 1 and pd.isna(lone.fatalities) and lone.spc_fatalities == 3
+    roles = grouping.set_index("spc_id").role.to_dict()
+    assert roles == {"s1": "dat_closest", "s2": "spc_hazard", "s3": "spc_hazard",
+                     "s4": "dat_secondary"}, roles
+    assert sorted(spc_hazards.spc_id) == ["s2", "s3"], "a linked SPC track is no hazard"
+    assert spc_hazards.set_index("spc_id").efscale.to_dict() == {"s2": "EFU", "s3": "EF2"}
+    m = member.set_index("hazard_uid")
+    assert m.loc[["h3", "h4"]].episode_uid.isna().all(), "no SPC track, no episode"
+    assert m.spc_match_status.loc[["h1", "h3", "h4"]].tolist() == [
+        "linked", "probable_duplicate", "untimed_no_spc"]
+    again, _, _, _ = et.build(frame, labels, tracks, hazards.iloc[:2], links)
     assert big.episode_uid in set(again.episode_uid), "episode ids rest on SPC tracks only"
+
+
+def populations_go_to_the_nearest_namesake() -> None:
+    """A Census population goes to the same-named GNIS place nearest its point, not to all."""
+    from tornado_dataset.geo import gazetteer as gz
+    places = [{"name": "Oxford", "state": "Mississippi", "lat": 34.37, "lon": -89.52},
+              {"name": "Oxford", "state": "Mississippi", "lat": 31.10, "lon": -90.80},
+              {"name": "Oklahoma City", "state": "Oklahoma", "lat": 35.47, "lon": -97.52},
+              {"name": "Lexington", "state": "Kentucky", "lat": 38.05, "lon": -84.50},
+              {"name": "Lexington-Fayette", "state": "Kentucky", "lat": 38.04, "lon": -84.46}]
+    census = [{"name": "Oxford city", "state": "mississippi", "population": 26801,
+               "lat": 34.36, "lon": -89.53, "aland_m2": 6e7},
+              {"name": "Oklahoma City city", "state": "oklahoma", "population": 712919,
+               "lat": 35.47, "lon": -97.51, "aland_m2": 1.5e9},
+              {"name": "Lexington-Fayette urban county", "state": "kentucky",
+               "population": 329437, "lat": 38.04, "lon": -84.46, "aland_m2": 7e8}]
+    stats = gz.assign_population(places, census)
+    assert [p["population"] for p in places] == [26801, 0, 712919, 329437, 0], places
+    assert stats["assigned"] == 3 and stats["ambiguous_names_resolved"] == 1, stats
+
+
+def place_and_county_names_fold() -> None:
+    """Legal suffixes come off Census names only; county spellings meet."""
+    from tornado_dataset.geo import gazetteer as gz
+    assert gz.canonical_place_key("Oklahoma City") == "oklahoma city"
+    assert gz.canonical_place_key("Oklahoma City city", census=True) == "oklahoma city"
+    assert gz.canonical_place_key("Saint Louis") == gz.canonical_place_key("St. Louis")
+    assert gz._census_keys("Weymouth Town city")[:2] == ["weymouth town", "weymouth"]
+    assert gz._census_keys("Lexington-Fayette urban county")[0] == "lexington"
+    for a, b in (("De Kalb", "DeKalb"), ("Prince Georges", "Prince George's"),
+                 ("Dona Ana", "Doña Ana"), ("City of Richmond", "Richmond (city)"),
+                 ("Mainland Dare", "Dare")):
+        assert gz.county_key(a) == gz.county_key(b), (a, b)
+    assert gz.county_key("Richmond (city)") != gz.county_key("Richmond")
+
+
+def counties_need_a_share_and_offices_an_order() -> None:
+    """A track grazing a county does not add it; the office follows DAT, Storm Events, counties."""
+    from shapely.geometry import LineString, box
+    from tornado_dataset.geo import gazetteer as gz
+    a = {"ugc": "A", "proj": box(0, 0, 10_000, 10_000)}
+    b = {"ugc": "B", "proj": box(10_000, 0, 20_000, 10_000)}
+    shares, unit = gz.county_shares(LineString([(1_000, 5_000), (10_300, 5_000)]), [a, b])
+    assert unit == "length" and [c["ugc"] for c in gz.keep_counties(shares, unit)] == ["A"]
+    shares, unit = gz.county_shares(LineString([(1_000, 5_000), (19_000, 5_000)]), [a, b])
+    assert {c["ugc"] for c in gz.keep_counties(shares, unit)} == {"A", "B"}
+    assert gz.choose_wfo(["TSA", "OUN"], ["OUN", "TSA"], []) == ("OUN", "dat", ["OUN", "TSA"])
+    assert gz.choose_wfo([], ["LZK"], ["MEG", "LZK"]) == ("LZK", "storm_events", ["LZK", "MEG"])
+    assert gz.choose_wfo([], [], ["MEG"])[:2] == ("MEG", "spatial_join")
+    assert gz.choose_wfo([], [], []) == (None, "none", [])
 
 
 def accents_do_not_make_duplicates() -> None:
@@ -738,7 +805,11 @@ for name, fn in [
     ("DAT reference extends through SPC", dat_reference_extends_through_spc),
     ("spc episodes carry to DAT hazards", spc_episodes_carry_to_dat_hazards),
     ("episode counts cover all SPC tornadoes", episode_counts_cover_all_spc_tornadoes),
-    ("episodes come from SPC and keep every hazard", episodes_come_from_spc_and_keep_every_hazard),
+    ("every SPC episode is published with its hazards",
+     every_spc_episode_is_published_with_its_hazards),
+    ("populations go to the nearest namesake", populations_go_to_the_nearest_namesake),
+    ("place and county names fold", place_and_county_names_fold),
+    ("counties need a share, offices an order", counties_need_a_share_and_offices_an_order),
     ("accents do not make duplicates", accents_do_not_make_duplicates),
     ("wind features are not tornadoes", wind_features_are_not_tornadoes),
     ("unclaimed polygons become hazards", unclaimed_polygons_become_hazards),

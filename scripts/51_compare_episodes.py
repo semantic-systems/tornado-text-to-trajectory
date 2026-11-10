@@ -171,7 +171,10 @@ class Projection:
             tag, ["hazard_uid", "episode_uid", "time_begin_utc"])
         self.dat = hz
         self.year = pd.to_datetime(hz.time_begin_utc, utc=True, errors="coerce").dt.year
-        self.published = pd.Series(pd.factorize(hz.episode_uid)[0], index=hz.index)
+        # A DAT hazard with no SPC track is in no episode: a group of its own here,
+        # as the methods treat it, not one shared label for all of them.
+        self.published = pd.Series(pd.factorize(hz.episode_uid.fillna(hz.hazard_uid))[0],
+                                   index=hz.index)
         path = config.PROCESSED_DIR / f"spc_tornado_links_{tag}.csv"
         if not path.exists():
             raise SystemExit(f"no {path.name} — run scripts/14_match_references.py")

@@ -88,7 +88,8 @@ The gazetteer has **two separate place lists per hazard**, and the split matters
 Keeping them apart is what let the matching set grow ninefold without invalidating
 the GDELT cache. Selecting the eight *nearest* names was the single largest cause
 of missed links — it kept hamlets like *Buffalo Mop* and dropped *Tuscaloosa* —
-and prominence now comes from Census population estimates joined to GNIS. See
+and prominence now comes from Census population estimates joined to GNIS by name,
+state and location (stage 16). See
 [`docs/linking_coverage_analysis.md`](docs/linking_coverage_analysis.md).
 
 **Links are candidates until annotated.** `scripts/40_sample_annotation.py` draws
@@ -635,18 +636,80 @@ Offline. Groups SPC's complete tornado list (stage 14's `spc_tornadoes.csv`) by
 single linkage within `config.EPISODE_MAX_DISTANCE_M` (400 km, closest points of
 the straight tracks) and `EPISODE_MAX_GAP_H` (6 h, end of one tornado to start of
 the next), with no day boundary — the rule stage 51 compared with the
-alternatives — and gives each DAT hazard the episode of its closest SPC track
-(stage 14's links, time-repaired and date-only ones included). A hazard with no
-SPC track is an episode of its own (`in_spc` false; 455 of 11,316). Only episodes
-holding a DAT hazard are published: `data/processed/episodes_<tag>.csv` (first
-and all convective days, SPC start and end, `n_dat`, `n_spc`, `n_spc_ef1plus`,
-`n_spc_unrated`, SPC and DAT casualties, offices, member IDs) and
-`hazard_episodes_<tag>.csv` (hazard → episode, its SPC track and how it was
-matched). `data/interim/spc_episodes_<tag>.csv` keeps the grouping of every SPC
-track. Episode IDs hash the method and the member SPC tracks, so they are stable
-across reruns. The hazards table carries no episode; stages read it through
-`episode_table.hazards_with_episodes` or `episode_of`. Stops if stage 14's
-outputs are missing rather than grouping DAT alone. Stage 17 reports the result.
+alternatives.
+
+**SPC is the population: every SPC episode is published** (4,325), and `has_dat`
+flags the 2,130 holding a DAT survey. Publishing only those would make coverage
+follow DAT's adoption (10 such episodes in 2010, 212 in 2025) and drop outbreaks
+such as Joplin, 22 May 2011. Counts and distributions use all episodes; a user
+wanting surveyed tracks filters on `has_dat` (episodes) or `hazard_source`
+(hazards).
+
+The hazards of an episode come from two sources:
+
+- **DAT** (`hazard_source = dat`): each DAT hazard takes the episode of its closest
+  SPC track (stage 14's links, time-repaired and date-only ones included).
+- **SPC** (`hazard_source = spc`, 8,444): an SPC tornado with no DAT link at all is a
+  hazard of its own, `data/processed/spc_hazards_<tag>.csv`/`.geojson`, with SPC's
+  straight start→end line (`geometry_source = spc_line`; `spc_point` for the 1,533
+  SPC gives no end for). An SPC track linked to a DAT hazard without being its
+  closest (1,009; median distance 0 m — mostly a piece of the same tornado) is not,
+  or one tornado would count twice. `data/interim/spc_episodes_<tag>.csv` records
+  each track's `role`.
+
+A **DAT hazard with no SPC track** (455) is in no episode: counting it as one would
+add single-hazard episodes the official record does not confirm and count 44 probable
+duplicates twice; dropping it would hide what DAT holds. It stays in the hazards
+table, `in_spc` false, with `spc_match_status` and its nearest SPC track
+(`time_mismatch`, `probable_duplicate`, `spc_far`, `no_spc_nearby`,
+`untimed_no_spc`). Only one of the 455 has a Storm Events row either.
+
+Outputs: `data/processed/episodes_<tag>.csv` (first and all convective days, SPC
+start and end, `n_hazards`, `n_dat`, `n_spc_hazards`, `n_spc`, `n_spc_ef1plus`,
+`n_spc_unrated`, SPC casualties, DAT casualties and rating where it has DAT,
+offices from DAT and Storm Events, member IDs) and `hazard_episodes_<tag>.csv`
+(every DAT and SPC hazard → episode, SPC track, how it was matched, status).
+Episode IDs hash the method and the member SPC tracks, so they are stable across
+reruns. The hazards table carries no episode; stages read it through
+`episode_table.hazards_with_episodes`, `episode_of` or `geography`. Stops if
+stage 14's outputs are missing rather than grouping DAT alone. Stage 17 reports the
+result.
+
+### Geography — `scripts/16_enrich_geography.py`
+
+For every DAT and SPC hazard, from the hazard's geometry in equal-area metres:
+
+- **Counties** from the NWS county polygons of the hazard's year (IEM, one snapshot
+  per year, as offices are reorganised). A county counts when it holds
+  `config.COUNTY_MIN_SHARE` (5%) of the track, or `COUNTY_MIN_TRACK_M` (1 km) of it
+  — of the damage area for a hazard without a track line — and the county with
+  most of it always counts. The outlines are simplified for web display, so without
+  the threshold a track along a county line picked up its neighbour's office too
+  (323 hazards with several offices by the county join, against 282 by Storm
+  Events; now 286). No county intersecting → the nearest, `county_fallback`.
+- **WFO** (`gazetteer.choose_wfo`): DAT's own field, else the linked Storm Events
+  segments (stage 14; the office where the tornado began first), else the county
+  join. `wfo_source` says which; `wfo_all` keeps every office of every source, and
+  `wfo_dat`, `wfo_storm_events`, `wfo_spatial` each source's. The three agree on
+  98.5–99% of DAT hazards; every hazard has an office.
+- **Places** from GNIS: `places` (the eight nearest within 25 km — GDELT's query
+  terms, unchanged so its cache stays valid) and `places_matching` (see *Linking
+  articles to events*), ranked by Census 2024 population. A Census place's
+  population goes to the same-named GNIS place nearest its Census Gazetteer point
+  (`gazetteer.assign_population`), not to every place of that name: a join by name
+  and state alone gave a hamlet called Oxford in Amite County the population of
+  Oxford, Lafayette County, and 1,670 names occur more than once in a state.
+  Census legal suffixes ("Tuscaloosa city") are stripped from Census names only;
+  stripping them from GNIS too had left Oklahoma City, Kansas City and 700 other
+  "… City" places without a population.
+
+Stage 16 also measures how well a straight SPC line stands in for a surveyed track:
+for the 10,861 DAT hazards with an SPC track, the SPC line finds 98.6% of the
+counties and 98% of the places of the DAT geometry (stage 17, "Geography"). Names
+and populations are today's, not the event year's. Downloads and caches the NWS
+county polygons, GNIS, and the Census population and Gazetteer files in
+`data/raw/gazetteer/` when missing. Writes `data/processed/hazard_geography_<tag>.csv`
+(no episode: join `hazard_episodes` or use `episode_table.geography`).
 
 ### Comparing episode definitions — `scripts/51_compare_episodes.py`
 

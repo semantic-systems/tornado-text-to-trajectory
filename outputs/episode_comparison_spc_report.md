@@ -1,8 +1,8 @@
-# Episode definitions compared — Stage 25 (SPC tracks)
+# Episode definitions compared — Stage 51 (SPC tracks)
 
-> **Scope:** all 20,164 SPC whole tracks, grouped by each method below. Scores use the 20,008 matched to an NCEI Storm Events row (stage 24), whose `EPISODE_ID` is the reference. Stage 3's episodes are unchanged; this is evidence for deciding whether they should be.
+> **Scope:** all 20,164 SPC whole tracks, grouped by each method below. Scores use the 20,008 matched to an NCEI Storm Events row (stage 14), whose `EPISODE_ID` is the reference. This is the evidence behind the rule stage 15 publishes.
 
-Generated 2026-11-09T15:20:43+00:00. Stage 3's rule is applied here to SPC tracks, so its row is the convective-day rule on the complete tornado list, not stage 3's episodes; the projection table compares it with those.
+Generated 2026-11-09T21:01:39+00:00. `space_time 400km 6h`, carried to DAT hazards, reproduces stage 15's published episodes with ARI 1.0000 (exact).
 
 ## How to read the scores
 
@@ -16,7 +16,7 @@ Generated 2026-11-09T15:20:43+00:00. Stage 3's rule is applied here to SPC track
 
 | method | episodes | singletons | largest | p95 / max extent km | max h | multi-day | recall | recall linked | office precision | SE split | SE split linked |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| convective_day 200km (stage 3) | 5,336 | 55% | 173 | 632 / 1,849 | 24 | 0 | 0.95 | 0.88 | 0.81 | 7.1% | 7.5% |
+| convective_day 200km | 5,336 | 55% | 173 | 632 / 1,849 | 24 | 0 | 0.95 | 0.88 | 0.81 | 7.1% | 7.5% |
 | convective_day 100km | 7,050 | 59% | 130 | 328 / 1,429 | 23 | 0 | 0.89 | 0.81 | 0.82 | 19.6% | 21.0% |
 | convective_day 400km | 4,254 | 50% | 176 | 1,008 / 1,919 | 24 | 0 | 0.95 | 0.88 | 0.81 | 6.1% | 6.3% |
 | time-gap 6h, all ratings (Fuhrmann variant) | 2,867 | 34% | 304 | 2,771 / 7,808 | 55 | 170 | 0.98 | 0.98 | 0.81 | 3.6% | 3.9% |
@@ -44,7 +44,7 @@ SPC tracks are complete in every period, so differences between periods here are
 
 | method | 2010–2015 | 2016–2020 | 2021–2025 |
 |---|---:|---:|---:|
-| convective_day 200km (stage 3) | 0.94 | 0.94 | 0.95 |
+| convective_day 200km | 0.94 | 0.94 | 0.95 |
 | convective_day 100km | 0.90 | 0.88 | 0.89 |
 | convective_day 400km | 0.94 | 0.94 | 0.95 |
 | time-gap 6h, all ratings (Fuhrmann variant) | 0.99 | 0.97 | 0.98 |
@@ -68,7 +68,7 @@ SPC tracks are complete in every period, so differences between periods here are
 
 ## Against SPC watches: upper and lower bounds
 
-Scored on the 14,918 SPC whole tracks in a watch (stage 26; unwatched tornadoes — about a quarter, mostly weak — are left out). Watches are how SPC organised the threat in real time, across offices: an operational and communication unit, not a physical one. Stage 26 gives two granularities, and they bracket every method:
+Scored on the 14,918 SPC whole tracks in a watch (stage 50; unwatched tornadoes — about a quarter, mostly weak — are left out). Watches are how SPC organised the threat in real time, across offices: an operational and communication unit, not a physical one. Stage 50 gives two granularities, and they bracket every method:
 
 - **Watch systems** (side-by-side watches joined; typically ~800 km across) are coarser than any method. Read as an **upper bound**: of pairs a method groups, the share inside one system — **within systems**, and its **cross-office** part. Below 1, the method merges what SPC never connected.
 - **Watch sequences** (one chain of hand-overs; typically ~300 km) are finer than any method. Read as a **lower bound**: of pairs SPC carried in one sequence, the share the method keeps together — **sequences kept**, and the share of sequences **split**. Below 1, the method cuts a chain SPC ran as one.
@@ -77,7 +77,7 @@ A method consistent with SPC's operations scores near 1 on both. F1 against eith
 
 | method | within systems | cross-office | sequences kept | sequences split |
 |---|---:|---:|---:|---:|
-| convective_day 200km (stage 3) | 0.99 | 0.99 | 0.81 | 17.1% |
+| convective_day 200km | 0.99 | 0.99 | 0.81 | 17.1% |
 | convective_day 100km | 1.00 | 0.99 | 0.68 | 45.5% |
 | convective_day 400km | 0.98 | 0.97 | 0.84 | 6.0% |
 | time-gap 6h, all ratings (Fuhrmann variant) | 0.94 | 0.93 | 0.99 | 2.1% |
@@ -105,7 +105,7 @@ The same scores against watch systems linked without the upstream-motion check (
 
 | method | within systems | cross-office | sequences kept | sequences split |
 |---|---:|---:|---:|---:|
-| convective_day 200km (stage 3) | 0.99 → 1.00 | 0.99 → 1.00 | 0.81 → 0.77 | 17.1% → 17.8% |
+| convective_day 200km | 0.99 → 1.00 | 0.99 → 1.00 | 0.81 → 0.77 | 17.1% → 17.8% |
 | convective_day 100km | 1.00 → 1.00 | 0.99 → 1.00 | 0.68 → 0.62 | 45.5% → 46.1% |
 | convective_day 400km | 0.98 → 0.99 | 0.97 → 0.99 | 0.84 → 0.80 | 6.0% → 6.6% |
 | time-gap 6h, all ratings (Fuhrmann variant) | 0.94 → 0.96 | 0.93 → 0.95 | 0.99 → 0.99 | 2.1% → 2.4% |
@@ -138,7 +138,7 @@ The same scores against watch systems linked without the upstream-motion check (
 
 | method | episodes ≥6 tornadoes | ≥6 EF1+ | tornadoes in ≥6 EF1+ |
 |---|---:|---:|---:|
-| convective_day 200km (stage 3) | 821 | 385 | 43.7% |
+| convective_day 200km | 821 | 385 | 43.7% |
 | convective_day 100km | 732 | 343 | 32.8% |
 | convective_day 400km | 821 | 396 | 50.7% |
 | time-gap 6h, all ratings (Fuhrmann variant) | 857 | 397 | 58.1% |
@@ -162,37 +162,37 @@ The same scores against watch systems linked without the upstream-motion check (
 
 ## Carried to DAT hazards
 
-Each DAT hazard takes the episode of its closest SPC track (stage 24 links); 95.8% have one. The other 4.2% become their own episode, which costs recall where such a hazard belongs to an outbreak. Scores use the DAT hazards' own Storm Events reference, so they compare directly with `episode_comparison_report.md`; **ARI vs stage 3** says how far each SPC-built grouping is from the episodes the dataset publishes now.
+Each DAT hazard takes the episode of its closest SPC track (stage 14 links); 96.0% have one. The other 4.0% become their own episode, which costs recall where such a hazard belongs to an outbreak. Scores use the DAT hazards' own Storm Events reference, so they compare directly with `episode_comparison_report.md`; **ARI vs published** says how far each SPC-built grouping is from the episodes stage 15 publishes.
 
-> **DAT reference.** 8,757 DAT hazards match a Storm Events row themselves; **687 more** reach one through their SPC track (DAT hazard → SPC track → Storm Events row; mostly hazards whose DAT time is off by hours, stage 24). Where both routes exist (8,753 hazards), they name the same Storm Events episode for **98.6%**. 538 have neither. `--dat-reference direct` scores against the hazards' own matches only.
+> **DAT reference.** 9,868 DAT hazards match a Storm Events row themselves; **878 more** reach one through their SPC track (DAT hazard → SPC track → Storm Events row; mostly hazards whose DAT time is off by hours, stage 14). Where both routes exist (9,864 hazards), they name the same Storm Events episode for **98.6%**. 570 have neither. `--dat-reference direct` scores against the hazards' own matches only.
 
-| method | DAT episodes | recall | recall linked | office precision | SE split | ARI vs stage 3 | 2010–2015 | 2016–2020 | 2021–2025 |
+| method | DAT episodes | recall | recall linked | office precision | SE split | ARI vs published | 2010–2015 | 2016–2020 | 2021–2025 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| convective_day 200km (stage 3) | 2,850 | 0.93 | 0.90 | 0.79 | 7.5% | 0.96 | 0.83 | 0.93 | 0.95 |
-| convective_day 100km | 3,682 | 0.87 | 0.84 | 0.80 | 18.9% | 0.82 | 0.80 | 0.89 | 0.89 |
-| convective_day 400km | 2,384 | 0.93 | 0.90 | 0.79 | 6.8% | 0.88 | 0.84 | 0.94 | 0.95 |
-| time-gap 6h, all ratings (Fuhrmann variant) | 1,981 | 0.98 | 0.98 | 0.79 | 3.3% | 0.76 | 0.98 | 0.97 | 0.98 |
-| space_time 100km 1h | 4,408 | 0.77 | 0.73 | 0.82 | 37.4% | 0.68 | 0.71 | 0.78 | 0.77 |
-| space_time 100km 3h | 3,795 | 0.86 | 0.83 | 0.81 | 21.8% | 0.78 | 0.80 | 0.90 | 0.86 |
-| space_time 100km 6h | 3,680 | 0.90 | 0.90 | 0.81 | 18.1% | 0.78 | 0.95 | 0.91 | 0.89 |
-| space_time 200km 1h | 3,927 | 0.82 | 0.80 | 0.81 | 30.1% | 0.79 | 0.74 | 0.84 | 0.84 |
-| space_time 200km 3h | 3,066 | 0.94 | 0.95 | 0.80 | 10.0% | 0.89 | 0.97 | 0.95 | 0.94 |
-| space_time 200km 6h | 2,858 | 0.96 | 0.96 | 0.80 | 5.9% | 0.89 | 0.98 | 0.96 | 0.96 |
-| space_time 400km 1h | 3,576 | 0.85 | 0.84 | 0.80 | 26.7% | 0.83 | 0.76 | 0.86 | 0.86 |
-| space_time 400km 3h | 2,694 | 0.96 | 0.96 | 0.80 | 8.1% | 0.84 | 0.98 | 0.95 | 0.95 |
-| space_time 400km 6h | 2,400 | 0.97 | 0.97 | 0.79 | 4.1% | 0.80 | 0.98 | 0.97 | 0.97 |
-| st_dbscan 200km 3h minpts=3 | 3,331 | 0.94 | 0.94 | 0.80 | 18.7% | 0.89 | 0.96 | 0.94 | 0.93 |
-| st_dbscan 200km 3h minpts=5 | 3,997 | 0.91 | 0.93 | 0.80 | 34.8% | 0.88 | 0.94 | 0.90 | 0.90 |
-| st_dbscan 400km 3h minpts=3 | 2,901 | 0.95 | 0.96 | 0.80 | 14.4% | 0.84 | 0.97 | 0.95 | 0.95 |
-| st_dbscan 400km 3h minpts=5 | 3,436 | 0.93 | 0.94 | 0.80 | 26.4% | 0.84 | 0.95 | 0.92 | 0.93 |
-| kde day bw=50km | 2,953 | 0.92 | 0.89 | 0.79 | 8.3% | 0.94 | 0.83 | 0.93 | 0.95 |
-| kde overlap 24h/12h bw=50km | 2,707 | 0.99 | 0.99 | 0.76 | 2.6% | 0.80 | 0.99 | 0.99 | 0.99 |
-| kde day bw=100km | 2,419 | 0.93 | 0.90 | 0.79 | 6.8% | 0.88 | 0.84 | 0.94 | 0.95 |
-| kde overlap 24h/12h bw=100km | 1,983 | 1.00 | 1.00 | 0.74 | 0.5% | 0.62 | 1.00 | 1.00 | 1.00 |
+| convective_day 200km | 3,095 | 0.93 | 0.89 | 0.79 | 7.3% | 0.83 | 0.86 | 0.95 | 0.95 |
+| convective_day 100km | 4,029 | 0.88 | 0.83 | 0.80 | 18.5% | 0.69 | 0.83 | 0.90 | 0.89 |
+| convective_day 400km | 2,563 | 0.93 | 0.89 | 0.79 | 6.6% | 0.89 | 0.87 | 0.95 | 0.95 |
+| time-gap 6h, all ratings (Fuhrmann variant) | 2,122 | 0.98 | 0.98 | 0.79 | 3.2% | 0.93 | 0.99 | 0.98 | 0.98 |
+| space_time 100km 1h | 4,871 | 0.77 | 0.72 | 0.82 | 37.1% | 0.58 | 0.73 | 0.79 | 0.78 |
+| space_time 100km 3h | 4,160 | 0.87 | 0.82 | 0.81 | 21.6% | 0.69 | 0.83 | 0.90 | 0.86 |
+| space_time 100km 6h | 4,031 | 0.91 | 0.91 | 0.81 | 17.9% | 0.73 | 0.95 | 0.91 | 0.89 |
+| space_time 200km 1h | 4,323 | 0.83 | 0.79 | 0.81 | 29.9% | 0.69 | 0.76 | 0.84 | 0.84 |
+| space_time 200km 3h | 3,341 | 0.95 | 0.95 | 0.80 | 10.0% | 0.85 | 0.97 | 0.95 | 0.94 |
+| space_time 200km 6h | 3,107 | 0.97 | 0.97 | 0.79 | 5.7% | 0.90 | 0.98 | 0.97 | 0.96 |
+| space_time 400km 1h | 3,915 | 0.86 | 0.82 | 0.80 | 26.2% | 0.79 | 0.79 | 0.87 | 0.87 |
+| space_time 400km 3h | 2,923 | 0.96 | 0.96 | 0.80 | 8.1% | 0.94 | 0.98 | 0.96 | 0.95 |
+| space_time 400km 6h | 2,585 | 0.97 | 0.97 | 0.79 | 3.9% | 1.00 | 0.99 | 0.97 | 0.97 |
+| st_dbscan 200km 3h minpts=3 | 3,648 | 0.94 | 0.94 | 0.80 | 19.2% | 0.85 | 0.96 | 0.94 | 0.93 |
+| st_dbscan 200km 3h minpts=5 | 4,429 | 0.91 | 0.93 | 0.80 | 35.3% | 0.84 | 0.93 | 0.91 | 0.90 |
+| st_dbscan 400km 3h minpts=3 | 3,166 | 0.95 | 0.96 | 0.79 | 14.8% | 0.94 | 0.97 | 0.95 | 0.95 |
+| st_dbscan 400km 3h minpts=5 | 3,785 | 0.93 | 0.94 | 0.79 | 26.8% | 0.93 | 0.95 | 0.93 | 0.92 |
+| kde day bw=50km | 3,215 | 0.93 | 0.88 | 0.79 | 8.1% | 0.82 | 0.86 | 0.94 | 0.94 |
+| kde overlap 24h/12h bw=50km | 2,939 | 0.99 | 0.99 | 0.76 | 2.6% | 0.83 | 0.99 | 0.99 | 0.99 |
+| kde day bw=100km | 2,601 | 0.93 | 0.89 | 0.79 | 6.6% | 0.89 | 0.87 | 0.95 | 0.95 |
+| kde overlap 24h/12h bw=100km | 2,127 | 1.00 | 1.00 | 0.73 | 0.6% | 0.77 | 1.00 | 1.00 | 1.00 |
 
 ## Carried to DAT hazards — against SPC watches
 
-Scored on the 7,427 DAT hazards with an SPC track in a watch (stage 26; unwatched tornadoes — about a quarter, mostly weak — are left out). Watches are how SPC organised the threat in real time, across offices: an operational and communication unit, not a physical one. Stage 26 gives two granularities, and they bracket every method:
+Scored on the 8,483 DAT hazards with an SPC track in a watch (stage 50; unwatched tornadoes — about a quarter, mostly weak — are left out). Watches are how SPC organised the threat in real time, across offices: an operational and communication unit, not a physical one. Stage 50 gives two granularities, and they bracket every method:
 
 - **Watch systems** (side-by-side watches joined; typically ~800 km across) are coarser than any method. Read as an **upper bound**: of pairs a method groups, the share inside one system — **within systems**, and its **cross-office** part. Below 1, the method merges what SPC never connected.
 - **Watch sequences** (one chain of hand-overs; typically ~300 km) are finer than any method. Read as a **lower bound**: of pairs SPC carried in one sequence, the share the method keeps together — **sequences kept**, and the share of sequences **split**. Below 1, the method cuts a chain SPC ran as one.
@@ -201,31 +201,31 @@ A method consistent with SPC's operations scores near 1 on both. F1 against eith
 
 | method | within systems | cross-office | sequences kept | sequences split |
 |---|---:|---:|---:|---:|
-| convective_day 200km (stage 3) | 1.00 | 0.99 | 0.91 | 13.7% |
-| convective_day 100km | 1.00 | 1.00 | 0.80 | 39.3% |
-| convective_day 400km | 0.98 | 0.97 | 0.93 | 6.9% |
-| time-gap 6h, all ratings (Fuhrmann variant) | 0.96 | 0.94 | 1.00 | 1.8% |
-| space_time 100km 1h | 1.00 | 1.00 | 0.69 | 55.5% |
-| space_time 100km 3h | 1.00 | 1.00 | 0.80 | 40.7% |
-| space_time 100km 6h | 1.00 | 1.00 | 0.84 | 38.4% |
-| space_time 200km 1h | 1.00 | 1.00 | 0.79 | 43.5% |
-| space_time 200km 3h | 1.00 | 1.00 | 0.94 | 15.6% |
-| space_time 200km 6h | 1.00 | 1.00 | 0.97 | 11.0% |
-| space_time 400km 1h | 0.99 | 0.99 | 0.84 | 36.4% |
-| space_time 400km 3h | 0.99 | 0.99 | 0.97 | 8.7% |
-| space_time 400km 6h | 0.99 | 0.98 | 0.99 | 2.7% |
-| st_dbscan 200km 3h minpts=3 | 1.00 | 1.00 | 0.94 | 25.0% |
-| st_dbscan 200km 3h minpts=5 | 1.00 | 1.00 | 0.92 | 40.6% |
-| st_dbscan 400km 3h minpts=3 | 0.99 | 0.99 | 0.97 | 15.7% |
-| st_dbscan 400km 3h minpts=5 | 0.99 | 0.99 | 0.96 | 26.9% |
-| kde day bw=50km | 0.99 | 0.99 | 0.91 | 17.0% |
-| kde overlap 24h/12h bw=50km | 0.87 | 0.85 | 0.97 | 11.5% |
-| kde day bw=100km | 0.98 | 0.97 | 0.93 | 6.9% |
-| kde overlap 24h/12h bw=100km | 0.73 | 0.69 | 1.00 | 0.4% |
+| convective_day 200km | 1.00 | 0.99 | 0.90 | 13.3% |
+| convective_day 100km | 1.00 | 1.00 | 0.79 | 38.9% |
+| convective_day 400km | 0.97 | 0.96 | 0.92 | 6.5% |
+| time-gap 6h, all ratings (Fuhrmann variant) | 0.95 | 0.94 | 1.00 | 1.7% |
+| space_time 100km 1h | 1.00 | 1.00 | 0.68 | 55.1% |
+| space_time 100km 3h | 1.00 | 1.00 | 0.78 | 40.0% |
+| space_time 100km 6h | 1.00 | 1.00 | 0.84 | 38.2% |
+| space_time 200km 1h | 1.00 | 1.00 | 0.78 | 43.8% |
+| space_time 200km 3h | 1.00 | 1.00 | 0.93 | 15.7% |
+| space_time 200km 6h | 1.00 | 1.00 | 0.97 | 10.7% |
+| space_time 400km 1h | 0.99 | 0.99 | 0.83 | 36.7% |
+| space_time 400km 3h | 0.99 | 0.99 | 0.97 | 8.5% |
+| space_time 400km 6h | 0.99 | 0.98 | 0.99 | 2.5% |
+| st_dbscan 200km 3h minpts=3 | 1.00 | 1.00 | 0.93 | 25.0% |
+| st_dbscan 200km 3h minpts=5 | 1.00 | 1.00 | 0.91 | 41.7% |
+| st_dbscan 400km 3h minpts=3 | 0.99 | 0.99 | 0.97 | 15.6% |
+| st_dbscan 400km 3h minpts=5 | 0.99 | 0.99 | 0.95 | 27.6% |
+| kde day bw=50km | 0.99 | 0.99 | 0.89 | 16.6% |
+| kde overlap 24h/12h bw=50km | 0.86 | 0.84 | 0.97 | 11.5% |
+| kde day bw=100km | 0.97 | 0.96 | 0.92 | 6.5% |
+| kde overlap 24h/12h bw=100km | 0.72 | 0.67 | 1.00 | 0.3% |
 
 ## Methods
 
-- **convective_day** — stage 3: same 1200–1159 UTC day, single linkage on track distance.
+- **convective_day** — the former episode rule (200 km): same 1200–1159 UTC day, single linkage on track distance.
 - **space_time** — single linkage on track distance and the gap between time intervals; no day boundary.
 - **time-gap 6h, all ratings (Fuhrmann variant)** — after the outbreak-sequence rule of Fuhrmann et al.: consecutive tornadoes ≤6 h apart, with no distance limit. Unlike theirs, tornadoes of every rating chain (they used F/EF1+), the gap runs from one tornado's end to the next one's start (theirs from start to start), and no minimum count (their ≥6) applies; a count threshold is a filter on the episode counts. Their common synoptic-scale system has no objective test here, so this shows what the time rule alone does.
 - **st_dbscan** — Birant & Kut: a hazard needs `minpts` neighbours (itself included) to be a core point; only core points link clusters, so chains of isolated tornadoes do not bridge outbreaks. Noise points stay singletons.
@@ -238,10 +238,10 @@ Neither KDE variant replicates the papers: they clustered all severe reports and
 
 1. **The reference is office-bounded.** Storm Events episodes never span two offices; linked episodes span offices only where a tornado crossed between them. Both test splitting well and merging only within one office.
 2. **Offices differ** in how finely they divide episodes; office precision mixes method behaviour with office practice.
-3. **Only matched tornadoes are scored** — for DAT hazards about nine in ten from 2020, fewer before; SPC tracks match Storm Events almost completely (stage 24 report).
+3. **Only matched tornadoes are scored** — for DAT hazards about nine in ten from 2020, fewer before; SPC tracks match Storm Events almost completely (stage 14 report).
 4. **The grid is coarse on purpose**: three distances × three gaps, two density settings. A finer search would overfit the one reference available.
 5. **SPC geometry is a straight start→end line**; distances between long, curved tracks are approximate under `--anchor spc`.
-6. **Watches are a forecast-made reference** (stage 26): they score only watched tornadoes, and they group what SPC expected to be one threat. They are the only reference here that spans offices; as bounds rather than a target, they flag over-merging (systems) and splitting (sequences). Conclusions should hold against both the office episodes and the watch bounds.
+6. **Watches are a forecast-made reference** (stage 50): they score only watched tornadoes, and they group what SPC expected to be one threat. They are the only reference here that spans offices; as bounds rather than a target, they flag over-merging (systems) and splitting (sequences). Conclusions should hold against both the office episodes and the watch bounds.
 
 ## References
 

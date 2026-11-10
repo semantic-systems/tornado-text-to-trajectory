@@ -22,7 +22,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 
 | stage | state |
 |---|---|
-| 10–12, 16–17 DAT (fetch, link, hazards, geography, QA) | **complete.** 11,520 lines + 9,989 polygons → 11,316 hazards (1,475 from polygons alone; 300 lines and 1,076 polygons rated `TSTM/Wind` left out) in 2,585 episodes (stage 15: space-time 400 km / 6 h on SPC tracks, carried to DAT; 455 hazards with no SPC track stand alone). Stages from 16 on (geography, NWS text, GDELT, linking) were built on the 9,982 hazards and convective-day episodes from before, until rerun. Geometry linker validated at 99.3% precision / 96.2% recall on the 289-polygon `path_guid` gold set |
+| 10–12, 16–17 DAT (fetch, link, hazards, geography, QA) | **complete.** 11,520 lines + 9,989 polygons → 11,316 DAT hazards (1,475 from polygons alone; 300 lines and 1,076 polygons rated `TSTM/Wind` left out). Stage 15: all 4,325 SPC episodes (space-time 400 km / 6 h on SPC tracks), 2,130 with a DAT survey; 10,861 DAT hazards carried over, 8,444 SPC tornadoes without a DAT survey as hazards of their own (straight SPC line); 455 DAT hazards with no SPC track in no episode, with a `spc_match_status`. Stage 16: counties, offices (DAT → Storm Events → county join; every hazard has one) and places for DAT and SPC hazards. Stages from 20 on (NWS text, GDELT, linking) read DAT hazards only and were built on the 9,982 hazards and convective-day episodes from before, until revisited and rerun. Geometry linker validated at 99.3% precision / 96.2% recall on the 289-polygon `path_guid` gold set |
 | 13–14 Storm Events + SPC | **run, 2010–2025.** SPC's reviewed whole-track tornado file matched to DAT as the tornado-level reference (98.3% of Storm Events chains match one SPC track); NCEI Storm Events tornado rows chained into whole tornadoes through `TOR_OTHER_*` and cross-checked against SPC, matched to DAT hazards by space and time, episodes linked across offices where a tornado crossed between them; DAT completeness rises from 1% of tornadoes (2010) to 85% (2025) |
 | 35, 18–19 QA, analysis, map | 35 refreshed 12 Aug against the rebuilt GDELT tables; 18–19 read DAT tables that have not changed |
 | 20 NWS text (IEM) | **complete.** 15,687 LSRs + 14,956 survey products; 7,314 hazards (73.3%) have survey text |
@@ -101,6 +101,13 @@ when it gives ≤5 h, else set the end to the start); stage 12 itself is unchang
 of the officially recorded tornadoes, 2025 DAT 85%. Every count of
 tornadoes or episodes from DAT is a lower bound that grows with time for reasons
 of adoption, not climate. Stage 14's report gives the per-year figure.
+
+**Place populations before the stage 16 rework were wrong in two ways.** Census
+populations were joined to GNIS by name and state only, so every namesake of a town
+got its population (1,670 names occur more than once in a state), and Census legal
+suffixes were stripped from GNIS names too, leaving Oklahoma City, Kansas City and
+~700 other "… City" places with none. Both fed `places_matching` and stage 31's IDF
+(`canonical_place_key`); link scores from before a stage 16 + 31 rerun carry them.
 
 **`--limit` bounds reads, not writes.** On stages 30 and 32 it caps how much of the
 corpus is *read*, so a "small test" happily reuses a full labels file and then
@@ -390,6 +397,18 @@ hazards against a Storm Events reference extended through their SPC track
 reference): episodes built on SPC and carried to DAT keep their recall
 (space-time 400 km / 6 h 0.97), episodes built on DAT's own times lose it
 (0.97 → 0.95; the former convective-day rule 0.92 → 0.90) — the cost of DAT's clock errors.
+
+**Every SPC episode is published, not only those with a DAT survey.** Restricting to
+episodes with DAT made coverage follow DAT's adoption (10 such episodes in 2010, 212
+in 2025) and dropped outbreaks such as Joplin (22 May 2011, 159 deaths). SPC's list
+is the population; `has_dat` and `hazard_source` are filters a user applies and
+reports. SPC tornadoes no DAT survey covers are hazards with SPC's straight line;
+stage 16 measures that such a line finds 98.6% of the counties and 98% of the places
+of a surveyed track. The 455 DAT hazards with no SPC tornado are in no episode,
+neither counted (single-hazard episodes the record does not confirm, 44 probable
+duplicates) nor dropped (`spc_match_status` says what is near them). Stages from 20
+on adopt SPC hazards when each is revisited; until then they read DAT hazards only
+(`episode_table.geography` defaults to them).
 
 ## If you change the pipeline
 

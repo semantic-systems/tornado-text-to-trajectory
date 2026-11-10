@@ -72,8 +72,8 @@ python scripts/11_link_geometry.py     # candidate + accepted line<->polygon lin
 python scripts/12_build_hazards.py     # hazards (tornadoes): lines, polygons, attributes
 python scripts/13_fetch_references.py  # NCEI Storm Events + SPC tornado files
 python scripts/14_match_references.py  # ...matched to DAT hazards
-python scripts/15_build_episodes.py    # episodes (outbreaks) on SPC tracks, carried to DAT
-python scripts/16_enrich_geography.py  # counties, states, WFO backfill, place names
+python scripts/15_build_episodes.py    # episodes (outbreaks) on SPC tracks; SPC-only tornadoes as hazards
+python scripts/16_enrich_geography.py  # counties, WFO, place names for DAT and SPC hazards
 python scripts/17_qa_events.py         # outputs/events_qa_report.md
 python scripts/18_analyze_events.py    # descriptive report + figures
 python scripts/19_event_map.py         # interactive map (self-contained HTML)
@@ -123,8 +123,12 @@ where it stopped and a rerun needs no network: IEM ~26k requests (~3.5 h), GDELT
 Scope and every threshold live in [`config.py`](src/tornado_dataset/config.py); a
 run is described by that file plus the git SHA recorded in each manifest. The
 default window is 2010-01-01 – 2025-12-31, which yields **11,520 damage lines and
-9,989 damage polygons → 11,316 hazards in 2,585 episodes**, 1,475 of them
-from damage polygons alone; features rated thunderstorm wind are left out.
+9,989 damage polygons → 11,316 DAT hazards**, 1,475 of them from damage polygons
+alone; features rated thunderstorm wind are left out. Episodes are built on SPC's
+complete tornado list: **4,325 episodes**, 2,130 of them holding a DAT survey, with
+19,305 hazards — 10,861 DAT hazards and 8,444 SPC tornadoes no DAT survey covers
+(straight SPC line, `hazard_source = spc`). The 455 DAT hazards with no SPC tornado
+are in no episode and carry a `spc_match_status`.
 
 Three design decisions worth knowing before using the outputs:
 

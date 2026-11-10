@@ -30,13 +30,14 @@ Key fields: `episode_uid`, `title`, `hazard_family` (tornado|flood|wildfire|trop
 
 As built (stage 15, `dat/episode_table.py`): SPC's complete tornado list grouped by
 single linkage within 400 km and 6 h (closest points of the tracks; end of one
-tornado to start of the next; no day boundary), and each DAT hazard given the
-episode of its closest SPC track. A hazard with no SPC track is an episode of its
-own (`in_spc` false). Counts cover every SPC tornado in the episode, in DAT or not
-(`n_spc`, `n_spc_ef1plus`, `n_spc_unrated`, beside `n_dat`), so a minimum size such
-as ≥6 EF1+ is a filter on them; `convective_days` lists every 12 UTC day the
-episode touches. Membership lives in `hazard_episodes_<tag>.csv`, not on the
-hazards.
+tornado to start of the next; no day boundary). SPC is the population: every SPC
+episode is published, `has_dat` flagging those with a DAT survey. Counts cover
+every SPC tornado in the episode (`n_spc`, `n_spc_ef1plus`, `n_spc_unrated`, SPC
+casualties), so a minimum size such as ≥6 EF1+ is a filter on them; `n_dat` and
+`n_spc_hazards` count its hazards by source, and `max_efscale`, `fatalities`,
+`injuries` are the DAT surveys' (empty without one). `convective_days` lists every
+12 UTC day the episode touches. Membership lives in `hazard_episodes_<tag>.csv`,
+not on the hazards.
 
 ### 2. Hazard
 One authoritative sub-event with its own geometry — one tornado track, one flood extent,
@@ -46,6 +47,19 @@ Key fields: `hazard_uid`, `episode_uid` (FK), `hazard_type`, `time_begin_utc`,
 `time_end_utc`, external IDs (`ncei_event_id`, `dat_event_ids[]`), `wfo`,
 plus a typed **`attributes`** block whose schema is selected by `hazard_type`
 (tornado profile below).
+
+As built, a hazard has a `hazard_source`:
+
+- `dat` — a DAT survey (stage 12, `hazards_<tag>.csv`). With an SPC track it is in
+  that track's episode (`in_spc`); without one it is in **no episode** and carries
+  `spc_match_status` (`time_mismatch`, `probable_duplicate`, `spc_far`,
+  `no_spc_nearby`, `untimed_no_spc`) and its nearest SPC track.
+- `spc` — an SPC tornado no DAT survey covers (stage 15, `spc_hazards_<tag>.csv`),
+  with SPC's rating, casualties, length and width and its straight start→end line
+  (`geometry_source` `spc_line`, or `spc_point` without an end).
+
+Counties, offices (`wfo`, `wfo_source`, `wfo_all`) and place names for both are in
+stage 16's `hazard_geography_<tag>.csv`.
 
 ### 3. Geometry
 One geospatial ground-truth object attached to a hazard. A hazard may have several
@@ -73,7 +87,9 @@ A hazard is then `line` (track line(s) only), `line+polygon` (with the polygons 
 to its lines) or `polygon` (polygons no line claims: a tornado surveyed without a
 drawn track; touching polygons of one day and within an hour form one hazard). A
 `polygon` hazard has no path length, no WFO until stage 16 backfills it, no end time,
-and — where DAT gives only a date — no start time either.
+and — where DAT gives only a date — no start time either. An SPC hazard's geometry
+is `spc_line` or `spc_point`; stage 16 measures that an SPC line finds 98.6% of the
+counties and 98% of the places of the surveyed track of the same tornado.
 
 ### 4. TextRef
 A single natural-language artifact **stored by reference, not by body** (copyright-safe).

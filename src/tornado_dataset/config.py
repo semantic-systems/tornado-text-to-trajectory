@@ -196,6 +196,14 @@ PLACE_PROMINENT_MIN_POPULATION = 20_000
 # The largest place in each county the track crosses, as a county-seat proxy:
 # local reporting is organised by county and names its seat.
 INCLUDE_COUNTY_LARGEST_PLACE = True
+# A county counts for a hazard when it holds at least this share of the track
+# (of the damage area, for a hazard with no track line), or this much of it in
+# absolute terms; the county with the largest share always counts. The NWS county
+# outlines are simplified for web display, so a track along a county line grazes
+# the neighbour for a few hundred metres and picked up its office as well.
+COUNTY_MIN_SHARE = 0.05
+COUNTY_MIN_TRACK_M = 1_000.0
+COUNTY_MIN_AREA_M2 = 1_000_000.0
 
 # ── NWS / IEM text ───────────────────────────────────────────────────────────
 IEM_BASE = "https://mesonet.agron.iastate.edu"

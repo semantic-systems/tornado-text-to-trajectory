@@ -26,6 +26,7 @@ import _bootstrap  # noqa: F401
 import pandas as pd
 
 from tornado_dataset import config
+from tornado_dataset.dat import episode_table
 from tornado_dataset.ids import write_manifest
 
 # Score bands for stratification. Equal-width rather than equal-count, so the
@@ -64,7 +65,8 @@ def main() -> None:
     bodies = dict(zip(articles.file, articles.body))
     episodes = pd.read_csv(config.PROCESSED_DIR / f"episodes_{args.tag}.csv").set_index(
         "episode_uid")
-    geography = pd.read_csv(config.PROCESSED_DIR / f"hazard_geography_{args.tag}.csv")
+    # The places of every hazard of the episode, DAT and SPC, describe it.
+    geography = episode_table.geography(args.tag, ("dat", "spc"))
     places_by_episode = (geography.groupby("episode_uid")
                          .apply(lambda g: "; ".join(
                              sorted({p for row in g.places.dropna()
