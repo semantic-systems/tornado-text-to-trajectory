@@ -48,20 +48,30 @@ def crosscheck_path(tag: str) -> Path:
 
 
 def download() -> tuple[list[dict], dict]:
-    """The newest Storm Events details file per year and SPC's tornado file.
+    """The newest Storm Events details file per year, and SPC's tornado file if saved.
 
-    Skips files already present; appends what was downloaded to each source's
-    ``provenance.jsonl``.
+    Skips Storm Events files already present; appends what was downloaded to
+    ``provenance.jsonl``. SPC's file is never downloaded (its robots.txt disallows
+    automated access): :func:`spc_tornadoes.check_local` finds the hand-saved file
+    and records its provenance once, by checksum.
     """
     records = se.download(years(), RAW_SE)
     with (RAW_SE / "provenance.jsonl").open("a", encoding="utf-8") as fh:
         for r in records:
             if r["status"] == "downloaded":
                 fh.write(json.dumps(r) + "\n")
-    record = spc.download(RAW_SPC)
-    if record["status"] == "downloaded":
-        with (RAW_SPC / "provenance.jsonl").open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record) + "\n")
+    record = spc.check_local(RAW_SPC)
+    if record["status"] == "present":
+        log = RAW_SPC / "provenance.jsonl"
+        entries = [json.loads(line) for line in log.read_text().splitlines()
+                   if line.strip()] if log.exists() else []
+        # Earlier entries (automatic downloads) carry no checksum: name and size.
+        known = any(e.get("sha256") == record["sha256"]
+                    or (e.get("file"), e.get("bytes")) == (record["file"], record["bytes"])
+                    for e in entries)
+        if not known:
+            with log.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record) + "\n")
     return records, record
 
 

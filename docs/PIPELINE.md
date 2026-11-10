@@ -617,8 +617,15 @@ tornadoes, both directions, in its section on the official records. One hazard c
 scores against both `EPISODE_ID` and `LINKED_EPISODE`.
 `--from-dir` reads details files from elsewhere, e.g. ones downloaded by hand.
 
-Stage 13 also fetches SPC's `*_actual_tornadoes.csv` (one reviewed record per
-whole track, from <https://www.spc.noaa.gov/wcm/>) into `data/raw/spc/`; stage 14 keeps
+SPC's `*_actual_tornadoes.csv` (one reviewed record per whole track) is **saved
+by hand** into `data/raw/spc/`: spc.noaa.gov's robots.txt disallows every automated
+client, so stage 13 never contacts it. Open <https://www.spc.noaa.gov/wcm/> in a
+browser, download the `YYYY-YYYY_actual_tornadoes.csv` with the latest end year
+(not `all_tornadoes`, which holds segments), and save it unchanged; stage 13 prints
+these steps when the file is missing and records the saved file's size and SHA-256 in
+`data/raw/spc/provenance.jsonl`. SPC's daily storm-report comments were checked and
+left out: on ten sample days, 94% are the IEM LSR remarks stage 20 already holds
+(half of them cut at ~170 characters), the rest earlier versions of them. Stage 14 keeps
 `sg == 1` records in the window, converts SPC's CST to UTC, and matches them to
 DAT hazards by the same rule (`data/processed/spc_tornado_links_<tag>.csv`). It
 also matches every Storm Events row to its closest SPC track, which checks the

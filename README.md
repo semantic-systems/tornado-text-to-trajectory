@@ -70,7 +70,7 @@ python scripts/00_selftest.py          # no network, no data — check the envir
 python scripts/10_fetch_dat.py         # DAT lines+polygons for the configured window
 python scripts/11_link_geometry.py     # candidate + accepted line<->polygon links
 python scripts/12_build_hazards.py     # hazards (tornadoes): lines, polygons, attributes
-python scripts/13_fetch_references.py  # NCEI Storm Events + SPC tornado files
+python scripts/13_fetch_references.py  # NCEI Storm Events; SPC's tornado file is saved by hand
 python scripts/14_match_references.py  # ...matched to DAT hazards
 python scripts/15_build_episodes.py    # episodes (outbreaks) on SPC tracks; SPC-only tornadoes as hazards
 python scripts/16_enrich_geography.py  # counties, WFO, place names for DAT and SPC hazards

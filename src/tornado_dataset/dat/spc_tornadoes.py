@@ -48,30 +48,38 @@ def latest_file(listing_html: str) -> str | None:
     return max(names, key=names.get) if names else None
 
 
-def download(dest: Path, *, session=None) -> dict:
-    """Fetch the newest ``actual_tornadoes`` file into ``dest``; skip if present."""
-    import requests
+# spc.noaa.gov's robots.txt disallows every automated client (``User-agent: *``,
+# ``Disallow: /``), so the pipeline never fetches from it: the file is saved by
+# hand and found here.
+MANUAL_DOWNLOAD = f"""SPC's tornado file is not downloaded automatically: spc.noaa.gov's robots.txt
+disallows automated access. Save it by hand:
+
+  1. Open {SPC_PAGE} in a browser.
+  2. Under the tornado data, download the CSV named YYYY-YYYY_actual_tornadoes.csv
+     with the latest end year (e.g. 1950-2025_actual_tornadoes.csv). Not the
+     "all_tornadoes" file, which holds state and county segments.
+  3. Save it, unchanged and under its own name, into {{dest}}/
+  4. Run scripts/13_fetch_references.py again (it records the file's provenance),
+     then scripts/14_match_references.py."""
+
+
+def check_local(dest: Path) -> dict:
+    """The newest ``actual_tornadoes`` file in ``dest``, or ``missing``.
+
+    A file seen for the first time gets a provenance record (manual download, size,
+    SHA-256, when it was first seen), since no request records it.
+    """
+    import hashlib
     from ..http import utcnow_iso
 
-    session = session or requests.Session()
-    session.headers.setdefault("User-Agent",
-                               "tornado-text-to-trajectory/0.1 (academic research)")
-    page = session.get(SPC_PAGE, timeout=60)
-    page.raise_for_status()
-    name = latest_file(page.text)
-    if name is None:
-        return {"file": None, "status": "not_found_on_page"}
-    dest.mkdir(parents=True, exist_ok=True)
-    target = dest / name
-    if target.exists():
-        return {"file": name, "status": "present"}
-    response = session.get(SPC_DIR + name, timeout=300)
-    response.raise_for_status()
-    tmp = target.with_suffix(".part")
-    tmp.write_bytes(response.content)
-    tmp.rename(target)
-    return {"file": name, "status": "downloaded", "url": SPC_DIR + name,
-            "retrieved_at": utcnow_iso(), "bytes": len(response.content)}
+    path = local_file(dest) if dest.exists() else None
+    if path is None:
+        return {"file": None, "status": "missing",
+                "instructions": MANUAL_DOWNLOAD.format(dest=dest)}
+    data = path.read_bytes()
+    return {"file": path.name, "status": "present", "source": "manual_download",
+            "url": SPC_DIR + path.name, "first_seen_at": utcnow_iso(), "bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest()}
 
 
 def local_file(directory: Path) -> Path | None:
