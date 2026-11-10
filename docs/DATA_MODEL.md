@@ -95,7 +95,8 @@ counties and 98% of the places of the surveyed track of the same tornado.
 A single natural-language artifact **stored by reference, not by body** (copyright-safe).
 
 Key fields: `textref_uid`, `url`, `source_name`, `source_type`
-(news | wire | nws_warning | lsr | pns | tv_caption | radio | social | encyclopedic |
+(news | wire | nws_warning | lsr | pns | storm_events_narrative |
+storm_events_episode_narrative | dat_comment | tv_caption | radio | social | encyclopedic |
 survey_report | official_statement), `author_org` (the publishing organization, e.g.
 "NWS Little Rock", "Arkansas Democrat-Gazette"), `language`, `published_at`, `retrieved_at`,
 `wayback_snapshot_url`, `title`, `snippet` (short, fair-use-length quote only), the two
@@ -112,7 +113,8 @@ independence axes **`same_org_as_geometry`** (bool) and **`temporal_class`**, th
 Connects a `TextRef` to an `Episode` or a `Hazard`.
 
 Key fields: `textref_uid` (FK), `target_uid` (FK), `link_level` (episode | hazard),
-`link_relation` (describes | mentions | primary_survey_of), `time_offset` (published_at −
+`link_relation` (describes | mentions | primary_survey_of | narrative_of | comment_of |
+episode_narrative_of), `time_offset` (published_at −
 hazard/episode begin, ISO 8601 duration, signed), `linker` (auto | manual), `link_confidence`.
 
 ## Independence — two orthogonal axes (the pivotal methodological design)
@@ -164,6 +166,9 @@ exclude per experiment, tagged either way).
 
 Both axes are assigned by rule from (`author_org`, `source_type`, `published_at`,
 `survey_date`); the rule id is stored in `tier_rule_version` so re-tiering stays reproducible.
+Since `tier_rules_v2`, Storm Events narratives and DAT comments are `post_survey` by source
+type: they are written from the survey and carry no publication time, and a missing time
+would otherwise fall back to pre-survey.
 
 ## Caveats recorded as data, not assumed away
 - **Ground truth is an estimate.** DAT/NCEI geometries are field-survey products; coverage

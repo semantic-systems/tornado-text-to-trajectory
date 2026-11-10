@@ -29,10 +29,20 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
-TIER_RULE_VERSION = "tier_rules_v1_2026-07"
+TIER_RULE_VERSION = "tier_rules_v2_2026-11"
+# v2: source types written from the survey by construction are post-survey
+# without a publication time (POST_SURVEY_SOURCE_TYPES); v1 rows are unchanged
+# for every other type.
 
 # Source types produced by the same organisation that surveys the damage.
-NWS_SOURCE_TYPES = {"lsr", "pns", "nws_warning", "survey_report"}
+NWS_SOURCE_TYPES = {"lsr", "pns", "nws_warning", "survey_report",
+                    "storm_events_narrative", "storm_events_episode_narrative", "dat_comment"}
+# Written from the survey by construction, and carrying no publication time:
+# the Storm Data narratives (compiled by the office after the event month) and
+# the comments surveyors enter on DAT features. Without this rule a missing time
+# falls back to "pre-survey", and the survey's own words would count as timely.
+POST_SURVEY_SOURCE_TYPES = {"storm_events_narrative", "storm_events_episode_narrative",
+                            "dat_comment"}
 # Author-organisation markers for NWS/NOAA, matched case-insensitively.
 NWS_ORG_MARKERS = ("nws", "national weather service", "noaa", "weather.gov",
                    "storm prediction center", "spc")
@@ -92,7 +102,10 @@ def derive(author_org: str | None, source_type: str | None, published_at: Any,
            event_begin: Any, survey_at: Any = None) -> dict[str, Any]:
     """Full independence classification for one text reference."""
     same_org = is_same_org(author_org, source_type)
-    tclass = temporal_class(published_at, event_begin, survey_at)
+    if str(source_type or "").lower() in POST_SURVEY_SOURCE_TYPES:
+        tclass = "post_survey"
+    else:
+        tclass = temporal_class(published_at, event_begin, survey_at)
     role = TEXT_ROLES[(same_org, tclass == "post_survey")]
     published = _as_datetime(published_at)
     begin = _as_datetime(event_begin)

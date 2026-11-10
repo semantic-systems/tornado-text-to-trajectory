@@ -83,6 +83,7 @@ python scripts/20_fetch_nws_text.py    # NWS LSRs (timely) + storm-survey PNS (o
 python scripts/21_fetch_gdelt.py       # independent news links per episode
 python scripts/22_fetch_media_cloud.py # Media Cloud headlines, 2010-2025
 python scripts/23_import_lexisnexis.py # LexisNexis RTF exports (by hand) -> articles
+python scripts/24_import_record_text.py # Storm Events narratives + DAT comments (oracle)
 
 # 3x  text selection, enrichment, linking
 python scripts/30_filter_media_cloud.py run    # LLM relevance labels

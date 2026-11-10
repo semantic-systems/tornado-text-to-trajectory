@@ -42,6 +42,35 @@ re-tiered reproducibly.
 See [`outputs/text_qa_report.md`](outputs/text_qa_report.md), which also records the
 measurements behind the retrieval choices (query form, match radii).
 
+### Text that comes with the records — `scripts/24_import_record_text.py`
+
+Offline. Turns two official texts already on disk into TextRefs and TextLinks in
+stage 20's schema (`text/records.py`), all `oracle` (tiering v2):
+
+- **Storm Events event narratives** (`storm_events_narrative`, 23,189): one per
+  Storm Events tornado row. Storm Events splits a tornado at county and office
+  lines, so a long track has several. Each is linked to one hazard
+  (`narrative_of`, `link_route`): the DAT hazard it is matched to (stage 14,
+  13,093); else, through its SPC track, the SPC hazard that track is (9,065) or
+  the DAT hazard it is the closest track of (930, mostly DAT hazards with a clock
+  error); else, for a track that is only a secondary link of a DAT hazard, the
+  episode (38). 10,598 DAT and 8,367 SPC hazards get a narrative.
+- **Storm Events episode narratives** (`storm_events_episode_narrative`, 8,517): the
+  office's account of the weather situation, linked to each stage 15 episode its
+  rows fall in (`episode_narrative_of`). Storm Events episodes are per office, so a
+  large outbreak has several.
+- **DAT comments** (`dat_comment`, 9,412 for 7,850 hazards): one TextRef per distinct
+  comment of a hazard, its ID resting on the features (`line:<objectid>`,
+  `polygon:<objectid>`) that carry it (`comment_of`). Stage 12's `oracle_text`
+  column stays as it was.
+
+`mentions_track` flags an event narrative or comment naming a start, an end, a
+direction, a crossing or a movement (80% of narratives, 66% of comments) — a coarse
+cue, not a judgement of quality. Texts are not merged or deduplicated here: DAT
+comments are mostly excerpts of the survey statement (PNS) and narratives edited
+versions of it, which a separate step records. Writes
+`data/processed/textrefs_records_<tag>.csv` and `textlinks_records_<tag>.csv`.
+
 ### Importing the LexisNexis exports — `scripts/23_import_lexisnexis.py`
 
 LexisNexis Uni offers no API for this corpus; the articles were exported by hand

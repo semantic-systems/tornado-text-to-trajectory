@@ -48,7 +48,7 @@ MODULES = [
     "tornado_dataset.text.fulltext_corpus",
     "tornado_dataset.text.linking", "tornado_dataset.text.matching",
     "tornado_dataset.text.corpora",
-    "tornado_dataset.text.overlap",
+    "tornado_dataset.text.overlap", "tornado_dataset.text.records",
 ]
 
 failures: list[str] = []
@@ -83,9 +83,9 @@ scripts = sorted(p for p in (REPO / "scripts").glob("*.py")
                  if p.name[0].isdigit() or p.stem in ("_bootstrap", "viewer"))
 for path in scripts:
     check(path.name, lambda p=path: py_compile.compile(str(p), doraise=True))
-if len(scripts) < 29:
-    failures.append(f"only {len(scripts)} stage scripts found — expected 29 "
-                    "(00, 10-23, 30-35, 40-43, 50-51, viewer, _bootstrap). "
+if len(scripts) < 30:
+    failures.append(f"only {len(scripts)} stage scripts found — expected 30 "
+                    "(00, 10-24, 30-35, 40-43, 50-51, viewer, _bootstrap). "
                     "Some are probably untracked.")
     print(f"  FAIL  expected 29 stage scripts, found {len(scripts)}")
 
@@ -576,6 +576,49 @@ def counties_need_a_share_and_offices_an_order() -> None:
     assert gz.choose_wfo([], [], []) == (None, "none", [])
 
 
+def record_texts_link_once_and_count_as_oracle() -> None:
+    """Narratives reach one hazard by the first route; comments are one ref per text."""
+    import pandas as pd
+    from tornado_dataset.text import records, tiering
+    membership = pd.DataFrame({
+        "hazard_uid": ["hd1", "hd2", "hs1"], "hazard_source": ["dat", "dat", "spc"],
+        "spc_id": ["s1", "s2", "s3"], "episode_uid": ["e1", "e1", "e2"]})
+    grouping = pd.DataFrame({"spc_id": ["s1", "s2", "s3", "s4"],
+                             "episode_uid": ["e1", "e1", "e2", "e2"]})
+    se_links = pd.DataFrame({"EVENT_ID": [1, 2], "hazard_uid": ["hd1", "hd2"],
+                             "rank_for_event": [1, 2]})
+    spc_se = pd.DataFrame({"EVENT_ID": [1, 2, 3, 4], "spc_id": ["s3", "s2", "s3", "s4"],
+                           "rank_for_event": [1, 1, 1, 1]})
+    targets = records.event_targets(se_links, spc_se, membership, grouping)
+    assert targets[1] == ("dat_direct", ["hd1"], "e1"), "a direct DAT link wins"
+    assert targets[2] == ("dat_via_spc_track", ["hd2"], "e1")
+    assert targets[3] == ("spc_hazard", ["hs1"], "e2")
+    assert targets[4] == ("episode_only", [], "e2")
+    se = pd.DataFrame({"EVENT_ID": [1, 3], "EPISODE_ID": [9, 9], "WFO": ["OUN", "OUN"],
+                       "STATE": ["OKLAHOMA"] * 2, "CZ_NAME": ["CLEVELAND"] * 2,
+                       "begin_utc": ["2020-04-12 20:00:00+00:00"] * 2, "BEGIN_LAT": [35.0] * 2,
+                       "BEGIN_LON": [-97.0] * 2,
+                       "EVENT_NARRATIVE": ["The tornado touched down and moved northeast.", "nan"],
+                       "EPISODE_NARRATIVE": ["A strong upper trough moved across the Plains."] * 2})
+    refs, links = records.storm_events_refs(se, targets)
+    kinds = sorted(r["source_type"] for r in refs)
+    assert kinds == ["storm_events_episode_narrative", "storm_events_narrative"], kinds
+    assert all(r["text_role"] == "oracle" for r in refs), "survey products are oracle text"
+    assert {(lk["target_uid"], lk["link_relation"]) for lk in links} == {
+        ("hd1", "narrative_of"), ("e1", "episode_narrative_of"), ("e2", "episode_narrative_of")}
+    hazards = pd.DataFrame({"hazard_uid": ["hd1"], "line_objectids": ["10;11"],
+                            "polygon_objectids": ["20"], "wfo": ["OUN"],
+                            "time_begin_utc": ["2020-04-12T20:00:00+00:00"]})
+    features = {"line": {"10": {"comments": "EF1 tornado began near Noble.", "wfo": "OUN"},
+                         "11": {"comments": "None"}},
+                "polygon": {"20": {"comments": "EF1 tornado began near Noble."}}}
+    refs, links = records.dat_comment_refs(hazards, features)
+    assert len(refs) == 1 and refs[0]["record_id"] == "line:10;polygon:20", refs
+    assert refs[0]["mentions_track"] and links[0]["link_relation"] == "comment_of"
+    assert tiering.derive("NWS OUN", "dat_comment", None, None)["temporal_class"] == "post_survey"
+    assert not records.mentions_track("A rain wrapped tornado caused no reported damage.")
+
+
 def accents_do_not_make_duplicates() -> None:
     """Bodies differing only in an accented letter are not verbatim duplicates."""
     import pandas as pd
@@ -810,6 +853,7 @@ for name, fn in [
     ("populations go to the nearest namesake", populations_go_to_the_nearest_namesake),
     ("place and county names fold", place_and_county_names_fold),
     ("counties need a share, offices an order", counties_need_a_share_and_offices_an_order),
+    ("record texts link once and count as oracle", record_texts_link_once_and_count_as_oracle),
     ("accents do not make duplicates", accents_do_not_make_duplicates),
     ("wind features are not tornadoes", wind_features_are_not_tornadoes),
     ("unclaimed polygons become hazards", unclaimed_polygons_become_hazards),
