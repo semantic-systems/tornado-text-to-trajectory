@@ -15,7 +15,6 @@ Writes `outputs/news_time_report.md` and `outputs/figures/nt_*.png`.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 from collections import Counter
 
@@ -28,7 +27,6 @@ import numpy as np
 import pandas as pd
 
 from tornado_dataset import config, viz
-from tornado_dataset.dat import episode_table
 from tornado_dataset.text import tiering
 
 plt.rcParams.update(viz.matplotlib_style())
@@ -45,31 +43,6 @@ def severity_band(fatalities: float) -> str:
         if low <= value <= high:
             return label
     return "no deaths"
-
-
-def survey_times(tag: str) -> dict[str, dt.datetime]:
-    """First primary-survey publication per episode (the oracle boundary).
-
-    Same derivation Stage 21 uses; it defines when text stops being independent of
-    the survey and starts being downstream of it.
-    """
-    refs_path = config.PROCESSED_DIR / f"textrefs_nws_{tag}.csv"
-    links_path = config.PROCESSED_DIR / f"textlinks_nws_{tag}.csv"
-    hazards_path = config.PROCESSED_DIR / f"hazards_{tag}.csv"
-    if not (refs_path.exists() and links_path.exists()):
-        return {}
-    refs = pd.read_csv(refs_path, usecols=["textref_uid", "published_at"])
-    links = pd.read_csv(links_path, usecols=["textref_uid", "target_uid", "link_relation"])
-    hazards = episode_table.hazards_with_episodes(tag, ["hazard_uid", "episode_uid"])
-    surveys = (links[links.link_relation == "primary_survey_of"]
-               .merge(refs, on="textref_uid")
-               .merge(hazards, left_on="target_uid", right_on="hazard_uid"))
-    out: dict[str, dt.datetime] = {}
-    for row in surveys.itertuples():
-        moment = tiering._as_datetime(row.published_at)
-        if moment and (row.episode_uid not in out or moment < out[row.episode_uid]):
-            out[row.episode_uid] = moment
-    return out
 
 
 def main() -> None:
@@ -225,7 +198,7 @@ def main() -> None:
     # LexisNexis articles carry no text_role: Stage 31 records when they appeared
     # but never classifies them. Deriving it here puts news on the same axis as the
     # NWS products, which is the comparison the dataset exists to support.
-    surveys = survey_times(tag)
+    surveys = tiering.survey_times(tag)
     print(f"  survey times known for {len(surveys):,} episodes")
     roles = []
     for row in describes.itertuples():

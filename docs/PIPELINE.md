@@ -25,7 +25,20 @@ re-tiered reproducibly.
 - **NWS text is stored in full** (US-government works): Local Storm Reports as the
   timely stream, and the per-tornado section of a storm-survey PNS as the oracle.
   Survey sections are matched to a track by the coordinates they state, and only
-  the best-scoring section becomes `primary_survey_of`.
+  the best-scoring section becomes `primary_survey_of`. A western longitude
+  written without its minus sign is restored (`iem.stated_point`).
+- **Stage 20 matches DAT and SPC hazards** (stage 15; an SPC hazard by SPC's
+  straight line or point) with stage 16's offices and places. LSRs and survey
+  sections are matched on each hazard's start time and convective day. For the
+  1,066 DAT hazards whose clock stage 14 found wrong by whole hours (881, 378 of
+  them on the wrong date) or missing (185), these are the SPC track's
+  (`episode_table.event_times`). With DAT's own, their LSRs fell outside the time
+  window or were looked up on the wrong day, and a date-only hazard had no window
+  at all.
+- **`20_fetch_nws_text.py --cache-only`** reads nothing from the network: it
+  builds from the IEM cache, prints what is missing, and writes its tables with
+  the suffix `_cacheonly` unless nothing was missing. Product downloads are
+  spaced 0.5 s apart, like the list requests, on the project's User-Agent.
 - **News is *published* as links and metadata only.** GDELT queries run per
   episode and store links. Article text itself is retrieved and held locally where
   it is needed for analysis — LexisNexis full-text exports, and Media Cloud bodies
@@ -144,10 +157,9 @@ narratives (`narrative_of`) and DAT comments (`comment_of`).
   hazards. Each recalibrates the rule and agrees with the main run on 97.6–99.3%
   of pairs. With no cut-off, 25 shared tokens are needed and agreement is 94.7%.
 
-10,701 hazards with two or more texts hold 55,943 texts in 39,918 accounts.
-Stage 20's links still cover the DAT hazards of its last run (256 links to hazards
-no longer in stage 15 are left out), so SPC hazards are compared on their
-narratives only until stage 20 is rerun. Writes
+10,701 hazards with two or more texts hold 55,943 texts in 39,918 accounts. These
+figures are from the stage 20 tables before its rework, which covered DAT hazards
+only; rerun stage 25 after stage 20. Writes
 `data/processed/same_source_edits_<tag>.csv` (one row per hazard and text),
 `data/interim/same_source_pairs_<tag>.csv` (every pair, both coverages),
 `manifest_same_source_<tag>.json` and `outputs/same_source_edits_report.md`.

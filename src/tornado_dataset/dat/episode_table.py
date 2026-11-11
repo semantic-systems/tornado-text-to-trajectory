@@ -39,7 +39,7 @@ import pandas as pd
 from .. import config
 from ..ids import uid
 from . import episodes as ep
-from .hazards import ef_rank
+from .hazards import convective_day, ef_rank
 
 METHOD = (f"space_time_spc_{config.EPISODE_MAX_DISTANCE_M / 1000:g}km_"
           f"{config.EPISODE_MAX_GAP_H:g}h")
@@ -272,6 +272,37 @@ def hazards_with_episodes(tag: str, usecols: list[str] | None = None) -> pd.Data
 def spc_hazards(tag: str) -> pd.DataFrame:
     """Stage 15's SPC hazards (SPC tornadoes with no DAT link)."""
     return pd.read_csv(_require(spc_hazards_path(tag)), low_memory=False)
+
+
+# Stage 14 links these DAT hazards to their SPC track only after finding DAT's own
+# time wrong (a whole-hour clock error) or missing (a date only).
+SPC_TIME_METHODS = ("time_repaired", "date_only")
+
+
+def event_times(hazards: pd.DataFrame, member: pd.DataFrame, tracks: pd.DataFrame
+                ) -> pd.DataFrame:
+    """When, and on which convective day, each hazard happened: for matching text.
+
+    ``hazards`` has ``hazard_uid``, ``hazard_source``, ``time_begin_utc`` and
+    ``convective_day`` (DAT and SPC hazards); ``member`` is stage 15's membership
+    table, ``tracks`` SPC's tornado list (``spc_id``, ``begin_utc``). A DAT hazard
+    takes its SPC track's start and day where DAT's clock was repaired or missing
+    (``SPC_TIME_METHODS``; ``time_source = spc_track``); otherwise every hazard
+    keeps its own (``dat`` or ``spc``). Returns ``hazard_uid``, ``begin_utc``,
+    ``convective_day`` and ``time_source``.
+    """
+    out = hazards[["hazard_uid", "hazard_source", "time_begin_utc", "convective_day"]].merge(
+        member[["hazard_uid", "spc_id", "spc_link_method"]], on="hazard_uid", how="left")
+    begin = dict(zip(tracks.spc_id, tracks.begin_utc))
+    use = ((out.hazard_source == "dat") & out.spc_link_method.isin(SPC_TIME_METHODS)
+           & out.spc_id.map(lambda s: isinstance(begin.get(s), str)))
+    track_begin = pd.to_datetime(out.spc_id[use].map(begin), utc=True)
+    out["begin_utc"] = out.time_begin_utc.where(out.time_begin_utc.notna(), None)
+    out.loc[use, "begin_utc"] = [t.isoformat() for t in track_begin]
+    out.loc[use, "convective_day"] = [convective_day(t.to_pydatetime()).isoformat()
+                                      for t in track_begin]
+    out["time_source"] = out.hazard_source.where(~use, "spc_track")
+    return out[["hazard_uid", "begin_utc", "convective_day", "time_source"]]
 
 
 def geography(tag: str, sources: tuple[str, ...] = ("dat",)) -> pd.DataFrame:

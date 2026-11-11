@@ -674,6 +674,55 @@ def sample_page_marks_what_was_counted() -> None:
     assert "<b>" not in out, "text is escaped"
 
 
+def nws_text_matches_on_repaired_times() -> None:
+    """SPC's time for DAT clock errors; signs restored; cache-only fetches nothing."""
+    import datetime as dt
+    import tempfile
+    import pandas as pd
+    from tornado_dataset.dat import episode_table
+    from tornado_dataset.text import iem, tiering
+    hazards = pd.DataFrame({
+        "hazard_uid": ["ok", "clock", "dateonly", "spc"],
+        "hazard_source": ["dat", "dat", "dat", "spc"],
+        "time_begin_utc": ["2020-04-12T20:00:00+00:00", "2020-04-13T02:00:00+00:00", None,
+                           "2020-04-12T21:00:00+00:00"],
+        "convective_day": ["2020-04-12", "2020-04-12", "2020-04-12", "2020-04-12"]})
+    member = pd.DataFrame({"hazard_uid": ["ok", "clock", "dateonly", "spc"],
+                           "spc_id": ["s1", "s2", "s3", "s4"],
+                           "spc_link_method": ["spatial_temporal_join", "time_repaired",
+                                               "date_only", "spc_record"]})
+    tracks = pd.DataFrame({"spc_id": ["s1", "s2", "s3", "s4"],
+                           "begin_utc": ["2020-04-12 20:00:00+00:00", "2020-04-14 01:00:00+00:00",
+                                         "2020-04-12 22:30:00+00:00",
+                                         "2020-04-12 21:00:00+00:00"]})
+    t = episode_table.event_times(hazards, member, tracks).set_index("hazard_uid")
+    assert t.time_source.to_dict() == {"ok": "dat", "clock": "spc_track",
+                                       "dateonly": "spc_track", "spc": "spc"}
+    assert t.at["clock", "convective_day"] == "2020-04-13", "a wrong date moves the day"
+    assert t.at["dateonly", "begin_utc"].startswith("2020-04-12T22:30")
+    assert t.at["ok", "begin_utc"] == "2020-04-12T20:00:00+00:00"
+    assert iem.stated_point(42.79, 92.78) == (42.79, -92.78), "a lost minus sign"
+    assert iem.stated_point(39.2, -39.2) is None and iem.stated_point(None, -90) is None
+    with tempfile.TemporaryDirectory() as tmp:
+        cache = Path(tmp)
+        assert iem.fetch_product_text("X-PNS", cache_dir=cache, offline=True) is None
+        (cache / "X-PNS.txt").write_text("cached", encoding="utf-8")
+        assert iem.fetch_product_text("X-PNS", cache_dir=cache, offline=True) == "cached"
+        assert iem.list_pns_products(dt.date(2020, 4, 13), cache_dir=cache, offline=True) is None
+        assert iem.fetch_lsr_year(2020, cache_dir=cache, offline=True) is None
+    links = pd.DataFrame({"textref_uid": ["p1", "p2", "l1"], "target_uid": ["ok", "spc", "ok"],
+                          "link_relation": ["primary_survey_of", "primary_survey_of",
+                                            "describes"]})
+    refs = pd.DataFrame({"textref_uid": ["p1", "p2", "l1"],
+                         "published_at": ["2020-04-14T18:00:00+00:00",
+                                          "2020-04-13T18:00:00+00:00",
+                                          "2020-04-12T20:05:00+00:00"]})
+    episodes = pd.DataFrame({"hazard_uid": ["ok", "spc"], "episode_uid": ["e1", "e1"]})
+    first = tiering.first_surveys(links, refs, episodes)
+    assert first == {"e1": dt.datetime(2020, 4, 13, 18, tzinfo=dt.timezone.utc)}, \
+        "an SPC hazard's survey counts for its episode"
+
+
 def accents_do_not_make_duplicates() -> None:
     """Bodies differing only in an accented letter are not verbatim duplicates."""
     import pandas as pd
@@ -911,6 +960,7 @@ for name, fn in [
     ("record texts link once and count as oracle", record_texts_link_once_and_count_as_oracle),
     ("same-source links need specific wording", same_source_links_need_specific_wording),
     ("sample page marks what was counted", sample_page_marks_what_was_counted),
+    ("NWS text matches on repaired times", nws_text_matches_on_repaired_times),
     ("accents do not make duplicates", accents_do_not_make_duplicates),
     ("wind features are not tornadoes", wind_features_are_not_tornadoes),
     ("unclaimed polygons become hazards", unclaimed_polygons_become_hazards),

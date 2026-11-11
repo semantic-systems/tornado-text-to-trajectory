@@ -12,9 +12,20 @@ the evidence it rests on (distance, time offset), and the survey section's own
 rating / path length are kept beside DAT's, since the two are independent
 descriptions of the same survey and their disagreements are worth measuring.
 
+Hazards are stage 15's: DAT hazards and SPC tornadoes without a DAT survey
+(their straight SPC line or point), with stage 16's offices and places. Text is
+matched on each hazard's time and convective day, which for a DAT hazard whose
+clock stage 14 found wrong or missing is its SPC track's
+(:func:`episode_table.event_times`).
+
+    python scripts/20_fetch_nws_text.py --cache-only          # what a run would fetch
+    python scripts/20_fetch_nws_text.py                       # full window
     python scripts/20_fetch_nws_text.py --tag march2025
     python scripts/20_fetch_nws_text.py --sample-days 30      # cost pilot
-    python scripts/20_fetch_nws_text.py                       # full window
+
+``--cache-only`` reads nothing from the network: it builds from the IEM cache,
+reports what is missing, and writes its tables with the suffix ``_cacheonly``
+unless nothing was missing.
 """
 
 from __future__ import annotations
@@ -33,20 +44,33 @@ from shapely.geometry import LineString, Point
 
 from tornado_dataset import config
 from tornado_dataset.dat import episode_table
+from tornado_dataset.dat import references
 from tornado_dataset.dat.geometry import to_equal_area, to_shapely
 from tornado_dataset.ids import uid, write_manifest
 from tornado_dataset.text import iem, tiering
 
 
 def load_hazards(tag: str) -> list[dict]:
-    """Hazards with geometry, projected geometry and their geography row."""
-    path = config.PROCESSED_DIR / f"hazards_{tag}.geojson"
-    features = json.loads(path.read_text(encoding="utf-8"))["features"]
+    """DAT and SPC hazards with projected geometry, matching time and geography."""
+    features = []
+    for path, stage in ((config.PROCESSED_DIR / f"hazards_{tag}.geojson", "12_build_hazards"),
+                        (episode_table.spc_hazards_path(tag, "geojson"), "15_build_episodes")):
+        if not path.exists():
+            raise SystemExit(f"no {path.name} — run scripts/{stage}.py")
+        features += json.loads(path.read_text(encoding="utf-8"))["features"]
+    if not references.SPC_TRACKS.exists():
+        raise SystemExit(f"no {references.SPC_TRACKS.name} — run scripts/13_fetch_references.py")
+    table = pd.DataFrame([{k: f["properties"].get(k) for k in
+                           ("hazard_uid", "hazard_source", "time_begin_utc", "convective_day")}
+                          for f in features])
+    table["hazard_source"] = table.hazard_source.fillna("dat")
+    tracks = pd.read_csv(references.SPC_TRACKS, usecols=["spc_id", "begin_utc"])
+    times = episode_table.event_times(table, episode_table.membership(tag), tracks)
+    times = times.set_index("hazard_uid").to_dict("index")
+    source = dict(zip(table.hazard_uid, table.hazard_source))
     episode_of = episode_table.episode_of(tag)
-    geography_path = config.PROCESSED_DIR / f"hazard_geography_{tag}.csv"
-    geography = {}
-    if geography_path.exists():
-        geography = pd.read_csv(geography_path).set_index("hazard_uid").to_dict("index")
+    geography = (episode_table.geography(tag, ("dat", "spc"))
+                 .set_index("hazard_uid").to_dict("index"))
 
     hazards = []
     for feature in features:
@@ -54,6 +78,7 @@ def load_hazards(tag: str) -> list[dict]:
         geom = to_shapely(feature.get("geometry"))
         if geom is None:
             continue
+        time = times[props["hazard_uid"]]
         info = geography.get(props["hazard_uid"], {})
         # Every office of every source (stage 16); older tables had two columns.
         wfos = {w for col in ("wfo_all", "wfo_dat", "wfo_spatial")
@@ -63,9 +88,11 @@ def load_hazards(tag: str) -> list[dict]:
                   if len(c.split(",")[0].strip()) > 3}
         hazards.append({
             "uid": props["hazard_uid"],
+            "source": source[props["hazard_uid"]],
             "episode_uid": episode_of.get(props["hazard_uid"]),
-            "day": props.get("convective_day"),
-            "begin": props.get("time_begin_utc"),
+            "day": time["convective_day"],
+            "begin": time["begin_utc"] if isinstance(time["begin_utc"], str) else None,
+            "time_source": time["time_source"],
             "efscale": props.get("efscale"),
             "path_length_mi": props.get("path_length_mi"),
             "fatalities": props.get("fatalities"),
@@ -77,13 +104,19 @@ def load_hazards(tag: str) -> list[dict]:
 
 
 # ── Local Storm Reports ──────────────────────────────────────────────────────
-def collect_lsrs(hazards: list[dict], *, refresh: bool = False) -> list[dict]:
+def collect_lsrs(hazards: list[dict], *, refresh: bool = False, offline: bool = False,
+                 missing: Counter | None = None) -> list[dict]:
     """Match tornado LSRs to hazards by distance from the track and time."""
     cache_dir = config.RAW_DIR / "iem" / "lsr"
     years = sorted({int(h["day"][:4]) for h in hazards if h["day"]})
     by_year: dict[int, list[dict]] = {}
     for year in years:
-        rows = iem.fetch_lsr_year(year, cache_dir=cache_dir, refresh=refresh)
+        rows = iem.fetch_lsr_year(year, cache_dir=cache_dir, refresh=refresh, offline=offline)
+        if rows is None:
+            if missing is not None:
+                missing["lsr_years"] += 1
+            print(f"  LSRs {year}: not cached")
+            continue
         by_year[year] = rows
         print(f"  LSRs {year}: {len(rows)}")
 
@@ -122,7 +155,8 @@ def collect_lsrs(hazards: list[dict], *, refresh: bool = False) -> list[dict]:
 
 # ── storm-survey PNS ─────────────────────────────────────────────────────────
 def collect_pns(hazards: list[dict], *, window_days: int, refresh: bool = False,
-                verbose: bool = True) -> tuple[list[dict], dict]:
+                verbose: bool = True, offline: bool = False,
+                missing: Counter | None = None) -> tuple[list[dict], dict]:
     """Find storm-survey sections and match them to hazards by coordinates."""
     list_cache = config.RAW_DIR / "iem" / "pns_lists"
     text_cache = config.RAW_DIR / "iem" / "products"
@@ -145,7 +179,12 @@ def collect_pns(hazards: list[dict], *, window_days: int, refresh: bool = False,
     matches, seen_products = [], set()
 
     for i, (date, offices) in enumerate(sorted(wanted.items()), 1):
-        products = iem.list_pns_products(date, cache_dir=list_cache, refresh=refresh)
+        products = iem.list_pns_products(date, cache_dir=list_cache, refresh=refresh,
+                                         offline=offline)
+        if products is None:
+            if missing is not None:
+                missing["pns_lists"] += 1
+            continue
         stats["products_listed"] += len(products)
         for product in products:
             product_id = product.get("product_id")
@@ -154,7 +193,12 @@ def collect_pns(hazards: list[dict], *, window_days: int, refresh: bool = False,
             if iem.product_wfo(product_id) not in offices:
                 continue
             seen_products.add(product_id)
-            text = iem.fetch_product_text(product_id, cache_dir=text_cache, refresh=refresh)
+            text = iem.fetch_product_text(product_id, cache_dir=text_cache, refresh=refresh,
+                                          offline=offline)
+            if text is None:
+                if missing is not None:
+                    missing["pns_products"] += 1
+                continue
             stats["products_downloaded"] += 1
             if not text:
                 continue
@@ -169,6 +213,12 @@ def collect_pns(hazards: list[dict], *, window_days: int, refresh: bool = False,
                 stats["structured_surveys"] += 1
                 for segment in segments:
                     stats["survey_segments"] += 1
+                    for la, lo in (("start_lat", "start_lon"), ("end_lat", "end_lon")):
+                        if segment[la] is not None and segment[lo] is not None:
+                            point = iem.stated_point(segment[la], segment[lo])
+                            stats["endpoints_sign_restored"] += bool(
+                                point and point[1] != segment[lo])
+                            stats["endpoints_unusable"] += point is None
                     matched = match_segment(segment, hazards_by_day, date)
                     stats["segments_matched"] += bool(matched)
                     for hazard, distance, is_best in matched:
@@ -234,11 +284,13 @@ def match_segment(segment: dict, hazards_by_day: dict[str, list[dict]],
     splits into several sections (and vice versa), so all hazards within the
     tolerance are returned with their distance and the closest flagged.
     """
-    if segment["start_lat"] is None:
+    start = iem.stated_point(segment["start_lat"], segment["start_lon"])
+    if start is None:
         return []
-    points = [(segment["start_lat"], segment["start_lon"])]
-    if segment["end_lat"] is not None:
-        points.append((segment["end_lat"], segment["end_lon"]))
+    points = [start]
+    end = iem.stated_point(segment["end_lat"], segment["end_lon"])
+    if end is not None:
+        points.append(end)
     # Both endpoints must sit near the track, not just the segment as a whole.
     # DAT sometimes draws one 80-mile line where the survey lists several
     # tornadoes, and a neighbouring tornado's path crosses such a line at zero
@@ -282,7 +334,12 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=17)
     parser.add_argument("--skip-pns", action="store_true")
     parser.add_argument("--refresh", action="store_true")
+    parser.add_argument("--cache-only", action="store_true",
+                        help="no network: build from the IEM cache and report what is missing")
     args = parser.parse_args()
+    if args.cache_only and args.refresh:
+        parser.error("--cache-only and --refresh exclude each other")
+    missing: Counter = Counter()
 
     hazards = load_hazards(args.tag)
     if args.sample_days:
@@ -291,17 +348,21 @@ def main() -> None:
         keep = set(days[:args.sample_days])
         hazards = [h for h in hazards if h["day"] in keep]
         print(f"pilot: {len(keep)} convective days, {len(hazards)} hazards")
-    print(f"{len(hazards)} hazards with usable geometry")
+    print(f"{len(hazards)} hazards with usable geometry: "
+          f"{dict(Counter(h['source'] for h in hazards))}; matched on the time of "
+          f"{dict(Counter(h['time_source'] for h in hazards))}")
 
     print("\nLocal Storm Reports")
-    lsr_matches = collect_lsrs(hazards, refresh=args.refresh)
+    lsr_matches = collect_lsrs(hazards, refresh=args.refresh, offline=args.cache_only,
+                               missing=missing)
     print(f"  {len(lsr_matches)} LSR-hazard matches")
 
     pns_matches, pns_stats = ([], {})
     if not args.skip_pns:
         print("\nStorm-survey PNS")
         pns_matches, pns_stats = collect_pns(hazards, window_days=args.window_days,
-                                             refresh=args.refresh)
+                                             refresh=args.refresh, offline=args.cache_only,
+                                             missing=missing)
 
     # The survey time per hazard is what makes temporal_class meaningful: it is
     # the moment after which any text is downstream of the survey. The *first*
@@ -437,30 +498,39 @@ def main() -> None:
     links = pd.DataFrame(textlinks).drop_duplicates(subset=["textref_uid", "target_uid"])
 
     suffix = f"{args.tag}" + (f"_pilot{args.sample_days}" if args.sample_days else "")
+    if args.cache_only and missing:
+        suffix += "_cacheonly"      # incomplete: never overwrite the real tables
     refs_path = config.PROCESSED_DIR / f"textrefs_nws_{suffix}.csv"
     links_path = config.PROCESSED_DIR / f"textlinks_nws_{suffix}.csv"
     refs.to_csv(refs_path, index=False)
     links.to_csv(links_path, index=False)
 
-    linked_hazards = links.target_uid.nunique() if len(links) else 0
+    source_of = {h["uid"]: h["source"] for h in hazards}
+
+    def per_source(uids) -> dict[str, int]:
+        return dict(Counter(source_of.get(u, "unknown") for u in set(uids)))
+
     # "Has oracle text" means a survey section identified as *this* tornado's,
     # not merely any survey product that mentioned the area.
-    oracle_hazards = (links[links.link_relation == "primary_survey_of"].target_uid.nunique()
-                      if len(links) else 0)
-    mention_hazards = (links[links.link_relation == "mentions"].target_uid.nunique()
-                       if len(links) else 0)
+    primary = set(links.target_uid[links.link_relation == "primary_survey_of"]) if len(links) else set()
+    mentioned = set(links.target_uid[links.link_relation == "mentions"]) if len(links) else set()
+    with_lsr = set(links.target_uid[links.link_relation == "describes"]) if len(links) else set()
     counts = {
         "hazards_considered": len(hazards),
+        "hazards_by_source": dict(Counter(h["source"] for h in hazards)),
+        "matched_on_time_of": dict(Counter(h["time_source"] for h in hazards)),
         "textrefs": len(refs),
         "textlinks": len(links),
         "by_source_type": refs.source_type.value_counts().to_dict() if len(refs) else {},
         "by_text_role": refs.text_role.value_counts().to_dict() if len(refs) else {},
-        "hazards_with_any_nws_text": int(linked_hazards),
-        "hazards_with_oracle_survey": int(oracle_hazards),
-        "hazards_with_survey_mention_only": int(mention_hazards - oracle_hazards),
+        "hazards_with_any_nws_text": per_source(links.target_uid if len(links) else []),
+        "hazards_with_lsr": per_source(with_lsr),
+        "hazards_with_oracle_survey": per_source(primary),
+        "hazards_with_survey_mention_only": per_source(mentioned - primary),
         "by_survey_format": (refs[refs.source_type == "pns"].survey_format.value_counts().to_dict()
                              if len(refs) and "survey_format" in refs else {}),
         "pns": pns_stats,
+        "not_cached": dict(missing) if args.cache_only else None,
         "parameters": {"window_days": args.window_days,
                        "lsr_radius_m": config.LSR_MATCH_RADIUS_M,
                        "lsr_window_hours": config.LSR_MATCH_WINDOW_HOURS,
@@ -472,9 +542,16 @@ def main() -> None:
 
     print(f"\n{len(refs)} text references, {len(links)} links")
     print(f"  by role: {counts['by_text_role']}")
-    print(f"  hazards with any NWS text: {linked_hazards}/{len(hazards)}")
-    print(f"  hazards with an oracle survey section: {oracle_hazards}/{len(hazards)}")
+    print(f"  hazards with any NWS text: {counts['hazards_with_any_nws_text']}")
+    print(f"  hazards with an oracle survey section: {counts['hazards_with_oracle_survey']}")
     print(f"wrote {refs_path.name}, {links_path.name}")
+    if args.cache_only:
+        if missing:
+            print(f"\nnot cached, so left out: {dict(missing)}. A run without --cache-only "
+                  "fetches them (about 0.5 s each); the PNS products of uncached lists are "
+                  "only known once the lists are fetched.")
+        else:
+            print("\neverything was cached: the tables are complete.")
 
 
 if __name__ == "__main__":

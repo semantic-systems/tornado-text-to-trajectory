@@ -30,27 +30,6 @@ from tornado_dataset.ids import uid, write_manifest
 from tornado_dataset.text import gdelt, tiering
 
 
-def survey_times(tag: str) -> dict[str, dt.datetime]:
-    """First primary-survey publication per episode, if Stage 20 has run."""
-    refs_path = config.PROCESSED_DIR / f"textrefs_nws_{tag}.csv"
-    links_path = config.PROCESSED_DIR / f"textlinks_nws_{tag}.csv"
-    hazards_path = config.PROCESSED_DIR / f"hazards_{tag}.csv"
-    if not (refs_path.exists() and links_path.exists()):
-        return {}
-    refs = pd.read_csv(refs_path)
-    links = pd.read_csv(links_path)
-    hazards = episode_table.hazards_with_episodes(tag, ["hazard_uid", "episode_uid"])
-    surveys = (links[links.link_relation == "primary_survey_of"]
-               .merge(refs[["textref_uid", "published_at", "source_type"]], on="textref_uid")
-               .merge(hazards, left_on="target_uid", right_on="hazard_uid"))
-    out: dict[str, dt.datetime] = {}
-    for row in surveys.itertuples():
-        moment = tiering._as_datetime(row.published_at)
-        if moment and (row.episode_uid not in out or moment < out[row.episode_uid]):
-            out[row.episode_uid] = moment
-    return out
-
-
 def main() -> None:
     default_tag = f"{config.WINDOW_START.isoformat()}_{config.WINDOW_END.isoformat()}"
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -104,7 +83,7 @@ def main() -> None:
 
     print(f"{len(episodes)} episodes; {skipped} predate GDELT coverage "
           f"({coverage_start}) and are flagged, {len(eligible)} to query")
-    surveys = survey_times(args.tag)
+    surveys = tiering.survey_times(args.tag)
     if surveys:
         print(f"  survey times known for {len(surveys)} episodes (from Stage 20)")
 

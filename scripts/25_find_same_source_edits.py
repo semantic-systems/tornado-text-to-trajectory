@@ -502,10 +502,13 @@ def write_report(path: Path, tag: str, settings: dict, r: dict, rows: pd.DataFra
           "each.",
           "- Each hazard's primary survey section is compared. Earlier revisions of it are "
           "stage 20 `mentions` and are not compared.",
-          "- Stage 20 covers the DAT hazards of its last run. Links to hazards no longer in "
-          f"stage 15 are left out: {dropped['links_to_hazards_not_in_stage_15']:,} "
-          f"({', '.join(f'{k} {v:,}' for k, v in dropped['of_which_relation'].items())}).",
-          ""]
+          ]
+    if dropped["links_to_hazards_not_in_stage_15"]:
+        L.append("- Stage 20 or 24 predates the current hazards. Links to hazards no longer in "
+                 f"stage 15 are left out: {dropped['links_to_hazards_not_in_stage_15']:,} "
+                 f"({', '.join(f'{k} {v:,}' for k, v in dropped['of_which_relation'].items())});"
+                 " rerun them.")
+    L.append("")
     path.write_text("\n".join(L), encoding="utf-8")
 
 

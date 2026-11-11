@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from tornado_dataset import config
+from tornado_dataset.dat import episode_table
 from tornado_dataset.text import tiering
 
 plt.rcParams.update({
@@ -53,6 +54,12 @@ def main() -> None:
     news_tag = args.news_suffix or tag
 
     hazards = pd.read_csv(config.PROCESSED_DIR / f"hazards_{tag}.csv")
+    spc_path = episode_table.spc_hazards_path(tag)
+    spc = pd.read_csv(spc_path) if spc_path.exists() else pd.DataFrame(
+        columns=["hazard_uid", "efscale", "path_length_mi", "fatalities"])
+    nws_manifest_path = config.PROCESSED_DIR / f"manifest_nws_text_{tag}.json"
+    nws_manifest = (json.loads(nws_manifest_path.read_text())["counts"]
+                    if nws_manifest_path.exists() else {})
     episodes = pd.read_csv(config.PROCESSED_DIR / f"episodes_{tag}.csv")
     nws_refs = read_optional(config.PROCESSED_DIR / f"textrefs_nws_{tag}.csv")
     nws_links = read_optional(config.PROCESSED_DIR / f"textlinks_nws_{tag}.csv")
@@ -67,21 +74,30 @@ def main() -> None:
     refs = pd.concat([df for df in (nws_refs, news_refs) if len(df)], ignore_index=True)
     role_counts = refs.text_role.value_counts() if len(refs) else pd.Series(dtype=int)
 
-    # ── coverage per hazard / episode ──
-    hazard_with_nws = nws_links.target_uid.nunique() if len(nws_links) else 0
+    # ── coverage per hazard / episode, DAT and SPC hazards apart ──
     oracle_links = (nws_links[nws_links.link_relation == "primary_survey_of"]
-                    if len(nws_links) else pd.DataFrame())
-    hazard_with_oracle = oracle_links.target_uid.nunique() if len(oracle_links) else 0
+                    if len(nws_links) else pd.DataFrame(columns=["target_uid", "textref_uid"]))
+    lsr_links = (nws_links[nws_links.link_relation == "describes"]
+                 if len(nws_links) else pd.DataFrame(columns=["target_uid"]))
+    sources = {"DAT": set(hazards.hazard_uid), "SPC": set(spc.hazard_uid)}
+
+    def with_text(links: pd.DataFrame, source: str) -> str:
+        n = links.target_uid[links.target_uid.isin(sources[source])].nunique() if len(links) else 0
+        return f"{n:,} ({pct(n, len(sources[source]))})"
+
+    any_nws = nws_links if len(nws_links) else pd.DataFrame(columns=["target_uid"])
+    time_sources = nws_manifest.get("matched_on_time_of", {})
     episode_with_news = news_links.target_uid.nunique() if len(news_links) else 0
     eligible_episodes = (episodes.convective_day >= config.GDELT_COVERAGE_START.isoformat()).sum()
 
     # ── survey vs DAT attribute agreement (independent descriptions) ──
     agreement_rows = pd.DataFrame()
     if len(oracle_links):
+        records = pd.concat([
+            hazards[["hazard_uid", "efscale", "path_length_mi", "fatalities"]].assign(record="DAT"),
+            spc[["hazard_uid", "efscale", "path_length_mi", "fatalities"]].assign(record="SPC")])
         agreement_rows = (oracle_links.merge(nws_refs, on="textref_uid")
-                          .merge(hazards[["hazard_uid", "efscale", "path_length_mi",
-                                          "fatalities"]],
-                                 left_on="target_uid", right_on="hazard_uid"))
+                          .merge(records, left_on="target_uid", right_on="hazard_uid"))
         agreement_rows["ef_match"] = (agreement_rows.survey_ef_rating.astype(str).str.upper()
                                       == agreement_rows.efscale.astype(str).str.upper())
         agreement_rows["length_ratio"] = (agreement_rows.survey_path_length_mi
@@ -152,13 +168,24 @@ layer: {pct(geo_dat.get('wfo_known', 0), geo_dat.get('hazards', 0))} of the
 
 ## 2. NWS text (same-org)
 
-| | n |
-|---|---|
-| text references | {len(nws_refs)} |
-| links to hazards | {len(nws_links)} |
-| hazards with any NWS text | {hazard_with_nws} ({pct(hazard_with_nws, len(hazards))}) |
-| hazards with a primary survey (oracle) | {hazard_with_oracle} ({pct(hazard_with_oracle, len(hazards))}) |
-| hazards with DAT survey comments (the other oracle source) | {int(hazards.has_oracle_text.sum())} ({pct(hazards.has_oracle_text.sum(), len(hazards))}) |
+{len(nws_refs):,} text references (LSRs and survey sections), {len(nws_links):,} links to
+hazards, for the DAT hazards and the SPC tornadoes without a DAT survey (matched on
+SPC's straight line or point).
+
+| | DAT hazards | SPC hazards |
+|---|---|---|
+| hazards | {len(sources["DAT"]):,} | {len(sources["SPC"]):,} |
+| with any NWS text | {with_text(any_nws, "DAT")} | {with_text(any_nws, "SPC")} |
+| with an LSR | {with_text(lsr_links, "DAT")} | {with_text(lsr_links, "SPC")} |
+| with a primary survey section (oracle) | {with_text(oracle_links, "DAT")} | {with_text(oracle_links, "SPC")} |
+| with DAT survey comments (stage 24) | {int(hazards.has_oracle_text.sum()):,} ({pct(hazards.has_oracle_text.sum(), len(hazards))}) | — |
+
+LSRs and survey sections are matched on each hazard's start time and convective
+day. For {time_sources.get("spc_track", 0):,} DAT hazards whose clock stage 14 found
+wrong by whole hours, or missing, these are the SPC track's
+(`episode_table.event_times`). With DAT's own, a wrong clock put their LSRs
+outside the time window or looked them up on the wrong day, and a missing one
+left no time window at all.
 
 Storm-survey products are compendia: one PNS covers every tornado an office
 surveyed, so sections are split apart and matched individually by the start/end
@@ -192,21 +219,27 @@ text should filter on `survey_format == "structured"`.
 """
 
     if len(agreement_rows):
-        ef_match = agreement_rows.ef_match.mean()
-        length_close = (agreement_rows.length_ratio.between(0.9, 1.1)).mean()
-        fatalities_match = agreement_rows.fatalities_match.mean()
+        def agree(g: pd.DataFrame) -> tuple[str, str, str]:
+            return (f"{g.ef_match.mean():.1%} (n={len(g):,})",
+                    f"{g.length_ratio.between(0.9, 1.1).mean():.1%} "
+                    f"(n={g.length_ratio.notna().sum():,})",
+                    f"{g.fatalities_match.mean():.1%} (n={len(g):,})")
+        cols = {rec: agree(g) for rec, g in agreement_rows.groupby("record")}
+        blank = ("—", "—", "—")
+        dat, spc_ = cols.get("DAT", blank), cols.get("SPC", blank)
         report += f"""
-### The survey and DAT as two independent descriptions
+### The survey and the record as two descriptions
 
-Each matched section states its own rating, path length and fatality count, and
-DAT records the same quantities separately. Comparing them is free validation of
-the hazard record — and where they disagree, that disagreement is itself data.
+Each matched section states its own rating, path length and fatality count; DAT,
+or SPC for an SPC hazard, records the same quantities separately. Comparing them
+is free validation of the hazard record, and where they disagree, that
+disagreement is itself data.
 
-| quantity | agreement | n |
+| quantity | survey vs DAT | survey vs SPC |
 |---|---|---|
-| EF rating identical | {ef_match:.1%} | {len(agreement_rows)} |
-| path length within ±10% | {length_close:.1%} | {agreement_rows.length_ratio.notna().sum()} |
-| fatality count identical | {fatalities_match:.1%} | {len(agreement_rows)} |
+| EF rating identical | {dat[0]} | {spc_[0]} |
+| path length within ±10% | {dat[1]} | {spc_[1]} |
+| fatality count identical | {dat[2]} | {spc_[2]} |
 
 Disagreement is expected and informative: DAT sometimes draws as one line what
 the survey splits into several tornadoes, so a hazard can legitimately be longer

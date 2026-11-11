@@ -107,6 +107,13 @@ def get_json(url: str, params: dict[str, Any], *, cache_path: Path | None = None
     raise RuntimeError(f"GET failed after {retries} attempts: {url}\n  {last_error}")
 
 
+def session_get(url: str, *, params: dict[str, Any] | None = None, min_interval: float = 0.0,
+                timeout: int = config.HTTP_TIMEOUT) -> requests.Response:
+    """One GET on the shared session (project User-Agent), after the host's throttle."""
+    _throttle(url, min_interval)
+    return _SESSION.get(url, params=params, timeout=timeout)
+
+
 def get_text(url: str, params: dict[str, Any], *, cache_path: Path | None = None,
              refresh: bool = False, min_interval: float = 0.0,
              retries: int = config.HTTP_RETRIES,
