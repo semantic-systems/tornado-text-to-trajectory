@@ -50,6 +50,7 @@ MODULES = [
     "tornado_dataset.text.corpora",
     "tornado_dataset.text.overlap", "tornado_dataset.text.records",
     "tornado_dataset.text.same_source", "tornado_dataset.text.same_source_view",
+    "tornado_dataset.text.official",
 ]
 
 failures: list[str] = []
@@ -723,6 +724,47 @@ def nws_text_matches_on_repaired_times() -> None:
         "an SPC hazard's survey counts for its episode"
 
 
+def official_texts_are_counted_per_hazard() -> None:
+    """Texts per hazard and kind; census divisions are the Census Bureau's."""
+    import tempfile
+    import pandas as pd
+    from tornado_dataset import config
+    from tornado_dataset.geo.gazetteer import census_division
+    from tornado_dataset.text import official
+    assert census_division("ok") == "West South Central" and census_division("PR") == "territory"
+    saved = config.PROCESSED_DIR
+    with tempfile.TemporaryDirectory() as tmp:
+        config.PROCESSED_DIR = Path(tmp)
+        try:
+            assert official.counts("t") is None, "nothing on disk: no table"
+            pd.DataFrame({"textref_uid": ["p", "l1", "l2", "l1"], "target_uid": ["h1", "h1", "h1", "h2"],
+                          "link_relation": ["primary_survey_of", "describes", "describes",
+                                            "describes"]}).to_csv(Path(tmp) / "textlinks_nws_t.csv")
+            pd.DataFrame({"textref_uid": ["p", "l1", "l2"],
+                          "lsr_source": [None, "NWS Storm Survey", "TRAINED SPOTTER"]}).to_csv(
+                Path(tmp) / "textrefs_nws_t.csv")
+            pd.DataFrame({"textref_uid": ["n", "c", "e"], "target_uid": ["h2", "h1", "ep"],
+                          "link_level": ["hazard", "hazard", "episode"],
+                          "link_relation": ["narrative_of", "comment_of", "narrative_of"]}).to_csv(
+                Path(tmp) / "textlinks_records_t.csv")
+            table = official.counts("t")
+        finally:
+            config.PROCESSED_DIR = saved
+    assert list(table.columns) == list(official.KINDS)
+    assert table.loc["h1"].tolist() == [1, 0, 1, 1, 1], table.loc["h1"].tolist()
+    assert table.loc["h2"].tolist() == [0, 1, 0, 1, 0], "an LSR may describe two hazards"
+    assert "ep" not in table.index, "episode-level narratives are not a hazard's"
+
+
+def map_coordinates_match_leaflet() -> None:
+    """Web Mercator world pixels as Leaflet's map.project computes them."""
+    from tornado_dataset.geo import pixels
+    assert pixels.mercator_world(-94, 38, 0) == (61, 99)
+    assert pixels.mercator_world(0, 0, 1) == (256, 256), "the origin is the map centre"
+    flat = pixels.ring_to_mercator([(-94, 38), (-94, 38), (-93, 38)])
+    assert len(flat) == 4, "coincident vertices are dropped"
+
+
 def accents_do_not_make_duplicates() -> None:
     """Bodies differing only in an accented letter are not verbatim duplicates."""
     import pandas as pd
@@ -960,6 +1002,8 @@ for name, fn in [
     ("record texts link once and count as oracle", record_texts_link_once_and_count_as_oracle),
     ("same-source links need specific wording", same_source_links_need_specific_wording),
     ("sample page marks what was counted", sample_page_marks_what_was_counted),
+    ("official texts are counted per hazard", official_texts_are_counted_per_hazard),
+    ("map coordinates match Leaflet", map_coordinates_match_leaflet),
     ("NWS text matches on repaired times", nws_text_matches_on_repaired_times),
     ("accents do not make duplicates", accents_do_not_make_duplicates),
     ("wind features are not tornadoes", wind_features_are_not_tornadoes),

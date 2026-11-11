@@ -6,7 +6,7 @@ current pipeline, and nothing in `src/tornado_dataset/` or `scripts/` imports it
 | file | superseded by | why |
 |---|---|---|
 | `extract_noaa_polygons.py` | `scripts/10_fetch_dat.py` | filtered on non-empty survey `comments` at download time, which discards 68% of damage polygons; the pipeline fetches everything and flags `has_oracle_text` instead |
-| `analyze_noaa_data.py` | `scripts/18_analyze_events.py` | reported over the older `events_*.geojson` shape, before the Episode/Hazard/Geometry model existed |
+| `analyze_noaa_data.py` | `scripts/18_analyze_events.py` | reported over the older `events_*.geojson` shape, before the Episode/Hazard/Geometry model existed. Its last report (June 2026, 9,143 events from 1979 to 2026, comment-bearing features only) is `tornado_analysis_report.md` here, moved out of `outputs/` so it is not read as a current result; its figures were never tracked |
 | `normalize_noaa_data.py` | the DAT pipeline (stages 10–12) | one-off normalisation absorbed into `dat/geometry.py` and `dat/hazards.py` |
 | `parse_lexisnexis_rtf.py` | `tornado_dataset.text.lexisnexis` | was already only a shim re-exporting the module |
 | `tornado_filter.py` | `text/mediacloud.py` + `scripts/30_filter_media_cloud.py` | written for LexisNexis headline+lead text; the rewrite works from headline+URL, dedups syndicated copies, and drops the rule/classifier stages that measurement showed were costing recall |

@@ -537,27 +537,63 @@ a Puerto Rico F4) that DAT structurally cannot cover.
 ### Exploring the data
 
 `scripts/18_analyze_events.py` writes
-[`outputs/hazard_analysis_report.md`](outputs/hazard_analysis_report.md) with figures
-for counts per year, rating distribution and mix, season and time of day (in local
-solar time, since a UTC histogram smears the afternoon peak across four time
-zones), track geometry, human impact, a density map in equal-area projection, and
-per-year coverage of each layer.
+[`outputs/hazard_analysis_report.md`](outputs/hazard_analysis_report.md): what the
+dataset holds and how representative its surveys are. SPC's tornado list is the
+population and DAT the surveyed subset, so every figure shows both: the
+population in grey, DAT in blue (DAT and SPC hazards: blue and orange). Times,
+ratings, lengths and casualties are SPC's for both, one record for the comparison,
+free of DAT's clock errors. Sections:
+1. the way from SPC's tornadoes to the dataset's hazards, every count reconciled;
+2. DAT coverage per year;
+3. **representativeness**: the share of tornadoes with a DAT survey by rating,
+   season, time of day (local solar), track length, deaths and Census division,
+   within three eras, so that adoption over time does not pass for a property of
+   the category;
+4. season, time of day and track length;
+5. density and DAT coverage on an equal-area map;
+6. deaths from SPC's record, with the ten deadliest tornadoes;
+7. which official texts each hazard has (`text/official.py`: survey statement,
+   narrative, DAT comment, survey and real-time LSR) and how many independent
+   accounts (stage 25). News is left out: it is not official text.
 
-`scripts/19_event_map.py` writes `outputs/hazard_map.html` — a single
-self-contained file (~3 MB, no network, no build step) showing all 9,982 tracks on
-a US map with a month slider and play button, a window mode (month / year /
-cumulative), a rating filter, hover details and a table of the strongest tracks in
-view. It zooms to 120× (scroll, pinch, double-click, or the buttons) and pans by
-dragging; surveyed **damage footprints** appear from 20×, where a polygon is more
-than a smudge.
+Each section opens with a finding computed from the data; longer tables are in
+collapsible blocks. Census divisions come from `gazetteer.census_division`.
 
-Tracks are pre-projected and simplified in Python so the browser only draws
-integer coordinates, which is what keeps 10k tracks interactive on a canvas. Two
-details make deep zoom work: coordinates ship in **sub-pixel units** (1/32 px), so
-detail is not discarded at build time, and the simplification tolerance is 60 m
-(~1 px at 70×). Stroke widths are divided by the zoom so lines stay the same
-thickness on screen, and each track carries a bounding box so off-screen work is
-culled.
+`scripts/19_event_map.py` writes `outputs/hazard_map.html`, a single file (~8 MB,
+no build step) showing every hazard over an **OpenStreetMap basemap**, as in the
+watch hand check: DAT's surveyed tracks solid, SPC tornadoes without a DAT survey
+dashed (SPC's straight line, or a hollow dot where SPC records no end). Controls:
+- **by month or by day**: a slider with play button, a date to jump to, and a
+  window (this month or day / so far this year or month / everything so far). Day
+  steps run over the 2,837 convective days with at least one hazard, not every
+  calendar day;
+- filters for rating, hazard source and official text, and the basemap on or off;
+- hover details: source, place, office, the record's casualties, episode, texts
+  and accounts;
+- a table of the deadliest and strongest hazards in view.
+
+**Clicking a hazard shows its whole episode** and zooms to it, for checking how
+tornadoes were grouped (Esc returns). Dates follow `episode_table.event_times`, so a
+DAT hazard with a repaired clock sits on its SPC day. Surveyed **damage
+footprints** appear from zoom 11, where a polygon is more than a smudge; at street
+zoom a track can be checked against the roads and towns it crossed. A footprint
+smaller than the simplification tolerance becomes a dot rather than vanishing.
+
+Leaflet 1.9.4 is embedded from the viewer's vendored copy, so the page needs no
+CDN; only the tiles come over the network, from `tile.openstreetmap.org` with the
+required attribution. The tiles are shown in greyscale (inverted in dark mode) so
+the tracks lead. The tile servers refuse requests without a referring page, which
+a file opened from disk does not send: serve `outputs/` (below). Without tiles,
+offline or with the basemap off, the map draws state outlines instead and says
+why.
+
+The tiles fix the projection: **Web Mercator**, which enlarges northern areas.
+Compare densities on stage 18's equal-area maps, not here. Tracks are simplified
+(60 m) and projected in Python to integer world pixels at zoom 14 (`geo/pixels.py`,
+`mercator_world`, about 7.5 m per unit), and drawn on one canvas above the map. The
+browser only scales them by 2^(zoom − 14), which keeps 20,000 hazards interactive.
+Stroke widths are divided by the scale so lines keep their screen width, and each
+track carries a bounding box so off-screen work is culled.
 
 Ratings use one validated single-hue ordinal ramp (`src/tornado_dataset/viz.py`),
 shared by the figures and the map. The dark-mode ramp is its own set of steps

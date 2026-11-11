@@ -25,17 +25,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from tornado_dataset import config
-from tornado_dataset.dat import evaluate, link
+from tornado_dataset import config, viz
+from tornado_dataset.dat import episode_table, evaluate, link
 from tornado_dataset.dat import references as refs
 
-plt.rcParams.update({
-    "figure.facecolor": "white", "axes.facecolor": "white",
-    "axes.spines.top": False, "axes.spines.right": False,
-    "axes.edgecolor": "#b8b8b8", "font.size": 10, "figure.dpi": 110,
-})
-ACCENT = "#d1495b"
-BLUE = "#2e6f95"
+plt.rcParams.update(viz.matplotlib_style())
+L = viz.LIGHT
+BLUE, ORANGE, GREY = L["series1"], L["series2"], L["muted"]
 
 
 def pct(numerator: float, denominator: float) -> str:
@@ -203,6 +199,73 @@ This is the accuracy to expect of the {c.get('spc', {}).get('hazards', 0):,} SPC
 """
 
 
+def record_agreement(tag: str, hazards: pd.DataFrame) -> str:
+    """Section 6: DAT's record against SPC's for the same tornado."""
+    member_path = episode_table.membership_path(tag)
+    if not (member_path.exists() and refs.SPC_TRACKS.exists()):
+        return ""
+    member = pd.read_csv(member_path)
+    dat = member[(member.hazard_source == "dat") & member.spc_id.notna()]
+    single = dat.spc_id.map(dat.spc_id.value_counts()) == 1
+    tracks = pd.read_csv(refs.SPC_TRACKS, usecols=["spc_id", "date", "st", "mag", "len", "wid",
+                                                   "fat", "inj"])
+    pairs = (dat[single][["hazard_uid", "spc_id", "spc_link_method"]]
+             .merge(hazards[["hazard_uid", "efscale", "path_length_mi", "path_width_yd",
+                             "fatalities", "injuries"]], on="hazard_uid")
+             .merge(tracks, on="spc_id"))
+    ef = pairs.efscale.map(viz.ef_class)
+    dat_ef = pairs.efscale.astype(str).str.extract(r"EF\s*-?\s*([0-5])", expand=False)
+    both = dat_ef.notna() & (pairs.mag >= 0)
+    diff = (dat_ef[both].astype(int) - pairs.mag[both]).abs()
+
+    def ratio_row(dat_col: str, spc_col: str, label: str) -> str:
+        ok = (pairs[dat_col] > 0) & (pairs[spc_col] > 0)
+        r = pairs[dat_col][ok] / pairs[spc_col][ok]
+        return (f"| {label} | {int(ok.sum()):,} | {r.between(0.9, 1.1).mean():.1%} within ±10% | "
+                f"median DAT ÷ SPC {r.median():.2f}; {(r < 0.5).mean():.1%} under half, "
+                f"{(r > 2).mean():.1%} over double |")
+
+    def count_row(dat_col: str, spc_col: str, label: str) -> str:
+        ok = pairs[dat_col].notna()
+        d, s = pairs[dat_col][ok], pairs[spc_col][ok]
+        return (f"| {label} | {int(ok.sum()):,} | {(d == s).mean():.1%} identical | "
+                f"total DAT {int(d.sum()):,}, SPC {int(s.sum()):,}; DAT lower on "
+                f"{int((d < s).sum()):,}, higher on {int((d > s).sum()):,} |")
+
+    death_gap = pairs.assign(gap=pairs.fat - pairs.fatalities)
+    worst = death_gap[death_gap.gap.abs() > 0].reindex(
+        death_gap.gap.abs().sort_values(ascending=False).index).dropna(subset=["gap"]).head(8)
+    worst_md = "\n".join(
+        f"| {r.date} | {r.st} | {int(r.fat)} | {int(r.fatalities)} | `{r.spc_id}` | "
+        f"`{r.hazard_uid}` |" for r in worst.itertuples())
+    multi = int((~single).sum())
+    return f"""### Same tornado, two records: DAT against SPC
+
+DAT and SPC's database record the same quantities for the same tornado,
+separately: DAT from the survey drawing, SPC from Storm Data. Compared on the
+{len(pairs):,} DAT hazards that are the only DAT hazard on their SPC track (the
+{multi:,} that share a track are pieces or duplicates and would double-count).
+
+| quantity | compared | agreement | detail |
+|---|---:|---:|---|
+| rating, both rated | {int(both.sum()):,} | {(diff == 0).mean():.1%} identical | {(diff <= 1).mean():.1%} within one EF class |
+{ratio_row("path_length_mi", "len", "path length")}
+{ratio_row("path_width_yd", "wid", "path width")}
+{count_row("fatalities", "fat", "deaths")}
+{count_row("injuries", "inj", "injuries")}
+
+Path lengths and widths differ by design: DAT measures the drawn line and the
+widest polygon, SPC states the length and maximum width Storm Data received. Deaths
+and injuries should not differ; where they do, DAT's figure is a field the
+surveyor filled in (or left at zero) and SPC's is the reviewed count, so stage 18
+uses SPC's. Largest differences in deaths, for checking:
+
+| date | state | SPC deaths | DAT deaths | SPC track | DAT hazard |
+|---|---|---:|---:|---|---|
+{worst_md}
+"""
+
+
 def main() -> None:
     default_tag = f"{config.WINDOW_START.isoformat()}_{config.WINDOW_END.isoformat()}"
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -231,6 +294,9 @@ def main() -> None:
     hazard_counts = json.loads((config.PROCESSED_DIR / f"manifest_hazards_{tag}.json")
                                .read_text())["counts"]
 
+    polygons_with_comments = sum(
+        1 for f in polys_raw
+        if str(f["properties"].get("comments") or "").strip().lower() not in ("", "none", "nan"))
     lines = link.prepare(lines_raw)
     polygons = link.prepare(polys_raw)
     line_guids = {line["globalid"] for line in lines if line["globalid"]}
@@ -252,34 +318,37 @@ def main() -> None:
     hazards["year"] = hazards.convective_day.str[:4]
     counts_by_year = hazards.groupby("year").agg(
         hazards=("hazard_uid", "size"),
-        with_polygon=("has_polygon", "sum"),
-        with_oracle=("has_oracle_text", "sum"))
+        with_polygon=("has_polygon", "sum"))
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 3.6))
-    axes[0].bar(counts_by_year.index, counts_by_year.hazards, color=BLUE, label="hazards")
-    axes[0].bar(counts_by_year.index, counts_by_year.with_polygon, color=ACCENT,
-                label="with damage polygon")
-    axes[0].set_title("Hazards per year"); axes[0].legend(frameon=False)
-    axes[0].tick_params(axis="x", rotation=90)
-    axes[1].plot(population.year, population.path_guid_rate, marker="o", color=ACCENT,
-                 label="real path_guid")
-    axes[1].plot(population.year, population.event_id_rate, marker="o", color=BLUE,
-                 label="event_id")
-    axes[1].plot(population.year, population.comments_rate, marker="o", color="#6a994e",
-                 label="comments")
-    axes[1].set_title("Polygon field population by year"); axes[1].set_ylim(0, 1)
-    axes[1].legend(frameon=False); axes[1].tick_params(axis="x", rotation=90)
-    fig.tight_layout()
+    fig, axes = plt.subplots(1, 4, figsize=(14, 3.2), width_ratios=[1.6, 1, 1, 1],
+                             layout="constrained")
+    years = counts_by_year.index.astype(int)
+    axes[0].bar(years, counts_by_year.hazards, color=L["axis"], width=0.72, label="DAT hazards")
+    axes[0].bar(years, counts_by_year.with_polygon, color=BLUE, width=0.72,
+                label="… with a damage polygon")
+    axes[0].set_title("DAT hazards per year", loc="left")
+    axes[0].legend(loc="upper left")
+    axes[0].set_xticks(range(years.min(), years.max() + 1, 3))
+    axes[0].grid(axis="x", visible=False)
+    fields = (("path_guid_rate", "a real path_guid"), ("event_id_rate", "an event_id"),
+              ("comments_rate", "comments"))
+    for ax, (column, title) in zip(axes[1:], fields):
+        ax.plot(population.year.astype(int), population[column] * 100, color=BLUE, lw=2)
+        ax.set_ylim(0, 100)
+        ax.set_title(f"polygons with {title}", loc="left", fontsize=10)
+        ax.set_xticks(range(years.min(), years.max() + 1, 5))
+        ax.grid(axis="x", visible=False)
+    axes[1].set_ylabel("% of DAT polygons")
     coverage_fig = figures_dir / "dat_coverage.png"
     fig.savefig(coverage_fig); plt.close(fig)
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.6))
     if not reliability.empty:
-        axes[0].plot([0, 1], [0, 1], "--", color="#999999", lw=1, label="perfect calibration")
+        axes[0].plot([0, 1], [0, 1], "--", color=GREY, lw=1, label="perfect calibration")
         axes[0].errorbar(reliability.mean_confidence, reliability.observed_accuracy,
                          yerr=[reliability.observed_accuracy - reliability.ci_low,
                                reliability.ci_high - reliability.observed_accuracy],
-                         fmt="o-", color=ACCENT, capsize=3, label="observed")
+                         fmt="o-", color=BLUE, capsize=3, label="observed")
         for row in reliability.itertuples():
             axes[0].annotate(f"n={int(row.n)}", (row.mean_confidence, row.observed_accuracy),
                              textcoords="offset points", xytext=(4, -10), fontsize=8)
@@ -290,11 +359,11 @@ def main() -> None:
         subset = sweep[sweep.max_date_delta_days == delta]
         axes[1].plot(subset.gap_threshold_m, subset.recall, style, marker="o", color=BLUE,
                      label=f"recall, date ±{delta}d")
-        axes[1].plot(subset.gap_threshold_m, subset.precision, style, marker="s", color=ACCENT,
+        axes[1].plot(subset.gap_threshold_m, subset.precision, style, marker="s", color=ORANGE,
                      label=f"precision, date ±{delta}d")
-    axes[1].axvline(config.LINK_GAP_THRESHOLD_M, color="#666666", lw=1)
+    axes[1].axvline(config.LINK_GAP_THRESHOLD_M, color=GREY, lw=1)
     axes[1].annotate("default", (config.LINK_GAP_THRESHOLD_M, axes[1].get_ylim()[0]),
-                     textcoords="offset points", xytext=(4, 4), fontsize=8, color="#666666")
+                     textcoords="offset points", xytext=(4, 4), fontsize=8, color=GREY)
     axes[1].set_xlabel("gap threshold (m)"); axes[1].set_xscale("log")
     axes[1].set_title("Operating points (n=%d gold polygons)" % int(gold.resolvable.sum()))
     axes[1].legend(frameon=False, fontsize=7, ncol=2, loc="center left",
@@ -361,6 +430,7 @@ line form the {int(by_source.get('polygon', 0)):,} polygon-only hazards
         if dat_geo else
         f"**WFO is missing on {pct(len(hazards) - hazards.wfo_known.sum(), len(hazards))} of "
         "hazards**, which will constrain the NWS/IEM text retrieval until stage 16 fills it.")
+    agreement_md = record_agreement(tag, hazards)
     reference_lines = refs.report_lines(tag)
     references_md = "\n".join(reference_lines) if reference_lines is not None else (
         "Not available: run `scripts/13_fetch_references.py` and "
@@ -380,10 +450,9 @@ Generated by `scripts/17_qa_events.py`; every number below is reproducible from
 | damage lines | {fetch_manifest['counts']['lines']['expected']} | {fetch_manifest['counts']['lines']['fetched']} | {fetch_manifest['counts']['lines']['complete']} | {fetch_manifest['counts']['lines']['missing_geometry']} |
 | damage polygons | {fetch_manifest['counts']['polygons']['expected']} | {fetch_manifest['counts']['polygons']['fetched']} | {fetch_manifest['counts']['polygons']['complete']} | {fetch_manifest['counts']['polygons']['missing_geometry']} |
 
-No attribute filter was applied. The earlier extract required a non-empty
-`comments` field, which would have dropped {100 - 100 * 3148 / 9989:.0f}% of damage polygons and biased the
-geometry sample; the comment-bearing subset is instead flagged per hazard
-(`has_oracle_text`) and can be selected as a view.
+No attribute filter was applied. Requiring a non-empty `comments` field, as an
+earlier extract did, would have dropped {pct(len(polys_raw) - polygons_with_comments, len(polys_raw))} of damage polygons and biased the
+geometry sample; the comments are kept as text instead (stage 24).
 
 Features with no usable geometry carry attributes but an empty `rings`/`paths`
 array in DAT itself — they are excluded from linkage and counted here rather
@@ -499,18 +568,20 @@ which is exactly why these metrics are not extrapolated to the full dataset.
 
 ## 5. Hazards and episodes
 
-{len(lines)} usable lines and {len(polygons)} usable polygons were assembled into
-**{len(hazards)} hazards** (one tornado each).
+{len(lines):,} usable lines and {len(polygons):,} usable polygons were assembled into
+**{len(hazards):,} hazards** (one tornado each).
 
 {sources_md}
 
-| property | n | share |
-|---|---|---|
-| hazards with ≥1 damage polygon | {int(hazards.has_polygon.sum())} | {pct(hazards.has_polygon.sum(), len(hazards))} |
-| hazards with oracle survey text (`comments`) | {int(hazards.has_oracle_text.sum())} | {pct(hazards.has_oracle_text.sum(), len(hazards))} |
-| hazards with a known WFO | {int(hazards.wfo_known.sum())} | {pct(hazards.wfo_known.sum(), len(hazards))} |
-| hazards inside the GDELT window (≥ {config.GDELT_COVERAGE_START}) | {int(hazards.gdelt_coverage.sum())} | {pct(hazards.gdelt_coverage.sum(), len(hazards))} |
-| hazards assembled from >1 line | {int((hazards.n_lines > 1).sum())} | {pct((hazards.n_lines > 1).sum(), len(hazards))} |
+| property | hazards | share |
+|---|---:|---:|
+| with ≥ 1 damage polygon | {int(hazards.has_polygon.sum()):,} | {pct(hazards.has_polygon.sum(), len(hazards))} |
+| assembled from > 1 line | {int((hazards.n_lines > 1).sum()):,} | {pct((hazards.n_lines > 1).sum(), len(hazards))} |
+| with an office recorded by DAT itself | {int(hazards.wfo_known.sum()):,} | {pct(hazards.wfo_known.sum(), len(hazards))} |
+
+Stage 16 gives every hazard an office (see Geography below). Which texts each
+hazard has is reported in `hazard_analysis_report.md` (section 7) and
+`text_qa_report.md`.
 
 Merge evidence for multi-line hazards (why segments were joined):
 
@@ -524,6 +595,7 @@ Calibration and operating points: `figures/dat_linker_evaluation.png`.
 ## 6. Against the official records (NCEI Storm Events, SPC)
 
 {references_md}
+{agreement_md}
 ## 7. Limitations to carry into the dataset documentation
 
 1. **Ground truth is a survey estimate.** DAT geometries are drawn by NWS field

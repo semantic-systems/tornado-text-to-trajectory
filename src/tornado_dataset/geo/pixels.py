@@ -56,3 +56,34 @@ def bounds_of(paths: Iterable[Sequence[int]]) -> list[int]:
     xs = [p[i] for p in paths for i in range(0, len(p), 2)]
     ys = [p[i] for p in paths for i in range(1, len(p), 2)]
     return [min(xs), min(ys), max(xs), max(ys)]
+
+
+# ── Web Mercator, for drawing over map tiles ─────────────────────────────────
+# Tiles (OpenStreetMap) come in Web Mercator, so a map drawn over them has to use
+# it too. Coordinates are Leaflet's "world pixels" at a fixed reference zoom:
+# at zoom 14 one unit is about 7.5 m at 38°N, finer than any simplification
+# tolerance used, and the browser scales by 2^(zoom - MERCATOR_ZOOM).
+MERCATOR_ZOOM = 14
+
+
+def mercator_world(lon: float, lat: float, zoom: int = MERCATOR_ZOOM) -> tuple[int, int]:
+    """WGS84 -> integer Web Mercator pixel at ``zoom`` (Leaflet's ``map.project``)."""
+    import math
+    size = 256 * 2 ** zoom
+    lat = max(min(lat, 85.0511287798), -85.0511287798)
+    s = math.sin(math.radians(lat))
+    x = (lon + 180.0) / 360.0 * size
+    y = (0.5 - math.log((1 + s) / (1 - s)) / (4 * math.pi)) * size
+    return round(x), round(y)
+
+
+def ring_to_mercator(coords: Iterable[Sequence[float]], zoom: int = MERCATOR_ZOOM) -> list[int]:
+    """Flatten a WGS84 ring/path to Web Mercator ``[x0, y0, x1, y1, …]``."""
+    flat: list[int] = []
+    last: tuple[int, int] | None = None
+    for lon, lat in coords:
+        xy = mercator_world(lon, lat, zoom)
+        if xy != last:                          # drop coincident vertices
+            flat.extend(xy)
+            last = xy
+    return flat

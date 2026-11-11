@@ -475,6 +475,28 @@ def choose_wfo(dat: list[str], storm_events: list[str],
     return primary, source, list(dict.fromkeys([primary] + dat + storm_events + spatial))
 
 
+# US Census Bureau divisions (Census Regions and Divisions of the United States),
+# for grouping tornadoes by area with a fixed, official mapping. Territories are
+# kept apart rather than forced into a division.
+CENSUS_DIVISIONS = {
+    "New England": ("CT", "ME", "MA", "NH", "RI", "VT"),
+    "Middle Atlantic": ("NJ", "NY", "PA"),
+    "East North Central": ("IL", "IN", "MI", "OH", "WI"),
+    "West North Central": ("IA", "KS", "MN", "MO", "NE", "ND", "SD"),
+    "South Atlantic": ("DE", "DC", "FL", "GA", "MD", "NC", "SC", "VA", "WV"),
+    "East South Central": ("AL", "KY", "MS", "TN"),
+    "West South Central": ("AR", "LA", "OK", "TX"),
+    "Mountain": ("AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY"),
+    "Pacific": ("AK", "CA", "HI", "OR", "WA"),
+}
+_DIVISION_OF = {st: div for div, states in CENSUS_DIVISIONS.items() for st in states}
+
+
+def census_division(state: str | None) -> str:
+    """Census division of a two-letter state code; ``territory`` otherwise."""
+    return _DIVISION_OF.get(str(state or "").strip().upper(), "territory")
+
+
 def state_outlines(year: int, *, simplify_deg: float = 0.02,
                    refresh: bool = False) -> dict[str, Any]:
     """State boundaries, dissolved from the cached county polygons.

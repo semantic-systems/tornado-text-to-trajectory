@@ -74,9 +74,9 @@ python scripts/13_fetch_references.py  # NCEI Storm Events; SPC's tornado file i
 python scripts/14_match_references.py  # ...matched to DAT hazards
 python scripts/15_build_episodes.py    # episodes (outbreaks) on SPC tracks; SPC-only tornadoes as hazards
 python scripts/16_enrich_geography.py  # counties, WFO, place names for DAT and SPC hazards
-python scripts/17_qa_events.py         # outputs/events_qa_report.md
-python scripts/18_analyze_events.py    # descriptive report + figures
-python scripts/19_event_map.py         # interactive map (self-contained HTML)
+python scripts/17_qa_events.py         # outputs/events_qa_report.md (linkage, DAT vs SPC records)
+python scripts/18_analyze_events.py    # what the dataset holds, how representative DAT is
+python scripts/19_event_map.py         # interactive map of all hazards, episodes, texts
 
 # 2x  text collection
 python scripts/20_fetch_nws_text.py    # NWS LSRs (timely) + storm-survey PNS (oracle)
