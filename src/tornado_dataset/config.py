@@ -233,6 +233,29 @@ PNS_MATCH_RADIUS_M = 5_000.0
 PNS_LEGACY_MIN_NAME_HITS = 2
 IEM_MIN_REQUEST_INTERVAL = 0.5  # be a good citizen on a free academic service
 
+# ── same-source edits among official texts (stage 25, text/same_source.py) ───
+# Two texts of one hazard are edits of one account when they share verbatim
+# wording specific to their tornado: runs of this many tokens found in the texts
+# of fewer than EDIT_COMMON_HAZARDS hazards. Shorter runs are mostly stock
+# phrases, longer ones break under every small edit; 4, 6 and 8 are rerun.
+EDIT_RUN_TOKENS = 5
+# A run in the texts of three or more tornadoes is a phrase of the language or a
+# formula of the office. Two are allowed because the hazard list holds a few
+# pieces and duplicates of one tornado (rerun with 2, 5, 10 and off).
+EDIT_COMMON_HAZARDS = 3
+# Shared specific tokens needed for a link: the smallest value from the floor
+# (two runs' worth, so one shared phrase never links) at which at most these
+# shares of comparison pairs would link: other episode (no copy, no shared
+# topic; lower bound) and same episode, other hazard (same day and office,
+# templates and some real copies; upper bound).
+EDIT_MIN_SHARED_FLOOR = 10
+EDIT_TARGET_OTHER_EPISODE = 0.001
+EDIT_TARGET_SAME_EPISODE = 0.01
+# A text covered this far by another member is recorded as contained in it.
+EDIT_CONTAINED_SHARE = 0.8
+EDIT_RECALL_TEXTS = 400         # texts per source type for the edited-copy recall
+EDIT_SEED = 25
+
 # ── GDELT ────────────────────────────────────────────────────────────────────
 GDELT_DOC_API = "https://api.gdeltproject.org/api/v2/doc/doc"
 # The DOC API returns HTTP 429 with an explicit "one every 5 seconds" message.

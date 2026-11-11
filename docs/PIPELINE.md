@@ -68,8 +68,111 @@ stage 20's schema (`text/records.py`), all `oracle` (tiering v2):
 direction, a crossing or a movement (80% of narratives, 66% of comments) — a coarse
 cue, not a judgement of quality. Texts are not merged or deduplicated here: DAT
 comments are mostly excerpts of the survey statement (PNS) and narratives edited
-versions of it, which a separate step records. Writes
+versions of it, which stage 25 records. Writes
 `data/processed/textrefs_records_<tag>.csv` and `textlinks_records_<tag>.csv`.
+
+### Edits of one account — `scripts/25_find_same_source_edits.py`
+
+Offline, half a minute (three with the sensitivity reruns). A hazard's official
+texts are rarely independent: the narrative is often an edited copy of the survey
+statement, the DAT comments excerpts of it, a survey LSR a short version. Stage 25
+groups, per hazard, the texts that share their wording (`text/same_source.py`).
+They count as one account, both when counting independent descriptions and when
+a model trained on one would be tested on another. Compared are the hazard's
+primary survey section (stage 20, `primary_survey_of`), its LSRs (`describes`),
+narratives (`narrative_of`) and DAT comments (`comment_of`).
+
+- **Evidence is wording specific to the tornado.** Texts become lower-case tokens
+  ("EF-1" → "ef1"). A run of 5 tokens shared by two texts counts only if it
+  occurs in the texts of at most one hazard besides the pair's own. Anything more
+  common is a phrase of the language or an office formula ("an NWS storm survey
+  found that an EF1 tornado began at"). Each text counts for one hazard, an LSR
+  within reach of several for the nearest. Counting by episode instead let
+  formulas through that an office repeats for every tornado of one outbreak.
+  Counting only single-hazard texts missed the LSRs' templates, because almost
+  half of the LSRs are linked to several hazards.
+- **Link: at least 10 tokens in shared specific runs** (counted in both texts,
+  the lower count used). This is two runs' worth, so one shared place description
+  ("2 miles southwest of Whigham") never links. Coverage, the share of a text's
+  specific tokens the other shares, is recorded, but decides nothing.
+- **Calibrated without hand labels.** Each text of a within-hazard pair is paired
+  with a random text of the other's source type and office, of two kinds:
+  - from *another episode* of the same year: no copy and no shared topic, a lower
+    bound;
+  - from *the same episode, another hazard*: same day, office and templates, but
+    also real copies between pieces of one tornado and through LSRs linked to the
+    wrong tornado, an upper bound; identical texts are excluded.
+
+  The rule is the smallest number of shared tokens, from 10, at which at most
+  0.1% of the first set and 1% of the second would link. It comes out at 10.
+  The two sets link 0.016% and 0.64% of their pairs, so of the 25,108 linked
+  within-hazard pairs (of 132,577), **0.1% to 3.4% are expected to be false**. A
+  comparison pair spans two hazards, so it is allowed one hazard more, and both
+  kinds of pair are held to the same rule; without that, the comparison sets
+  could hardly link and would understate false links.
+- **Recall**, without labels either:
+  - Edited copies of 400 real texts per source type, matched back to their
+    original. Dropping, reordering or inserting a sentence: ≥99%. Changing every
+    number: 95%. A random 10% of words replaced: 94%; 30% replaced: 71%, where
+    copying fades into paraphrase, which the method does not claim to detect.
+    Short texts are the weak spot: a 170-character cut is missed in 18% of cases,
+    and a quarter of such cuts and of one-sentence excerpts are too short to
+    compare at all.
+  - **Real copies:** the comments in the ten hand-saved SPC daily report files
+    (`data/raw/spc_reports/`) against the LSR at the same place and minute, which
+    SPC copies (cut, office appended, or an earlier version). 95.5% are linked
+    (553 of 579; 103 too short).
+- **Groups** are connected linked texts of one hazard, since two excerpts of one
+  text go back to one account. `bridged` flags a group whose members are not all
+  linked directly.
+- **No origin is inferred.** Narratives and DAT comments carry no time, an LSR's
+  timestamp is the event's, and a hazard has one primary survey section, so no
+  linked pair has two publication times. An excerpt, an expansion and a shared
+  unrecorded draft also leave the same evidence. What is recorded:
+  - `contained_in`: the member covering at least 80% of the text;
+  - the representative (`is_representative`): the member covering most of the
+    other members' wording, ties broken PNS, narrative, DAT comment, LSR as a
+    convention.
+
+  46% of DAT comments and 22% of narratives are contained in another text; the
+  representatives are mostly narratives (3,517) and PNS sections (3,340).
+- **LSRs.** 23% of the survey LSRs, but 2% of the real-time ones, share an
+  account with a survey statement, narrative or DAT comment. Stage 20 tiers every
+  LSR `official_timely` by its timestamp, which is the event's time, not when the
+  remark was written. The group shows which ones carry the survey's wording.
+- **Sensitivity:** run lengths 4, 6 and 8 and common-run cut-offs of 2, 5 and 10
+  hazards. Each recalibrates the rule and agrees with the main run on 97.6–99.3%
+  of pairs. With no cut-off, 25 shared tokens are needed and agreement is 94.7%.
+
+10,701 hazards with two or more texts hold 55,943 texts in 39,918 accounts.
+Stage 20's links still cover the DAT hazards of its last run (256 links to hazards
+no longer in stage 15 are left out), so SPC hazards are compared on their
+narratives only until stage 20 is rerun. Writes
+`data/processed/same_source_edits_<tag>.csv` (one row per hazard and text),
+`data/interim/same_source_pairs_<tag>.csv` (every pair, both coverages),
+`manifest_same_source_<tag>.json` and `outputs/same_source_edits_report.md`.
+
+**Checking by eye.** `python scripts/25_find_same_source_edits.py samples` reruns
+the method and writes only `outputs/same_source_samples_<tag>.html`
+(`text/same_source_view.py`; gitignored). It is one self-contained page of
+stratified samples, 25 per stratum (`--per-stratum`, `--seed` for another draw):
+- random hazards with two or more texts;
+- links just over the rule and pairs just under it;
+- links with low coverage;
+- survey statement and narrative left apart (paraphrase);
+- bridged groups;
+- real-time LSRs in a survey account;
+- comparison pairs that linked.
+
+The wording the method counted is highlighted:
+- shared within an account;
+- shared by the pair in question;
+- shared only with another account, below the rule;
+- greyed out when common to three or more tornadoes.
+
+A pair table gives shared tokens and coverages. Each sample takes a verdict and
+a note, kept in the browser and exported as CSV, so a hand check of any stratum
+yields a precision or miss rate.
 
 ### Importing the LexisNexis exports — `scripts/23_import_lexisnexis.py`
 

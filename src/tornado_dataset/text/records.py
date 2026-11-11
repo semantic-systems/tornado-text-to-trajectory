@@ -19,7 +19,8 @@ Three kinds of TextRef, all written by the NWS office from its survey and so
   hazard's track lines and damage polygons, one TextRef per distinct comment of
   the hazard, its ID resting on the features that carry it (``comment_of``).
 
-No text is merged with another here: how they overlap is a separate step.
+No text is merged with another here: stage 25 (:mod:`same_source`) records
+which texts of a hazard are edits of one account.
 ``mentions_track`` flags an event narrative or comment that names a start, an
 end, a direction, a crossing or a movement — a coarse cue for "describes the
 track", not a judgement of how well; empty for episode narratives.

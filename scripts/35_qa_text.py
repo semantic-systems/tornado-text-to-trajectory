@@ -61,6 +61,8 @@ def main() -> None:
 
     geo_manifest = json.loads(
         (config.PROCESSED_DIR / f"manifest_geography_{tag}.json").read_text())
+    edits_path = config.PROCESSED_DIR / f"manifest_same_source_{tag}.json"
+    edits = json.loads(edits_path.read_text())["counts"] if edits_path.exists() else None
 
     refs = pd.concat([df for df in (nws_refs, news_refs) if len(df)], ignore_index=True)
     role_counts = refs.text_role.value_counts() if len(refs) else pd.Series(dtype=int)
@@ -111,6 +113,26 @@ def main() -> None:
     roles_fig = figures_dir / "text_roles.png"
     fig.savefig(roles_fig)
     plt.close(fig)
+
+    # ── edits of one account (stage 25) ──
+    if edits:
+        linked, false = edits["within_pairs_linked"], edits["expected_false_links"]
+        edits_text = (
+            "Stage 25 compares each hazard's official texts (survey statement, Storm Events "
+            "narratives, DAT comments, LSRs) by shared wording specific to the tornado; "
+            "method, calibration, recall and sensitivity are in "
+            "[`same_source_edits_report.md`](same_source_edits_report.md).\n\n"
+            f"- {linked:,} of {edits['within_pairs']:,} within-hazard pairs are linked "
+            f"(at least {edits['min_shared']} shared tokens); expected false links "
+            f"{false['other_episode'] / linked:.1%} to {false['same_episode'] / linked:.1%} of "
+            "them, by the two comparison sets.\n"
+            f"- {edits['groups_2plus']:,} groups of two or more texts. The "
+            f"{edits['hazards_with_2plus_texts']:,} hazards with two or more texts hold "
+            f"{edits['their_texts']:,} texts in {edits['their_accounts']:,} accounts "
+            f"({1 - edits['their_accounts'] / edits['their_texts']:.0%} fewer accounts than "
+            "texts).")
+    else:
+        edits_text = "Not run yet: `scripts/25_find_same_source_edits.py`."
 
     # ── report ──
     # Stage 16 reports per hazard source; an older manifest has the DAT counts at the top.
@@ -228,7 +250,11 @@ assigned by one versioned rule, `{tiering.TIER_RULE_VERSION}`, recorded on every
 row so the corpus can be re-tiered reproducibly. Timing is in
 `figures/text_roles.png`.
 
-## 5. Limitations
+## 5. Edits of one account
+
+{edits_text}
+
+## 6. Limitations
 
 1. **News coverage stops at {config.GDELT_COVERAGE_START}.** {len(episodes) - eligible_episodes} of {len(episodes)} episodes predate the GDELT
    DOC API's earliest queryable date and carry no independent-news links. They

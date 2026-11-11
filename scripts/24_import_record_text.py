@@ -12,7 +12,7 @@ stage 20's NWS text (:mod:`tornado_dataset.text.records`):
 
 All are ``oracle`` text: written by the surveying office from its survey. Texts
 are not merged or deduplicated here; how they overlap with each other and with
-the survey statements is a separate step.
+the survey statements is stage 25.
 
     python scripts/24_import_record_text.py
 

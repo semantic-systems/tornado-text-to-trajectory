@@ -117,6 +117,23 @@ Key fields: `textref_uid` (FK), `target_uid` (FK), `link_level` (episode | hazar
 episode_narrative_of), `time_offset` (published_at −
 hazard/episode begin, ISO 8601 duration, signed), `linker` (auto | manual), `link_confidence`.
 
+### 6. Same-source edit group (stage 25)
+Which official texts of one hazard are edits of one account
+(`same_source_edits_<tag>.csv`, one row per hazard and text). Two texts are linked
+when enough of their tokens lie in shared 5-token runs that are rare in the
+texts of other tornadoes (at least 10, calibrated; the value used is
+`min_shared` in the manifest); linked texts form a group.
+
+Key fields: `hazard_uid`, `textref_uid`, `source_type`, `link_relation`,
+`edit_group` (per hazard), `group_size`, `group_source_types`, `is_representative`
+and `representative_uid` (the member covering most of the others' wording; ties
+PNS > narrative > DAT comment > LSR), `coverage_by_representative`,
+`contained_in` (the member covering ≥80% of this text), `max_coverage`,
+`bridged`, `comparable` (enough specific tokens to be linked at all),
+`n_tokens`, `n_specific`, `hazard_texts`, `hazard_accounts`. No field says which
+text was written first: the texts do not show it. Every compared pair, with both
+coverages, is in `data/interim/same_source_pairs_<tag>.csv`.
+
 ## Independence — two orthogonal axes (the pivotal methodological design)
 
 A single 0–3 "tier" conflates two independent questions. v0.2 records them separately on
@@ -176,3 +193,6 @@ would otherwise fall back to pre-survey.
   and a free `geometry_caveats` field record this per geometry.
 - **Independence is a judgement.** `independence_tier` is assigned by rule (source_type +
   authorship + timing) and the rule is stored in `tier_rule_version` so re-tiering is traceable.
+- **Texts of one hazard are not independent of each other.** Narratives, DAT comments
+  and survey LSRs often reuse the survey statement's wording. `edit_group` (stage 25)
+  records which texts are one account; it detects verbatim reuse, not paraphrase.

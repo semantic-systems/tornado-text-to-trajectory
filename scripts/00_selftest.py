@@ -49,6 +49,7 @@ MODULES = [
     "tornado_dataset.text.linking", "tornado_dataset.text.matching",
     "tornado_dataset.text.corpora",
     "tornado_dataset.text.overlap", "tornado_dataset.text.records",
+    "tornado_dataset.text.same_source", "tornado_dataset.text.same_source_view",
 ]
 
 failures: list[str] = []
@@ -83,11 +84,11 @@ scripts = sorted(p for p in (REPO / "scripts").glob("*.py")
                  if p.name[0].isdigit() or p.stem in ("_bootstrap", "viewer"))
 for path in scripts:
     check(path.name, lambda p=path: py_compile.compile(str(p), doraise=True))
-if len(scripts) < 30:
-    failures.append(f"only {len(scripts)} stage scripts found — expected 30 "
-                    "(00, 10-24, 30-35, 40-43, 50-51, viewer, _bootstrap). "
+if len(scripts) < 31:
+    failures.append(f"only {len(scripts)} stage scripts found — expected 31 "
+                    "(00, 10-25, 30-35, 40-43, 50-51, viewer, _bootstrap). "
                     "Some are probably untracked.")
-    print(f"  FAIL  expected 29 stage scripts, found {len(scripts)}")
+    print(f"  FAIL  expected 31 stage scripts, found {len(scripts)}")
 
 # ── 2. configuration ────────────────────────────────────────────────────────
 print("\nconfiguration")
@@ -619,6 +620,60 @@ def record_texts_link_once_and_count_as_oracle() -> None:
     assert not records.mentions_track("A rain wrapped tornado caused no reported damage.")
 
 
+def same_source_links_need_specific_wording() -> None:
+    """Shared formulas do not link; shared tornado-specific wording does, transitively."""
+    import random
+    from tornado_dataset.text import same_source as ss
+    assert ss.tokens("An EF-1 tornado (EF 2)") == ["an", "ef1", "tornado", "ef2"]
+    formula = "the national weather service conducted a storm survey and found"
+    texts = {f"h{i}": f"{formula} damage near town{i} on road{i}" for i in range(4)}
+    counts = ss.hazard_counts((set(ss.runs(ss.tokens(t), 5)), {h}) for h, t in texts.items())
+    common = ss.common_runs(counts, 3)
+    assert hash(tuple(ss.tokens(formula)[:5])) in common, "a run of 4 hazards is a formula"
+    two = ss.common_runs(ss.hazard_counts((set(ss.runs(ss.tokens(t), 5)), {h}) for h, t in
+                                          list(texts.items())[:2]), 3)
+    assert not two, "a run shared by two hazards is still specific"
+    assert ss.common_runs(counts, None) == set(), "None switches the filter off"
+    source = ("the tornado touched down west of noble and snapped dozens of trees before it "
+              "crossed highway 9 and lifted east of the lake near the old mill")
+    excerpt = "it crossed highway 9 and lifted east of the lake near the old mill"
+    other = f"{formula} damage near town9 on road9"
+    p = {k: ss.profile(t, 5, common) for k, t in
+         (("source", source), ("excerpt", excerpt), ("other", other), ("f", texts["h0"]))}
+    s = ss.compare(p["excerpt"], p["source"])
+    assert s.a_in_b == 1.0 and s.b_in_a < 0.6 and s.shared >= 10, s
+    assert ss.compare(p["f"], p["other"]).shared == 0, "only a formula in common"
+    assert ss.groups(["a", "b", "c", "d"], [("a", "b"), ("c", "b")]) == {
+        "a": 0, "b": 0, "c": 0, "d": 1}, "two excerpts of one text are one account"
+    m, how = ss.choose_min_shared([0] * 2000, [0] * 200, 10, 0.001, 0.01)
+    assert (m, how) == (10, "calibrated")
+    m, _ = ss.choose_min_shared([0] * 1990 + [12] * 10, [0] * 200, 10, 0.001, 0.01)
+    assert m == 13, f"0.5% of comparison pairs reach 12 shared tokens: needs 13, got {m}"
+    assert ss.choose_min_shared([0] * 10, [0] * 10, 10, 0.001, 0.01)[1].startswith("floor")
+    cut = ss.derive(source * 2, "truncate_170", random.Random(1))
+    assert cut.endswith("(XXX)") and len(cut) <= 176
+    assert ss.order_key("pns", 5, "x") < ss.order_key("lsr", 500, "a"), "PNS first on ties"
+
+
+def sample_page_marks_what_was_counted() -> None:
+    """The sample page highlights exactly the counted tokens and keeps the text intact."""
+    import html
+    import re
+    from tornado_dataset.text import same_source as ss
+    from tornado_dataset.text import same_source_view as view
+    text = "An EF-1 tornado <b> crossed Hwy 9 & lifted...\nnear the OLD mill, chef 1 said"
+    spans = ss.token_spans(text)
+    assert [t for t, _, _ in spans] == ss.tokens(text), "spans must give the same tokens"
+    other = ss.profile("then it crossed hwy 9, lifted near the old barn", 5, set())
+    prof = ss.profile(text, 5, set())
+    spans, states = view.token_states(text, prof, set(other.run_set), set(), "p")
+    marked = [t for (t, _, _), s in zip(spans, states) if s == "p"]
+    assert marked == ["crossed", "hwy", "9", "lifted", "near", "the", "old"], marked
+    out = view.render(text, spans, states)
+    assert html.unescape(re.sub(r"<[^>]+>", "", out)) == text, "the text must survive intact"
+    assert "<b>" not in out, "text is escaped"
+
+
 def accents_do_not_make_duplicates() -> None:
     """Bodies differing only in an accented letter are not verbatim duplicates."""
     import pandas as pd
@@ -854,6 +909,8 @@ for name, fn in [
     ("place and county names fold", place_and_county_names_fold),
     ("counties need a share, offices an order", counties_need_a_share_and_offices_an_order),
     ("record texts link once and count as oracle", record_texts_link_once_and_count_as_oracle),
+    ("same-source links need specific wording", same_source_links_need_specific_wording),
+    ("sample page marks what was counted", sample_page_marks_what_was_counted),
     ("accents do not make duplicates", accents_do_not_make_duplicates),
     ("wind features are not tornadoes", wind_features_are_not_tornadoes),
     ("unclaimed polygons become hazards", unclaimed_polygons_become_hazards),
