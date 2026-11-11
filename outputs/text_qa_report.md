@@ -12,13 +12,24 @@ layer: 100.0% of the
 
 ## 2. NWS text (same-org)
 
-| | n |
-|---|---|
-| text references | 30643 |
-| links to hazards | 42948 |
-| hazards with any NWS text | 9225 (81.5%) |
-| hazards with a primary survey (oracle) | 4910 (43.4%) |
-| hazards with DAT survey comments (the other oracle source) | 7850 (69.4%) |
+47,122 text references (LSRs and survey sections), 72,711 links to
+hazards, for the DAT hazards and the SPC tornadoes without a DAT survey (matched on
+SPC's straight line or point).
+
+| | DAT hazards | SPC hazards |
+|---|---|---|
+| hazards | 11,316 | 8,444 |
+| with any NWS text | 10,608 (93.7%) | 7,528 (89.2%) |
+| with an LSR | 10,159 (89.8%) | 7,314 (86.6%) |
+| with a primary survey section (oracle) | 5,577 (49.3%) | 708 (8.4%) |
+| with DAT survey comments (stage 24) | 7,850 (69.4%) | — |
+
+LSRs and survey sections are matched on each hazard's start time and convective
+day. For 1,066 DAT hazards whose clock stage 14 found
+wrong by whole hours, or missing, these are the SPC track's
+(`episode_table.event_times`). With DAT's own, a wrong clock put their LSRs
+outside the time window or looked them up on the wrong day, and a missing one
+left no time window at all.
 
 Storm-survey products are compendia: one PNS covers every tornado an office
 surveyed, so sections are split apart and matched individually by the start/end
@@ -50,17 +61,18 @@ field carries the surveyor's narrative for 69.4% of hazards — but the two
 sources have different eras of strength, and an experiment that needs PNS oracle
 text should filter on `survey_format == "structured"`.
 
-### The survey and DAT as two independent descriptions
+### The survey and the record as two descriptions
 
-Each matched section states its own rating, path length and fatality count, and
-DAT records the same quantities separately. Comparing them is free validation of
-the hazard record — and where they disagree, that disagreement is itself data.
+Each matched section states its own rating, path length and fatality count; DAT,
+or SPC for an SPC hazard, records the same quantities separately. Comparing them
+is free validation of the hazard record, and where they disagree, that
+disagreement is itself data.
 
-| quantity | agreement | n |
+| quantity | survey vs DAT | survey vs SPC |
 |---|---|---|
-| EF rating identical | 93.5% | 4875 |
-| path length within ±10% | 77.5% | 4694 |
-| fatality count identical | 97.4% | 4875 |
+| EF rating identical | 93.2% (n=5,577) | 92.5% (n=708) |
+| path length within ±10% | 68.5% (n=4,749) | 64.8% (n=645) |
+| fatality count identical | 97.2% (n=5,577) | 95.2% (n=708) |
 
 Disagreement is expected and informative: DAT sometimes draws as one line what
 the survey splits into several tornadoes, so a hazard can legitimately be longer
@@ -99,8 +111,8 @@ articles; slicing recovered them. Episodes whose slices hit the cap are flagged
 |:--------------------------|------:|
 | independent_timely        | 53795 |
 | independent_retrospective | 29977 |
-| official_timely           | 15736 |
-| oracle                    | 14913 |
+| official_timely           | 28167 |
+| oracle                    | 18961 |
 
 The two axes behind these labels (`same_org_as_geometry` × `temporal_class`) are
 assigned by one versioned rule, `tier_rules_v2_2026-11`, recorded on every
@@ -111,8 +123,8 @@ row so the corpus can be re-tiered reproducibly. Timing is in
 
 Stage 25 compares each hazard's official texts (survey statement, Storm Events narratives, DAT comments, LSRs) by shared wording specific to the tornado; method, calibration, recall and sensitivity are in [`same_source_edits_report.md`](same_source_edits_report.md).
 
-- 25,108 of 132,577 within-hazard pairs are linked (at least 10 shared tokens); expected false links 0.1% to 3.4% of them, by the two comparison sets.
-- 8,848 groups of two or more texts. The 10,701 hazards with two or more texts hold 55,943 texts in 39,918 accounts (29% fewer accounts than texts).
+- 29,183 of 172,819 within-hazard pairs are linked (at least 10 shared tokens); expected false links 0.1% to 3.2% of them, by the two comparison sets.
+- 11,601 groups of two or more texts. The 18,238 hazards with two or more texts hold 89,876 texts in 70,378 accounts (22% fewer accounts than texts).
 
 ## 6. Limitations
 
