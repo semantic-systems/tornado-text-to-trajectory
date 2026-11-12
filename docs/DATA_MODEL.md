@@ -61,6 +61,13 @@ As built, a hazard has a `hazard_source`:
 Counties, offices (`wfo`, `wfo_source`, `wfo_all`) and place names for both are in
 stage 16's `hazard_geography_<tag>.csv`.
 
+A hazard's times are in stage 15's `hazard_episodes_<tag>.csv`: `begin_utc`,
+`end_utc`, `convective_day`, with `time_source` (`dat`, `spc`, or `spc_track` where
+DAT's time was wrong or missing and SPC's track gives it) and `end_repaired` (a DAT
+end with a mistyped date, its clock time kept; an end that cannot be repaired is
+empty). `time_begin_utc` and `time_end_utc` in `hazards_<tag>.csv` are DAT's as
+entered, kept for provenance.
+
 ### 3. Geometry
 One geospatial ground-truth object attached to a hazard. A hazard may have several
 (a line *and* a polygon *and* points).

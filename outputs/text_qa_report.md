@@ -12,22 +12,22 @@ layer: 100.0% of the
 
 ## 2. NWS text (same-org)
 
-47,122 text references (LSRs and survey sections), 72,711 links to
+47,119 text references (LSRs and survey sections), 72,535 links to
 hazards, for the DAT hazards and the SPC tornadoes without a DAT survey (matched on
 SPC's straight line or point).
 
 | | DAT hazards | SPC hazards |
 |---|---|---|
-| hazards | 11,316 | 8,444 |
-| with any NWS text | 10,608 (93.7%) | 7,528 (89.2%) |
-| with an LSR | 10,159 (89.8%) | 7,314 (86.6%) |
-| with a primary survey section (oracle) | 5,577 (49.3%) | 708 (8.4%) |
+| hazards | 11,316 | 8,346 |
+| with any NWS text | 10,647 (94.1%) | 7,433 (89.1%) |
+| with an LSR | 10,219 (90.3%) | 7,221 (86.5%) |
+| with a primary survey section (oracle) | 5,582 (49.3%) | 675 (8.1%) |
 | with DAT survey comments (stage 24) | 7,850 (69.4%) | — |
 
 LSRs and survey sections are matched on each hazard's start time and convective
-day. For 1,066 DAT hazards whose clock stage 14 found
-wrong by whole hours, or missing, these are the SPC track's
-(`episode_table.event_times`). With DAT's own, a wrong clock put their LSRs
+day. For 1,164 DAT hazards whose time stage 14 found
+wrong (by whole hours, or on the same footprint as their SPC track) or missing,
+these are the SPC track's (`episode_table.event_times`). With DAT's own, a wrong clock put their LSRs
 outside the time window or looked them up on the wrong day, and a missing one
 left no time window at all.
 
@@ -66,13 +66,14 @@ text should filter on `survey_format == "structured"`.
 Each matched section states its own rating, path length and fatality count; DAT,
 or SPC for an SPC hazard, records the same quantities separately. Comparing them
 is free validation of the hazard record, and where they disagree, that
-disagreement is itself data.
+disagreement is itself data. Each quantity is compared where both state it
+(rated, a length above zero, a death count), as in stage 17's DAT against SPC.
 
 | quantity | survey vs DAT | survey vs SPC |
 |---|---|---|
-| EF rating identical | 93.2% (n=5,577) | 92.5% (n=708) |
-| path length within ±10% | 68.5% (n=4,749) | 64.8% (n=645) |
-| fatality count identical | 97.2% (n=5,577) | 95.2% (n=708) |
+| EF rating identical, both rated | 96.6% (n=5,348) | 97.0% (n=631) |
+| path length within ±10% | 80.4% (n=4,751) | 70.9% (n=612) |
+| fatality count identical | 99.4% (n=5,462) | 99.8% (n=642) |
 
 Disagreement is expected and informative: DAT sometimes draws as one line what
 the survey splits into several tornadoes, so a hazard can legitimately be longer
@@ -85,8 +86,12 @@ than the section matched to it.
 | episodes | 4325 |
 | … within GDELT coverage (≥ 2017-01-01) | 2500 |
 | … before it, flagged and never queried | 1825 |
-| episodes with retrieved articles | 1857 |
+| episodes with retrieved articles | 0 |
 | unique articles | 83778 |
+
+**Stage 21's links are stale.** They name 1,857 episodes that are not in
+`episodes_2010-01-01_2025-12-31.csv`: they were made on an earlier episode table, so no
+current episode has news yet. Rerun stage 21.
 
 **Query form was decided by measurement.** The prototype queried place names
 alone, having found that adding a hazard word to a *single* place name collapsed
@@ -111,8 +116,8 @@ articles; slicing recovered them. Episodes whose slices hit the cap are flagged
 |:--------------------------|------:|
 | independent_timely        | 53795 |
 | independent_retrospective | 29977 |
-| official_timely           | 28167 |
-| oracle                    | 18961 |
+| official_timely           | 28159 |
+| oracle                    | 18966 |
 
 The two axes behind these labels (`same_org_as_geometry` × `temporal_class`) are
 assigned by one versioned rule, `tier_rules_v2_2026-11`, recorded on every
@@ -123,8 +128,8 @@ row so the corpus can be re-tiered reproducibly. Timing is in
 
 Stage 25 compares each hazard's official texts (survey statement, Storm Events narratives, DAT comments, LSRs) by shared wording specific to the tornado; method, calibration, recall and sensitivity are in [`same_source_edits_report.md`](same_source_edits_report.md).
 
-- 29,183 of 172,819 within-hazard pairs are linked (at least 10 shared tokens); expected false links 0.1% to 3.2% of them, by the two comparison sets.
-- 11,601 groups of two or more texts. The 18,238 hazards with two or more texts hold 89,876 texts in 70,378 accounts (22% fewer accounts than texts).
+- 29,176 of 172,739 within-hazard pairs are linked (at least 10 shared tokens); expected false links 0.1% to 3.2% of them, by the two comparison sets.
+- 11,590 groups of two or more texts. The 18,198 hazards with two or more texts hold 89,785 texts in 70,296 accounts (22% fewer accounts than texts).
 
 ## 6. Limitations
 

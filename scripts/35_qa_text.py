@@ -24,6 +24,7 @@ import pandas as pd
 
 from tornado_dataset import config
 from tornado_dataset.dat import episode_table
+from tornado_dataset.dat.spc_tornadoes import ef_number
 from tornado_dataset.text import tiering
 
 plt.rcParams.update({
@@ -87,7 +88,12 @@ def main() -> None:
 
     any_nws = nws_links if len(nws_links) else pd.DataFrame(columns=["target_uid"])
     time_sources = nws_manifest.get("matched_on_time_of", {})
-    episode_with_news = news_links.target_uid.nunique() if len(news_links) else 0
+    # Stage 21 links to episodes by uid; counted only where the episode is in
+    # this table, so links made on an earlier episode table are not mixed in.
+    news_targets = (news_links.target_uid.drop_duplicates() if len(news_links)
+                    else pd.Series(dtype=str))
+    episode_with_news = int(news_targets.isin(episodes.episode_uid).sum())
+    stale_news_episodes = len(news_targets) - episode_with_news
     eligible_episodes = (episodes.convective_day >= config.GDELT_COVERAGE_START.isoformat()).sum()
 
     # ── survey vs DAT attribute agreement (independent descriptions) ──
@@ -98,12 +104,8 @@ def main() -> None:
             spc[["hazard_uid", "efscale", "path_length_mi", "fatalities"]].assign(record="SPC")])
         agreement_rows = (oracle_links.merge(nws_refs, on="textref_uid")
                           .merge(records, left_on="target_uid", right_on="hazard_uid"))
-        agreement_rows["ef_match"] = (agreement_rows.survey_ef_rating.astype(str).str.upper()
-                                      == agreement_rows.efscale.astype(str).str.upper())
-        agreement_rows["length_ratio"] = (agreement_rows.survey_path_length_mi
-                                          / agreement_rows.path_length_mi)
-        agreement_rows["fatalities_match"] = (agreement_rows.survey_fatalities.fillna(-1)
-                                              == agreement_rows.fatalities.fillna(-1))
+        agreement_rows["survey_ef"] = agreement_rows.survey_ef_rating.map(ef_number)
+        agreement_rows["record_ef"] = agreement_rows.efscale.map(ef_number)
 
     # ── figures ──
     figures_dir = config.OUTPUT_DIR / "figures"
@@ -181,9 +183,9 @@ SPC's straight line or point).
 | with DAT survey comments (stage 24) | {int(hazards.has_oracle_text.sum()):,} ({pct(hazards.has_oracle_text.sum(), len(hazards))}) | — |
 
 LSRs and survey sections are matched on each hazard's start time and convective
-day. For {time_sources.get("spc_track", 0):,} DAT hazards whose clock stage 14 found
-wrong by whole hours, or missing, these are the SPC track's
-(`episode_table.event_times`). With DAT's own, a wrong clock put their LSRs
+day. For {time_sources.get("spc_track", 0):,} DAT hazards whose time stage 14 found
+wrong (by whole hours, or on the same footprint as their SPC track) or missing,
+these are the SPC track's (`episode_table.event_times`). With DAT's own, a wrong clock put their LSRs
 outside the time window or looked them up on the wrong day, and a missing one
 left no time window at all.
 
@@ -219,11 +221,20 @@ text should filter on `survey_format == "structured"`.
 """
 
     if len(agreement_rows):
+        def share(hits: pd.Series) -> str:
+            return f"{hits.mean():.1%} (n={len(hits):,})" if len(hits) else "—"
+
         def agree(g: pd.DataFrame) -> tuple[str, str, str]:
-            return (f"{g.ef_match.mean():.1%} (n={len(g):,})",
-                    f"{g.length_ratio.between(0.9, 1.1).mean():.1%} "
-                    f"(n={g.length_ratio.notna().sum():,})",
-                    f"{g.fatalities_match.mean():.1%} (n={len(g):,})")
+            # Only where both state the value: an unrated tornado (EFU, however
+            # spelt) or a section without a length or a death count is not a
+            # disagreement.
+            rated = g[g.survey_ef.notna() & g.record_ef.notna()]
+            measured = g[(g.survey_path_length_mi > 0) & (g.path_length_mi > 0)]
+            counted = g[g.survey_fatalities.notna() & g.fatalities.notna()]
+            ratio = measured.survey_path_length_mi / measured.path_length_mi
+            return (share(rated.survey_ef == rated.record_ef),
+                    share(ratio.between(0.9, 1.1)),
+                    share(counted.survey_fatalities == counted.fatalities))
         cols = {rec: agree(g) for rec, g in agreement_rows.groupby("record")}
         blank = ("—", "—", "—")
         dat, spc_ = cols.get("DAT", blank), cols.get("SPC", blank)
@@ -233,11 +244,12 @@ text should filter on `survey_format == "structured"`.
 Each matched section states its own rating, path length and fatality count; DAT,
 or SPC for an SPC hazard, records the same quantities separately. Comparing them
 is free validation of the hazard record, and where they disagree, that
-disagreement is itself data.
+disagreement is itself data. Each quantity is compared where both state it
+(rated, a length above zero, a death count), as in stage 17's DAT against SPC.
 
 | quantity | survey vs DAT | survey vs SPC |
 |---|---|---|
-| EF rating identical | {dat[0]} | {spc_[0]} |
+| EF rating identical, both rated | {dat[0]} | {spc_[0]} |
 | path length within ±10% | {dat[1]} | {spc_[1]} |
 | fatality count identical | {dat[2]} | {spc_[2]} |
 
@@ -256,7 +268,11 @@ than the section matched to it.
 | … before it, flagged and never queried | {len(episodes) - eligible_episodes} |
 | episodes with retrieved articles | {episode_with_news} |
 | unique articles | {len(news_refs)} |
-
+{f'''
+**Stage 21's links are stale.** They name {stale_news_episodes:,} episodes that are not in
+`episodes_{tag}.csv`: they were made on an earlier episode table, so no
+current episode has news yet. Rerun stage 21.
+''' if stale_news_episodes else ''}
 **Query form was decided by measurement.** The prototype queried place names
 alone, having found that adding a hazard word to a *single* place name collapsed
 the results. With an OR-group of a dozen places the opposite holds — measured on

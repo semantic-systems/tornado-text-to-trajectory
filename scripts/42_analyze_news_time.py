@@ -72,6 +72,17 @@ def main() -> None:
     unique = articles.drop_duplicates(subset=["file", "headline", "pub_date", "body"])
     print(f"  {len(articles):,} export rows -> {len(unique):,} unique articles")
 
+    # Stage 31 links articles to episodes by uid. Linked on an earlier episode
+    # table, its uids are not in this one, and sections 4 and 5 would come out
+    # empty without saying why.
+    linked = links.episode_uid.dropna()
+    stale = int((~linked.isin(episodes.episode_uid)).sum())
+    if stale:
+        raise SystemExit(
+            f"{stale:,} of {len(linked):,} article links name an episode not in "
+            f"episodes_{tag}.csv: stage 31 linked them on an earlier episode table. "
+            "Rerun stage 31 first.")
+
     describes = links[links.link_relation == "describes"].copy()
     describes["event_day"] = pd.to_datetime(describes.event_day, errors="coerce")
     episode_meta = episodes.set_index("episode_uid")

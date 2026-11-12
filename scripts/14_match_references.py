@@ -116,6 +116,12 @@ def join_spc(args, se_rows, se_geoms, hazards, project) -> None:
         print(f"time-repaired pass: {repaired.hazard_uid.nunique():,} more DAT hazards "
               f"(whole-hour offsets 1–{args.repair_max_offset_h} h, ±"
               f"{args.repair_max_residual_min:g} min, ≤{args.max_distance_m/1000:g} km)")
+    footprint, footprint_stats = spc.footprint_links(tracks, geoms, hazards, links)
+    links = pd.concat([links, footprint], ignore_index=True)
+    repair["footprint"] = footprint_stats
+    print(f"footprint pass: {footprint.hazard_uid.nunique():,} more DAT hazards (both ends "
+          f"of an SPC track no DAT hazard has within {spc.FOOTPRINT_MAX_M / 1000:g} km of "
+          f"theirs, ≤{spc.FOOTPRINT_MAX_OFFSET_H:g} h)")
     links["id_date"] = spc.event_id_date_check(links, tracks, hazards)
     links["hazards_on_track"] = spc.hazards_per_track(links)
     unmatched = spc.nearest_unlinked(tracks, geoms, hazards, links)

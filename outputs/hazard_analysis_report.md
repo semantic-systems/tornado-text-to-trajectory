@@ -9,11 +9,11 @@ of the records themselves: `events_qa_report.md`.
 | | |
 |---|---:|
 | Tornadoes in SPC's record, 2010–2025 (the population) | 20,164 |
-| … with a DAT survey (surveyed track or damage polygon) | 11,720 (58.1%) |
-| … with a DAT survey in 2010 and in 2025 | 2% → 88% |
-| Hazards in the dataset | 19,760 (11,316 DAT, 8,444 SPC) |
-| Episodes | 4,325 (2,130 with a DAT survey) |
-| Deaths in SPC's record | 1,318 (72.1% in DAT-surveyed tornadoes) |
+| … with a DAT survey (surveyed track or damage polygon) | 11,818 (58.6%) |
+| … with a DAT survey in 2010 and in 2025 | 2% → 89% |
+| Hazards in the dataset | 19,662 (11,316 DAT, 8,346 SPC) |
+| Episodes | 4,325 (2,144 with a DAT survey) |
+| Deaths in SPC's record | 1,318 (72.2% in DAT-surveyed tornadoes) |
 
 > **How to read this report.** SPC's tornado list is the population; DAT, which
 > supplies the surveyed geometry, covers a subset that grew with the offices'
@@ -30,25 +30,25 @@ hazard of its own, so no tornado is missing and none counts twice.
 |  | count | note |
 |---|---:|---|
 | SPC tornadoes in the window (the population) | 20,164 |  |
-| … the closest SPC track of a DAT hazard | 10,711 | with a DAT survey |
-| … a further piece of a DAT-surveyed tornado | 1,009 | with a DAT survey; counted through that DAT hazard, not again |
-| … no DAT survey: an SPC hazard | 8,444 | SPC's straight start–end line, or a point |
-| DAT hazards on an SPC track | 10,861 | on 10,711 tracks; 136 tracks hold more than one |
-| DAT hazards with no SPC track | 455 | in no episode; `spc_match_status` says why (stage 17) |
-| **Hazards in the dataset** | **19,760** | 11,316 DAT + 8,444 SPC |
+| … the closest SPC track of a DAT hazard | 10,808 | with a DAT survey |
+| … a further piece of a DAT-surveyed tornado | 1,010 | with a DAT survey; counted through that DAT hazard, not again |
+| … no DAT survey: an SPC hazard | 8,346 | SPC's straight start–end line, or a point |
+| DAT hazards on an SPC track | 10,959 | on 10,808 tracks; 137 tracks hold more than one |
+| DAT hazards with no SPC track | 357 | in no episode; `spc_match_status` says why (stage 17) |
+| **Hazards in the dataset** | **19,662** | 11,316 DAT + 8,346 SPC |
 
 | hazard source | geometry | hazards |
 |---|---|---:|
 | DAT | `line` | 6,968 |
 | DAT | `line+polygon` | 2,873 |
 | DAT | `polygon` | 1,475 |
-| SPC | `spc_line` | 6,911 |
-| SPC | `spc_point` | 1,533 |
+| SPC | `spc_line` | 6,816 |
+| SPC | `spc_point` | 1,530 |
 
 ## 2. DAT coverage over time
 
 **Finding:** 2% of tornadoes have a DAT survey in 2010,
-88% in 2025. Any result that uses DAT geometry describes
+89% in 2025. Any result that uses DAT geometry describes
 the later years far more than the earlier ones.
 
 ![Tornadoes per year and the share with a DAT survey](figures/hz_coverage_per_year.png)
@@ -57,22 +57,22 @@ the later years far more than the earlier ones.
 
 | year | SPC tornadoes | with a DAT survey | share |
 |---|---:|---:|---:|
-| 2010 | 1,302 | 25 | 2% |
+| 2010 | 1,302 | 26 | 2% |
 | 2011 | 1,704 | 234 | 14% |
-| 2012 | 948 | 140 | 15% |
-| 2013 | 916 | 382 | 42% |
-| 2014 | 928 | 428 | 46% |
-| 2015 | 1,182 | 646 | 55% |
-| 2016 | 976 | 560 | 57% |
-| 2017 | 1,442 | 897 | 62% |
-| 2018 | 1,138 | 679 | 60% |
-| 2019 | 1,534 | 1,074 | 70% |
-| 2020 | 1,090 | 805 | 74% |
-| 2021 | 1,328 | 1,027 | 77% |
-| 2022 | 1,167 | 933 | 80% |
-| 2023 | 1,321 | 1,065 | 81% |
-| 2024 | 1,805 | 1,604 | 89% |
-| 2025 | 1,383 | 1,221 | 88% |
+| 2012 | 948 | 150 | 16% |
+| 2013 | 916 | 387 | 42% |
+| 2014 | 928 | 439 | 47% |
+| 2015 | 1,182 | 656 | 55% |
+| 2016 | 976 | 570 | 58% |
+| 2017 | 1,442 | 909 | 63% |
+| 2018 | 1,138 | 686 | 60% |
+| 2019 | 1,534 | 1,084 | 71% |
+| 2020 | 1,090 | 809 | 74% |
+| 2021 | 1,328 | 1,034 | 78% |
+| 2022 | 1,167 | 937 | 80% |
+| 2023 | 1,321 | 1,067 | 81% |
+| 2024 | 1,805 | 1,606 | 89% |
+| 2025 | 1,383 | 1,224 | 89% |
 
 </details>
 
@@ -90,33 +90,33 @@ like a property of the category. The grey bar spans the eras.
 
 | factor | category | 2010–2014 | 2015–2019 | 2020–2025 |
 |---|---|---:|---:|---:|
-| rating | EF0 | 13% of 3,165 | 49% of 3,146 | 79% of 2,886 |
-| rating | EF1 | 28% of 1,841 | 77% of 2,247 | 94% of 3,061 |
-| rating | EF2 | 34% of 576 | 82% of 469 | 96% of 731 |
-| rating | EF3 | 37% of 160 | 89% of 101 | 100% of 165 |
+| rating | EF0 | 13% of 3,165 | 50% of 3,146 | 79% of 2,886 |
+| rating | EF1 | 29% of 1,841 | 78% of 2,247 | 94% of 3,061 |
+| rating | EF2 | 34% of 576 | 83% of 469 | 97% of 731 |
+| rating | EF3 | 37% of 160 | 90% of 101 | 100% of 165 |
 | rating | EF4+ | 55% of 56 | 100% of 10 | 100% of 25 |
 | rating | unrated | — | 29% of 299 | 50% of 1,226 |
-| season | winter | 30% of 557 | 73% of 713 | 95% of 1,039 |
-| season | spring | 20% of 2,787 | 62% of 2,973 | 86% of 3,958 |
-| season | summer | 15% of 1,719 | 54% of 1,665 | 71% of 2,333 |
-| season | autumn | 32% of 735 | 63% of 921 | 77% of 764 |
-| time of day (solar) | night 0–6 | 37% of 460 | 73% of 531 | 92% of 878 |
-| time of day (solar) | morning 6–12 | 20% of 527 | 61% of 642 | 85% of 891 |
-| time of day (solar) | afternoon 12–18 | 17% of 2,971 | 56% of 3,345 | 75% of 3,815 |
-| time of day (solar) | evening 18–24 | 23% of 1,840 | 69% of 1,754 | 88% of 2,510 |
-| track length | < 1 mi | 11% of 2,501 | 43% of 2,604 | 64% of 2,827 |
-| track length | 1–5 mi | 23% of 2,060 | 71% of 2,435 | 90% of 3,185 |
-| track length | 5–15 mi | 35% of 935 | 82% of 1,034 | 95% of 1,659 |
-| track length | ≥ 15 mi | 39% of 302 | 85% of 199 | 97% of 423 |
-| deaths | no deaths | 20% of 5,668 | 61% of 6,213 | 82% of 7,967 |
-| deaths | killed someone | 39% of 130 | 86% of 59 | 98% of 127 |
+| season | winter | 31% of 557 | 74% of 713 | 95% of 1,039 |
+| season | spring | 20% of 2,787 | 63% of 2,973 | 87% of 3,958 |
+| season | summer | 15% of 1,719 | 55% of 1,665 | 72% of 2,333 |
+| season | autumn | 33% of 735 | 63% of 921 | 77% of 764 |
+| time of day (solar) | night 0–6 | 37% of 460 | 73% of 531 | 93% of 878 |
+| time of day (solar) | morning 6–12 | 21% of 527 | 62% of 642 | 85% of 891 |
+| time of day (solar) | afternoon 12–18 | 18% of 2,971 | 57% of 3,345 | 76% of 3,815 |
+| time of day (solar) | evening 18–24 | 23% of 1,840 | 70% of 1,754 | 88% of 2,510 |
+| track length | < 1 mi | 12% of 2,501 | 44% of 2,604 | 64% of 2,827 |
+| track length | 1–5 mi | 24% of 2,060 | 71% of 2,435 | 90% of 3,185 |
+| track length | 5–15 mi | 35% of 935 | 83% of 1,034 | 95% of 1,659 |
+| track length | ≥ 15 mi | 39% of 302 | 86% of 199 | 97% of 423 |
+| deaths | no deaths | 21% of 5,668 | 62% of 6,213 | 82% of 7,967 |
+| deaths | killed someone | 39% of 130 | 88% of 59 | 98% of 127 |
 | census division | New England | 0% of 52 | 12% of 43 | 40% of 58 |
-| census division | Middle Atlantic | 4% of 143 | 49% of 162 | 78% of 238 |
-| census division | East North Central | 24% of 787 | 82% of 720 | 97% of 1,272 |
-| census division | West North Central | 16% of 1,552 | 63% of 1,577 | 77% of 1,832 |
-| census division | South Atlantic | 14% of 668 | 53% of 804 | 81% of 1,128 |
-| census division | East South Central | 47% of 965 | 89% of 852 | 98% of 1,378 |
-| census division | West South Central | 18% of 1,190 | 57% of 1,639 | 82% of 1,687 |
+| census division | Middle Atlantic | 4% of 143 | 49% of 162 | 81% of 238 |
+| census division | East North Central | 24% of 787 | 83% of 720 | 97% of 1,272 |
+| census division | West North Central | 17% of 1,552 | 63% of 1,577 | 78% of 1,832 |
+| census division | South Atlantic | 15% of 668 | 55% of 804 | 81% of 1,128 |
+| census division | East South Central | 48% of 965 | 90% of 852 | 99% of 1,378 |
+| census division | West South Central | 18% of 1,190 | 57% of 1,639 | 83% of 1,687 |
 | census division | Mountain | 1% of 377 | 19% of 406 | 26% of 433 |
 | census division | Pacific | 0% of 61 | 2% of 64 | 25% of 63 |
 
@@ -142,7 +142,7 @@ paint a cell dark.
 
 ## 6. Deaths
 
-**Finding:** SPC's record holds 1,318 deaths; 72.1% were in
+**Finding:** SPC's record holds 1,318 deaths; 72.2% were in
 tornadoes DAT surveyed. DAT keeps its own death counts; they agree with SPC's for
 most of the same tornadoes but differ widely for a few, so this report uses SPC's
 throughout (comparison: `events_qa_report.md`, section 6).
@@ -164,29 +164,29 @@ The ten deadliest tornadoes (SPC's record):
 
 ## 7. Official text per hazard
 
-**Finding:** 97.6% of DAT hazards and
+**Finding:** 97.9% of DAT hazards and
 99.2% of SPC hazards have at least one oracle text; a survey
 statement (PNS) exists for 49.3% of DAT hazards and
-8.4% of SPC hazards.
+8.1% of SPC hazards.
 
-| text | DAT hazards (11,316) | SPC hazards (8,444) |
+| text | DAT hazards (11,316) | SPC hazards (8,346) |
 |---|---:|---:|
-| survey statement (PNS) | 5,577 (49.3%) | 708 (8.4%) |
-| Storm Events narrative | 10,598 (93.7%) | 8,367 (99.1%) |
+| survey statement (PNS) | 5,582 (49.3%) | 675 (8.1%) |
+| Storm Events narrative | 10,696 (94.5%) | 8,270 (99.1%) |
 | DAT comment | 7,850 (69.4%) | 0 (0.0%) |
-| survey LSR | 7,317 (64.7%) | 2,640 (31.3%) |
-| real-time LSR | 5,809 (51.3%) | 5,862 (69.4%) |
-| any oracle text (first three) | 11,043 (97.6%) | 8,375 (99.2%) |
-| any official text | 11,140 (98.4%) | 8,429 (99.8%) |
+| survey LSR | 7,358 (65.0%) | 2,578 (30.9%) |
+| real-time LSR | 5,839 (51.6%) | 5,813 (69.7%) |
+| any oracle text (first three) | 11,078 (97.9%) | 8,278 (99.2%) |
+| any official text | 11,167 (98.7%) | 8,331 (99.8%) |
 
 Independent accounts among a hazard's oracle texts (stage 25: texts that share tornado-specific wording count once):
 
 | accounts | DAT hazards | SPC hazards |
 |---|---:|---:|
-| none | 273 (2.4%) | 69 (0.8%) |
-| 1 | 6,781 (59.9%) | 7,798 (92.3%) |
-| 2 | 2,984 (26.4%) | 525 (6.2%) |
-| 3 or more | 1,278 (11.3%) | 52 (0.6%) |
+| none | 238 (2.1%) | 68 (0.8%) |
+| 1 | 6,780 (59.9%) | 7,718 (92.5%) |
+| 2 | 3,013 (26.6%) | 509 (6.1%) |
+| 3 or more | 1,285 (11.4%) | 51 (0.6%) |
 
 ![Share of hazards with each kind of official text, per year](figures/hz_text_per_year.png)
 

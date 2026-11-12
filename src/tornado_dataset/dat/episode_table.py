@@ -275,34 +275,66 @@ def spc_hazards(tag: str) -> pd.DataFrame:
 
 
 # Stage 14 links these DAT hazards to their SPC track only after finding DAT's own
-# time wrong (a whole-hour clock error) or missing (a date only).
-SPC_TIME_METHODS = ("time_repaired", "date_only")
+# time wrong (a whole-hour clock error, or another error on the same footprint) or
+# missing (a date only).
+SPC_TIME_METHODS = ("time_repaired", "footprint_match", "date_only")
+TIME_SOURCES = ("dat", "spc", "spc_track")
 
 
 def event_times(hazards: pd.DataFrame, member: pd.DataFrame, tracks: pd.DataFrame
                 ) -> pd.DataFrame:
-    """When, and on which convective day, each hazard happened: for matching text.
+    """When, and on which convective day, each hazard happened.
 
     ``hazards`` has ``hazard_uid``, ``hazard_source``, ``time_begin_utc`` and
-    ``convective_day`` (DAT and SPC hazards); ``member`` is stage 15's membership
-    table, ``tracks`` SPC's tornado list (``spc_id``, ``begin_utc``). A DAT hazard
-    takes its SPC track's start and day where DAT's clock was repaired or missing
-    (``SPC_TIME_METHODS``; ``time_source = spc_track``); otherwise every hazard
-    keeps its own (``dat`` or ``spc``). Returns ``hazard_uid``, ``begin_utc``,
-    ``convective_day`` and ``time_source``.
+    ``convective_day`` (DAT and SPC hazards), and ``time_end_utc`` if the end is
+    wanted; ``member`` is stage 15's membership table, ``tracks`` SPC's tornado
+    list (``spc_id``, ``begin_utc``, and ``end_utc`` for the end).
+
+    A DAT hazard takes its SPC track's start, end and day where stage 14 found
+    DAT's time wrong or missing (``SPC_TIME_METHODS``; ``time_source`` ``spc_track``).
+    Every other hazard keeps its own (``dat`` or ``spc``). An end before the start
+    or more than 5 h after it is mistyped: its clock time is kept where that gives
+    at most 5 h (``end_repaired``, :func:`episodes.repair_end_times`), and the end
+    is left empty where it does not, as where DAT has none. Returns
+    ``hazard_uid``, ``begin_utc``, ``end_utc``, ``convective_day``,
+    ``time_source`` and ``end_repaired``; times as ISO strings.
     """
     out = hazards[["hazard_uid", "hazard_source", "time_begin_utc", "convective_day"]].merge(
         member[["hazard_uid", "spc_id", "spc_link_method"]], on="hazard_uid", how="left")
-    begin = dict(zip(tracks.spc_id, tracks.begin_utc))
+    own_end = (hazards.set_index("hazard_uid").time_end_utc.reindex(out.hazard_uid).to_numpy()
+               if "time_end_utc" in hazards.columns else None)
+    track = tracks.set_index("spc_id")
     use = ((out.hazard_source == "dat") & out.spc_link_method.isin(SPC_TIME_METHODS)
-           & out.spc_id.map(lambda s: isinstance(begin.get(s), str)))
-    track_begin = pd.to_datetime(out.spc_id[use].map(begin), utc=True)
-    out["begin_utc"] = out.time_begin_utc.where(out.time_begin_utc.notna(), None)
-    out.loc[use, "begin_utc"] = [t.isoformat() for t in track_begin]
+           & out.spc_id.map(lambda s: s in track.index and isinstance(track.begin_utc.get(s), str)))
+
+    t0 = pd.to_datetime(out.time_begin_utc, utc=True, errors="coerce")
+    t1 = (pd.to_datetime(pd.Series(own_end, index=out.index), utc=True, errors="coerce")
+          if own_end is not None else pd.Series(pd.NaT, index=out.index, dtype="datetime64[ns, UTC]"))
+    if own_end is not None:
+        fixed, bad = ep.repair_end_times(t0, t1)
+        clock = ((t1.dt.hour * 60 + t1.dt.minute) - (t0.dt.hour * 60 + t0.dt.minute)) % 1440
+        kept = bad & t0.notna() & t1.notna() & (clock <= ep.MAX_TORNADO_DURATION_H * 60)
+        t1 = fixed.where(~bad | kept)
+        repaired = kept & ~use
+    else:
+        repaired = pd.Series(False, index=out.index)
+    t0 = t0.copy()
+    t0[use] = pd.to_datetime(out.spc_id[use].map(track.begin_utc), utc=True)
+    if "end_utc" in track.columns:
+        t1 = t1.copy()
+        t1[use] = pd.to_datetime(out.spc_id[use].map(track.end_utc), utc=True)
+
+    def iso(t: pd.Series) -> list:
+        return [x.isoformat() if pd.notna(x) else None for x in t]
+
+    out["begin_utc"] = iso(t0)
+    out["end_utc"] = iso(t1) if (own_end is not None or "end_utc" in track.columns) else None
     out.loc[use, "convective_day"] = [convective_day(t.to_pydatetime()).isoformat()
-                                      for t in track_begin]
+                                      for t in t0[use]]
     out["time_source"] = out.hazard_source.where(~use, "spc_track")
-    return out[["hazard_uid", "begin_utc", "convective_day", "time_source"]]
+    out["end_repaired"] = repaired.to_numpy()
+    return out[["hazard_uid", "begin_utc", "end_utc", "convective_day", "time_source",
+                "end_repaired"]]
 
 
 def geography(tag: str, sources: tuple[str, ...] = ("dat",)) -> pd.DataFrame:

@@ -168,8 +168,8 @@ def spc_section(tag: str, hazards: pd.DataFrame, ci) -> list[str]:
     lines = ["### SPC whole tracks", "",
              "SPC's database holds one reviewed record per tornado — the official "
              "version of the chaining above. Same matching rule; the last column adds "
-             "the time-repaired second pass (next section) and, for hazards whose DAT "
-             "survey gives only a date, a match by date within a day.", "",
+             "the time-repaired second pass and the footprint pass (next sections) and, "
+             "for hazards whose DAT survey gives only a date, a match by date within a day.", "",
              "| year | SPC tornadoes | DAT hazards | SPC tornadoes found in DAT | "
              "DAT hazards found in SPC | … all passes |", "|---|---:|---:|---|---|---|"]
     found_spc, found_hz = set(strict.spc_id), set(strict.hazard_uid)
@@ -194,7 +194,9 @@ def spc_section(tag: str, hazards: pd.DataFrame, ci) -> list[str]:
                   f"not whole-track, {check.get('dropped_unknown_tz', 0):,} with an unknown "
                   "time zone."]
     lines += [""] + geometry_source_lines(links, hazards)
-    return lines + [""] + repair_section(tag, links, hazards, check.get("time_repair", {}))
+    repair = check.get("time_repair", {})
+    return (lines + [""] + repair_section(tag, links, hazards, repair)
+            + footprint_section(links, repair.get("footprint")) + [""] + unmatched_lines(tag, len(hazards)))
 
 
 def geometry_source_lines(links: pd.DataFrame, hazards: pd.DataFrame) -> list[str]:
@@ -204,9 +206,10 @@ def geometry_source_lines(links: pd.DataFrame, hazards: pd.DataFrame) -> list[st
     best = links[links.rank_for_hazard == 1].drop_duplicates("hazard_uid").set_index("hazard_uid")
     how = hazards.hazard_uid.map(best.link_method).fillna("none")
     t = pd.crosstab(hazards.geometry_source, how)
-    cols = [c for c in ("spatial_temporal_join", "time_repaired", "date_only", "none") if c in t]
+    cols = [c for c in ("spatial_temporal_join", "time_repaired", "footprint_match",
+                        "date_only", "none") if c in t]
     names = {"spatial_temporal_join": "strict", "time_repaired": "time repaired",
-             "date_only": "by date", "none": "no SPC track"}
+             "footprint_match": "footprint", "date_only": "by date", "none": "no SPC track"}
     lines = ["#### By geometry source", "",
              "Hazards from damage polygons alone (stage 12: tornadoes DAT surveyed "
              "without drawing a track) are matched by their polygons; most carry a time, "
@@ -322,16 +325,54 @@ def repair_section(tag: str, links: pd.DataFrame, hazards: pd.DataFrame, repair:
               "kept, but filter on `offset_class` to drop them.",
               "- A hazard whose SPC track already has a first-pass hazard is probably "
               "a second survey of the same tornado in DAT.", ""]
-    path = spc_unmatched_path(tag)
-    if path.exists():
-        left = pd.read_csv(path)
-        near = left.nearest_distance_km.notna()
-        lines += ["#### Still without an SPC track", "",
-                  f"{len(left):,} DAT hazards ({len(left) / total:.1%}). "
-                  f"{int(near.sum()):,} have an SPC track within 20 km and 72 h (listed "
-                  "with its distance and offset), "
-                  f"**{int((~near).sum()):,} have none** — candidates for tornadoes not in "
-                  "the official record (reclassified, never submitted, a duplicate or a "
-                  f"test entry). One row each in `data/interim/{path.name}`, for a "
-                  "hand check.", ""]
     return lines
+
+
+def footprint_section(links: pd.DataFrame, stats: dict | None) -> list[str]:
+    """What the footprint pass (third) found, and the checks on it."""
+    if not stats or "link_method" not in links.columns:
+        return []
+    best = links[links.rank_for_hazard == 1].drop_duplicates("hazard_uid")
+    first = best[best.link_method == "spatial_temporal_join"]
+    fixed = best[best.link_method == "footprint_match"]
+
+    def agree(frame):
+        known = frame.ef_agrees.dropna()
+        return f"{known.astype(bool).mean():.0%} (n={len(known):,})" if len(known) else "—"
+
+    lines = ["### Same footprint, other time (third pass)", "",
+             "A hazard both passes leave unlinked is linked to an SPC tornado that no DAT "
+             f"hazard has when both ends of SPC's track lie within "
+             f"{stats['max_endpoint_m'] / 1000:g} km of DAT's track and the starts are at "
+             f"most {stats['max_offset_h']:g} h apart (`link_method = footprint_match`, "
+             "`endpoint_m`, `time_offset_h`). Unlinked, such a tornado is counted twice: as "
+             "the DAT hazard, in no episode, and as an SPC hazard.", "",
+             f"**{len(fixed):,} more hazards** are linked; "
+             f"{stats.get('hazards_with_several', 0):,} had more than one candidate. EF "
+             f"ratings match on {agree(fixed)}, against {agree(first)} in the first pass.", ""]
+    if len(fixed):
+        lines += ["| time error (`offset_class`) | hazards | EF agrees | median farther end |",
+                  "|---|---:|---:|---:|"]
+        for name, g in fixed.groupby("offset_class"):
+            lines.append(f"| `{name}` | {len(g):,} | {agree(g)} | {g.endpoint_m.median():.0f} m |")
+        lines += ["", "`dat_midnight`: DAT's start is 00:00 UTC, a placeholder for an unknown "
+                  "time. `whole_hours`: a whole-hour offset beyond the second pass's range "
+                  "(a date wrong by three days). `other`: an offset no clock error explains.", ""]
+    return lines
+
+
+def unmatched_lines(tag: str, total: int) -> list[str]:
+    """The DAT hazards no pass links, for the hand check."""
+    path = spc_unmatched_path(tag)
+    if not path.exists():
+        return []
+    left = pd.read_csv(path)
+    near = left.nearest_distance_km.notna()
+    return ["#### Still without an SPC track", "",
+            f"{len(left):,} DAT hazards ({len(left) / total:.1%}). "
+            f"{int(near.sum()):,} have an SPC track within 20 km and 72 h (listed "
+            "with its distance and offset), "
+            f"**{int((~near).sum()):,} have none** — candidates for tornadoes not in "
+            "the official record (reclassified, never submitted, a duplicate or a "
+            f"test entry). One row each in `data/interim/{path.name}`, for a "
+            "hand check.", ""]

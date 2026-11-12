@@ -10,28 +10,28 @@ Pairs that cannot be copies stand in for the false links, without hand labels: e
 
 | shared tokens needed | other episode linked | same episode linked | within-hazard pairs linked |
 |---:|---:|---:|---:|
-| 10 ← | 0.015% | 0.53% | 16.9% |
-| 12 | 0.008% | 0.40% | 15.8% |
-| 15 | 0.003% | 0.31% | 14.5% |
-| 20 | 0.002% | 0.22% | 12.7% |
+| 10 ← | 0.016% | 0.54% | 16.9% |
+| 12 | 0.008% | 0.40% | 15.9% |
+| 15 | 0.004% | 0.31% | 14.5% |
+| 20 | 0.003% | 0.22% | 12.7% |
 | 25 | 0.001% | 0.18% | 11.0% |
 | 30 | 0.001% | 0.10% | 9.1% |
 
-At 10: 29,183 of 172,819 within-hazard pairs are linked. Expected false links: 27 by the other-episode set and 924 by the same-episode set, i.e. **0.1% to 3.2% of the links**. Comparison pairs: 283,920 and 243,554. Histogram: `figures/same_source_shared_tokens.png`.
+At 10: 29,176 of 172,739 within-hazard pairs are linked. Expected false links: 28 by the other-episode set and 929 by the same-episode set, i.e. **0.1% to 3.2% of the links**. Comparison pairs: 283,989 and 243,696. Histogram: `figures/same_source_shared_tokens.png`.
 
 By source types:
 
 | source types | pairs | linked | expected false links (share of links) |
 |---|---:|---:|---:|
-| DAT comment – DAT comment | 2,518 | 8.8% | 0.2% – 15.1% |
-| DAT comment – LSR | 19,807 | 12.7% | 0.0% – 0.7% |
-| LSR – LSR | 55,318 | 5.0% | 0.1% – 4.0% |
-| PNS – DAT comment | 4,192 | 73.6% | 0.1% – 3.0% |
-| PNS – LSR | 14,111 | 15.9% | 0.1% – 1.5% |
-| PNS – narrative | 7,926 | 66.7% | 0.1% – 2.5% |
-| narrative – DAT comment | 13,560 | 46.4% | 0.1% – 2.6% |
-| narrative – LSR | 48,210 | 9.6% | 0.1% – 0.4% |
-| narrative – narrative | 7,177 | 29.8% | 0.2% – 10.2% |
+| DAT comment – DAT comment | 2,518 | 8.8% | 0.2% – 14.8% |
+| DAT comment – LSR | 19,820 | 12.7% | 0.0% – 0.8% |
+| LSR – LSR | 55,227 | 5.0% | 0.1% – 4.6% |
+| PNS – DAT comment | 4,192 | 73.6% | 0.1% – 2.9% |
+| PNS – LSR | 14,082 | 15.9% | 0.1% – 1.7% |
+| PNS – narrative | 7,926 | 66.7% | 0.1% – 2.6% |
+| narrative – DAT comment | 13,585 | 46.4% | 0.0% – 2.7% |
+| narrative – LSR | 48,212 | 9.6% | 0.1% – 0.4% |
+| narrative – narrative | 7,177 | 29.8% | 0.2% – 9.5% |
 
 ## 2. Recall
 
@@ -39,56 +39,56 @@ Edited copies of a random sample of real texts, compared with their original. A 
 
 | edit | copies | too short | linked (of the rest) | median coverage |
 |---|---:|---:|---:|---:|
-| truncate_170 | 993 | 27.4% | 83.5% | 0.93 |
-| one_sentence | 1,181 | 24.8% | 100.0% | 1.00 |
-| drop_sentence | 1,074 | 2.0% | 99.4% | 1.00 |
-| reorder | 1,074 | 0.0% | 99.2% | 0.93 |
-| numbers | 1,314 | 0.0% | 93.8% | 0.78 |
-| insert_sentence | 1,369 | 0.0% | 99.2% | 0.79 |
-| substitute_5 | 1,600 | 0.0% | 96.5% | 0.87 |
-| substitute_10 | 1,600 | 0.1% | 92.7% | 0.73 |
-| substitute_20 | 1,600 | 0.1% | 83.2% | 0.48 |
-| substitute_30 | 1,600 | 0.1% | 69.3% | 0.29 |
+| truncate_170 | 994 | 27.4% | 83.5% | 0.94 |
+| one_sentence | 1,190 | 21.7% | 100.0% | 1.00 |
+| drop_sentence | 1,057 | 1.9% | 99.1% | 1.00 |
+| reorder | 1,057 | 0.1% | 99.5% | 0.93 |
+| numbers | 1,317 | 0.0% | 93.8% | 0.79 |
+| insert_sentence | 1,371 | 0.0% | 99.1% | 0.79 |
+| substitute_5 | 1,600 | 0.1% | 96.2% | 0.87 |
+| substitute_10 | 1,600 | 0.0% | 92.7% | 0.73 |
+| substitute_20 | 1,600 | 0.2% | 83.6% | 0.49 |
+| substitute_30 | 1,600 | 0.1% | 69.3% | 0.28 |
 
-By source type of the original (all edits): DAT comment 92.3%, LSR 78.4%, PNS 96.5%, narrative 93.6%.
+By source type of the original (all edits): DAT comment 92.6%, LSR 77.6%, PNS 96.5%, narrative 93.9%.
 
 **Real copies.** 770 reports in the 10 hand-saved SPC daily files; 753 match an LSR in stage 20 at the same place (0.02°) and minute (±2 min). SPC's comment is the LSR's remark, often cut at about 170 characters with the office appended, or an earlier version of it. Too short to compare: 120; linked: **607 of 633 (95.9%)**; median coverage 0.93.
 
 ## 3. Groups
 
-91,207 hazard–text rows over 19,569 hazards; 20,113 texts have fewer than 10 specific tokens, cannot be linked and stay on their own.
+91,085 hazard–text rows over 19,498 hazards; 20,084 texts have fewer than 10 specific tokens, cannot be linked and stay on their own.
 
-- Hazards with two or more texts: 18,238, holding 89,876 texts in 70,378 accounts (median 4 texts, 3 accounts).
-- Groups of two or more texts: 11,601; bridged (some members not linked directly): 1,096.
+- Hazards with two or more texts: 18,198, holding 89,785 texts in 70,296 accounts (median 4 texts, 3 accounts).
+- Groups of two or more texts: 11,590; bridged (some members not linked directly): 1,097.
 
 | source types in the group | groups |
 |---|---:|
-| LSR | 1,921 |
-| narrative + DAT comment | 1,600 |
-| narrative + LSR | 1,509 |
-| PNS + narrative + DAT comment | 1,363 |
+| LSR | 1,918 |
+| narrative + DAT comment | 1,602 |
+| narrative + LSR | 1,504 |
+| PNS + narrative + DAT comment | 1,366 |
 | PNS + narrative + DAT comment + LSR | 1,355 |
-| PNS + narrative | 1,310 |
-| narrative + DAT comment + LSR | 817 |
+| PNS + narrative | 1,307 |
+| narrative + DAT comment + LSR | 822 |
 | PNS + narrative + LSR | 557 |
 | narrative | 539 |
-| PNS + DAT comment | 218 |
+| PNS + DAT comment | 215 |
 
 Texts another member covers to at least 80% (`contained_in`), by that member's source type:
 
 | text | texts | contained | in PNS | in narrative | in DAT comment | in LSR |
 |---|---:|---:|---:|---:|---:|---:|
-| PNS | 6,285 | 4.2% | 0 | 102 | 163 | 0 |
-| narrative | 23,107 | 24.1% | 2,380 | 1,243 | 1,753 | 192 |
-| DAT comment | 9,412 | 46.6% | 2,472 | 1,726 | 139 | 51 |
-| LSR | 52,403 | 9.7% | 1,283 | 878 | 323 | 2,615 |
+| PNS | 6,257 | 4.3% | 0 | 103 | 163 | 0 |
+| narrative | 23,108 | 24.1% | 2,380 | 1,243 | 1,755 | 192 |
+| DAT comment | 9,412 | 46.7% | 2,472 | 1,730 | 139 | 51 |
+| LSR | 52,308 | 9.7% | 1,281 | 878 | 322 | 2,604 |
 
-Representatives of groups of two or more (the member covering most of the others' wording): narrative 4,469, PNS 4,197, LSR 2,117, DAT comment 818.
+Representatives of groups of two or more (the member covering most of the others' wording): narrative 4,470, PNS 4,191, LSR 2,112, DAT comment 817.
 
 LSRs grouped with a survey statement, narrative or DAT comment, by the LSR's source field. Stage 20 tiers every LSR `official_timely`, but those grouped with the survey's wording share it:
 
-- real-time: 2.8% of 31,985
-- survey: 20.6% of 20,418
+- real-time: 2.8% of 31,928
+- survey: 20.6% of 20,380
 
 ## 4. Sensitivity
 
@@ -96,13 +96,13 @@ The whole method rerun with one setting changed, the link rule recalibrated each
 
 | run length | common from (hazards) | shared tokens needed | false links | pairs linked | groups ≥2 | agreement |
 |---:|---:|---:|---:|---:|---:|---:|
-| 4 | 3 | 10 | 0.1% – 2.5% | 17.4% | 11,264 | 98.6% |
-| 6 | 3 | 10 | 0.1% – 4.1% | 16.6% | 11,538 | 98.7% |
-| 8 | 3 | 10 | 0.1% – 4.8% | 16.2% | 11,455 | 97.7% |
-| 5 | 2 | 10 | 0.1% – 1.8% | 16.7% | 11,036 | 98.8% |
-| 5 | 5 | 10 | 0.2% – 4.3% | 17.1% | 11,889 | 99.3% |
-| 5 | 10 | 11 | 0.3% – 5.3% | 16.9% | 11,783 | 98.4% |
-| 5 | off | 23 | 0.7% – 4.9% | 12.6% | 9,102 | 95.2% |
+| 4 | 3 | 10 | 0.1% – 2.4% | 17.4% | 11,256 | 98.6% |
+| 6 | 3 | 10 | 0.1% – 4.1% | 16.6% | 11,528 | 98.7% |
+| 8 | 3 | 10 | 0.1% – 4.7% | 16.2% | 11,446 | 97.7% |
+| 5 | 2 | 10 | 0.1% – 2.0% | 16.8% | 11,048 | 98.9% |
+| 5 | 5 | 10 | 0.2% – 4.2% | 17.1% | 11,879 | 99.3% |
+| 5 | 10 | 11 | 0.4% – 5.4% | 16.9% | 11,774 | 98.4% |
+| 5 | off | 23 | 0.7% – 4.9% | 12.7% | 9,094 | 95.2% |
 
 ## 5. Scope and limits
 

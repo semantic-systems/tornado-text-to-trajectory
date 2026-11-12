@@ -10,6 +10,13 @@ straight SPC line). A DAT hazard with no SPC track is in no episode and gets a
 ``spc_match_status``. See :mod:`tornado_dataset.dat.episode_table`; stage 51 has
 the comparison behind the rule.
 
+Each hazard's times are written with its episode: ``begin_utc``, ``end_utc``,
+``convective_day``, with ``time_source`` (``dat``, ``spc``, or ``spc_track`` where
+stage 14 found DAT's time wrong or missing) and ``end_repaired`` (a DAT end with a
+mistyped date, its clock time kept; an end that cannot be repaired, or that DAT
+lacks, is empty; :func:`episode_table.event_times`). Stage 12's ``time_begin_utc`` and
+``time_end_utc`` stay as DAT entered them.
+
     python scripts/15_build_episodes.py
 
 Offline. Needs stage 12's hazards and stage 14's SPC tracks and links, and stops
@@ -65,6 +72,10 @@ def main() -> None:
                   + ("statuses stay 'unmatched'" if name == "unmatched" else "offices from DAT only"))
     episodes, member, grouping, spc_hazards = et.build(frame, labels, tracks, hazards, links,
                                                        **optional)
+    time_cols = ["hazard_uid", "time_begin_utc", "time_end_utc", "convective_day"]
+    table = pd.concat([hazards[time_cols].assign(hazard_source="dat"),
+                       spc_hazards[time_cols].assign(hazard_source="spc")], ignore_index=True)
+    member = member.merge(et.event_times(table, member, tracks), on="hazard_uid", how="left")
 
     out = {"episodes": et.episodes_path(args.tag), "membership": et.membership_path(args.tag),
            "spc_hazards": et.spc_hazards_path(args.tag),
@@ -93,6 +104,10 @@ def main() -> None:
         "dat_hazards_in_episodes": int(dat.episode_uid.notna().sum()),
         "dat_link_method": dat.spc_link_method.value_counts().to_dict(),
         "dat_match_status": dat.spc_match_status.value_counts().to_dict(),
+        "time_source": member.time_source.value_counts().to_dict(),
+        "dat_end_repaired": int(member.end_repaired.sum()),
+        "dat_end_unknown": int((dat.begin_utc.notna() & dat.end_utc.isna()).sum()),
+        "dat_untimed": int((dat.begin_utc.isna()).sum()),
         "spc_hazard_geometry": dict(Counter(f["properties"]["geometry_source"] or "none"
                                             for f in features)),
     }

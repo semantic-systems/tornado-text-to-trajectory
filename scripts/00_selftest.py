@@ -430,6 +430,71 @@ def dat_clock_errors_are_repaired_on_the_hour() -> None:
     assert spc.event_id_dates("ilx061921;Erath 121322") == set()
 
 
+def same_footprint_links_a_free_spc_track() -> None:
+    """Both ends on DAT's track, a free SPC track, within 72 h: one tornado, not two."""
+    import pandas as pd
+    from shapely.geometry import LineString
+    from tornado_dataset.dat import spc_tornadoes as spc
+    t = pd.Timestamp("2016-05-31 23:53", tz="UTC")
+    ids = ["taken", "free", "half", "late", "noon"]
+    tracks = pd.DataFrame({"spc_id": ids,
+                           "begin_utc": [t, t, t, t + pd.Timedelta(hours=80), t],
+                           "mag": [1, 1, 1, 1, 2]})
+    seg = lambda x, n=5000: LineString([(x, 0), (x + n, 0)])  # noqa: E731
+    # "half": SPC's track runs 3 km beyond DAT's, so only its start is on it.
+    geoms = [seg(0), seg(100_000), seg(200_000, 8000), seg(300_000), seg(400_000)]
+    hazards = pd.DataFrame({
+        "hazard_uid": ["dup", "jitter", "partial", "far_off", "midnight"],
+        "t0": [t - pd.Timedelta(hours=9, minutes=11)] * 4
+              + [pd.Timestamp("2016-05-31 00:00", tz="UTC")],
+        "track": [LineString([(x, 20), (x + 5000, 20)])
+                  for x in (0, 100_000, 200_000, 300_000, 400_000)],
+        "efscale": ["EF1", "EF1", "EF1", "EF1", "EF2"]})
+    first = spc.with_first_pass_columns(pd.DataFrame({
+        "spc_id": ["taken"], "hazard_uid": ["other"], "distance_m": [0.0], "gap_s": [0.0],
+        "rank_for_event": [1], "rank_for_hazard": [1],
+        "link_method": ["spatial_temporal_join"]}), tracks, hazards)
+    got, stats = spc.footprint_links(tracks, geoms, hazards, first)
+    got = got.set_index("hazard_uid")
+    assert set(got.index) == {"jitter", "midnight"}, f"got {sorted(got.index)}"
+    assert got.loc["jitter", "spc_id"] == "free" and got.loc["jitter", "offset_class"] == "other"
+    assert got.loc["midnight", "offset_class"] == "dat_midnight"
+    assert got.loc["jitter", "link_method"] == "footprint_match"
+    assert abs(got.loc["jitter", "endpoint_m"] - 20) < 1e-6 and bool(got.loc["jitter", "ef_agrees"])
+
+
+def hazard_times_take_spc_or_repaired_ends() -> None:
+    """SPC's start and end where DAT's time was wrong; DAT ends repaired or left empty."""
+    import pandas as pd
+    from tornado_dataset.dat import episode_table
+    uids = ["ok", "typo", "none", "lost", "clock", "foot"]
+    begin = "2020-04-12T20:00:00+00:00"
+    hazards = pd.DataFrame({
+        "hazard_uid": uids, "hazard_source": "dat", "time_begin_utc": begin,
+        "convective_day": "2020-04-12",
+        # 10 min; a mistyped date (+1 day, clock 10 min on); none; three days and
+        # seven hours on (no plausible clock time); wrong clocks, SPC's to be used.
+        "time_end_utc": ["2020-04-12T20:10:00+00:00", "2020-04-13T20:10:00+00:00", None,
+                         "2020-04-15T03:00:00+00:00", "2020-04-12T20:10:00+00:00",
+                         "2020-04-12T20:10:00+00:00"]})
+    member = pd.DataFrame({"hazard_uid": uids, "spc_id": ["a", "b", "c", "d", "e", "f"],
+                           "spc_link_method": ["spatial_temporal_join"] * 4
+                           + ["time_repaired", "footprint_match"]})
+    tracks = pd.DataFrame({"spc_id": list("abcdef"),
+                           "begin_utc": ["2020-04-12 20:00:00+00:00"] * 4
+                           + ["2020-04-13 01:00:00+00:00", "2020-04-13 05:00:00+00:00"],
+                           "end_utc": ["2020-04-12 20:10:00+00:00"] * 4
+                           + ["2020-04-13 01:20:00+00:00", "2020-04-13 05:30:00+00:00"]})
+    t = episode_table.event_times(hazards, member, tracks).set_index("hazard_uid")
+    assert t.at["ok", "end_utc"] == "2020-04-12T20:10:00+00:00" and not t.at["ok", "end_repaired"]
+    assert t.at["typo", "end_utc"] == "2020-04-12T20:10:00+00:00" and t.at["typo", "end_repaired"]
+    assert pd.isna(t.at["none", "end_utc"]) and not t.at["none", "end_repaired"]
+    assert pd.isna(t.at["lost", "end_utc"]) and not t.at["lost", "end_repaired"]
+    assert t.at["clock", "end_utc"] == "2020-04-13T01:20:00+00:00"
+    assert t.at["foot", "time_source"] == "spc_track" and t.at["foot", "convective_day"] == "2020-04-12"
+    assert t.at["foot", "begin_utc"] == "2020-04-13T05:00:00+00:00"
+
+
 def dat_reference_extends_through_spc() -> None:
     """A DAT hazard with no Storm Events match of its own takes its SPC track's."""
     import pandas as pd
@@ -991,6 +1056,8 @@ for name, fn in [
      county_segments_chain_into_tornadoes_and_link_offices),
     ("spc records are CST and whole tracks", spc_records_are_cst_and_whole_tracks),
     ("DAT clock errors are repaired on the hour", dat_clock_errors_are_repaired_on_the_hour),
+    ("the same footprint links a free SPC track", same_footprint_links_a_free_spc_track),
+    ("hazard times take SPC's or repaired ends", hazard_times_take_spc_or_repaired_ends),
     ("DAT reference extends through SPC", dat_reference_extends_through_spc),
     ("spc episodes carry to DAT hazards", spc_episodes_carry_to_dat_hazards),
     ("episode counts cover all SPC tornadoes", episode_counts_cover_all_spc_tornadoes),

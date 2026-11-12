@@ -31,7 +31,7 @@ import _bootstrap  # noqa: F401
 import pandas as pd
 
 from tornado_dataset import config
-from tornado_dataset.dat import episode_table
+from tornado_dataset.dat import episode_table, storm_events
 from tornado_dataset.dat import references as refs
 from tornado_dataset.ids import write_manifest
 from tornado_dataset.text import records
@@ -86,7 +86,9 @@ def main() -> None:
     hazard_links = link_frame[link_frame.link_level == "hazard"]
     source_of = membership.set_index("hazard_uid").hazard_source
     covered = hazard_links.assign(source=hazard_links.target_uid.map(source_of))
-    raw_files = sorted(p.name for p in (config.RAW_DIR / "storm_events").glob("StormEvents_details*"))
+    # The files read: the newest per year, not every version on disk.
+    raw_files = sorted(p.name for p in
+                       storm_events.details_paths(config.RAW_DIR / "storm_events").values())
     counts = {
         "textrefs": ref_frame.source_type.value_counts().to_dict(),
         "roles": ref_frame.text_role.value_counts().to_dict(),

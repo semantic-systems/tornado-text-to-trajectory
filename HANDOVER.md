@@ -22,15 +22,15 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 
 | stage | state |
 |---|---|
-| 10–12, 16–17 DAT (fetch, link, hazards, geography, QA) | **complete.** 11,520 lines + 9,989 polygons → 11,316 DAT hazards (1,475 from polygons alone; 300 lines and 1,076 polygons rated `TSTM/Wind` left out). Stage 15: all 4,325 SPC episodes (space-time 400 km / 6 h on SPC tracks), 2,130 with a DAT survey; 10,861 DAT hazards carried over, 8,444 SPC tornadoes without a DAT survey as hazards of their own (straight SPC line); 455 DAT hazards with no SPC track in no episode, with a `spc_match_status`. Stage 16: counties, offices (DAT → Storm Events → county join; every hazard has one) and places for DAT and SPC hazards. Stage 20 (NWS text) and 24–25 cover DAT and SPC hazards; stages 21 and 30–34 (news) still rest on the 9,982 hazards and convective-day episodes from before, until revisited and rerun. Geometry linker validated at 99.3% precision / 96.2% recall on the 289-polygon `path_guid` gold set |
-| 13–14 Storm Events + SPC | **run, 2010–2025.** SPC's reviewed whole-track tornado file matched to DAT as the tornado-level reference (98.3% of Storm Events chains match one SPC track); NCEI Storm Events tornado rows chained into whole tornadoes through `TOR_OTHER_*` and cross-checked against SPC, matched to DAT hazards by space and time, episodes linked across offices where a tornado crossed between them; DAT completeness rises from 1% of tornadoes (2010) to 85% (2025) |
-| 35, 17–19 QA, analysis, map | 35 refreshed 12 Aug against the rebuilt GDELT tables. **17–19 reworked, tested in scratch, not yet run by you:** 17 adds DAT against SPC on the same tornado (rating, length, width, deaths, injuries); 18 describes SPC's population and the DAT subset side by side, with representativeness by category and era, and official text per hazard (no news); 19 maps all DAT and SPC hazards over an OpenStreetMap basemap (Leaflet, Web Mercator; serve `outputs/` over http for the tiles), by month or by day, with episode focus and text filters |
-| 20 NWS text (IEM) | **reworked, not yet rerun by you.** Now matches DAT and SPC hazards (SPC's straight line or point), on SPC's time where DAT's clock was wrong or missing (1,066 hazards). A cache-only build in scratch: LSRs for 89.8% of DAT and 86.6% of SPC hazards. Still to fetch: 900 PNS lists and ≥14,623 products, so the survey numbers are not final. Before the rework: 15,687 LSRs + 14,956 survey products on 9,982 DAT hazards |
+| 10–12, 16–17 DAT (fetch, link, hazards, geography, QA) | **complete.** 11,520 lines + 9,989 polygons → 11,316 DAT hazards (1,475 from polygons alone; 300 lines and 1,076 polygons rated `TSTM/Wind` left out). Stage 15: all 4,325 SPC episodes (space-time 400 km / 6 h on SPC tracks), 2,144 with a DAT survey; 10,959 DAT hazards carried over, 8,346 SPC tornadoes without a DAT survey as hazards of their own (straight SPC line); 357 DAT hazards with no SPC track in no episode, with a `spc_match_status`. Each hazard's times, with their source, are in `hazard_episodes_<tag>.csv`. Stage 16: counties, offices (DAT → Storm Events → county join; every hazard has one) and places for DAT and SPC hazards. Stage 20 (NWS text) and 24–25 cover DAT and SPC hazards; stages 21, 30–34 and 42 (news) still rest on the 9,982 hazards and convective-day episodes from before, until revisited and rerun. Geometry linker validated at 99.3% precision / 96.2% recall on the 289-polygon `path_guid` gold set |
+| 13–14 Storm Events + SPC | **run, 2010–2025.** SPC's reviewed whole-track tornado file matched to DAT as the tornado-level reference (98.3% of Storm Events chains match one SPC track); NCEI Storm Events tornado rows chained into whole tornadoes through `TOR_OTHER_*` and cross-checked against SPC, matched to DAT hazards by space and time, episodes linked across offices where a tornado crossed between them; SPC tracks linked to DAT in three passes (strict; whole-hour clock errors; the same footprint at another time, 98 tornadoes that were counted twice before); DAT completeness rises from 1% of tornadoes (2010) to 85% (2025) |
+| 35, 17–19 QA, analysis, map | **run 11 Nov after stage 20.** 35 reports NWS text for DAT and SPC hazards apart; its GDELT section names stage 21's links as stale (no current episode has news) until 21 is rerun. 17 adds DAT against SPC on the same tornado (rating, length, width, deaths, injuries); 18 describes SPC's population and the DAT subset side by side, with representativeness by category and era, and official text per hazard (no news); 19 maps all DAT and SPC hazards over an OpenStreetMap basemap (Leaflet, Web Mercator; serve `outputs/` over http for the tiles), by month or by day, with episode focus and text filters |
+| 20 NWS text (IEM) | **run, 2010–2025 (11 Nov), fetch complete.** Matches DAT and SPC hazards (SPC's straight line or point), on SPC's time where DAT's was wrong or missing (1,164 hazards). 47,119 texts (28,115 LSRs, 19,004 survey sections), 72,535 links. NWS text for 94.1% of DAT and 89.1% of SPC hazards; a primary survey section for 49.3% (5,582) and 8.1% (675). Everything is cached: a rerun with `--cache-only` needs no network. Before the rework: 30,643 texts on 9,982 DAT hazards |
 | 21 GDELT | **rebuilt from cache 12 Aug; partial by construction.** The sweep stopped at 5,155/6,615 queries (78%), so 1,442 queries were never fetched and 57 episodes have no cached slice at all. From what *was* fetched: **83,778 unique URLs** (was 66,034), 100,661 links, **1,857 episodes covered** — 66.4% of all episodes, 84.2% within GDELT's own 2017+ era |
 | 22 Media Cloud fetch | complete. 491,432 rows, 266,258 distinct headlines, 2010–2025 |
 | 23 LexisNexis import | **complete.** 24,917 articles parsed from the hand-made RTF exports (1,487 sources, 2010-01-16 to 2025-12-29), 4,779 verbatim duplicates flagged. Reproduces the August `outputs/lexisnexis_articles.*` |
-| 24 record text | **built, tested on the real data in a scratch copy, not run by you.** Storm Events narratives (23,189 event, 8,517 episode) and DAT comments (9,412) as `oracle` TextRefs; narratives for 10,598 DAT and 8,367 SPC hazards. Overlap with the survey statements: stage 25 |
-| 25 same-source edits | **run, 2010–2025.** Per hazard, groups the official texts (PNS section, narratives, DAT comments, LSRs) that share tornado-specific wording; calibrated on comparison pairs without hand labels (0.1–3.4% of the 25,108 links expected false), recall 95.5% on SPC's real copies of LSRs. 10,701 hazards with two or more texts: 55,943 texts, 39,918 accounts. `samples` writes a page of stratified samples with verdict buttons; **no hand check made yet** |
+| 24 record text | **run, 2010–2025.** Storm Events narratives (23,189 event, 8,517 episode) and DAT comments (9,412) as `oracle` TextRefs; narratives for 10,696 DAT and 8,270 SPC hazards. Overlap with the survey statements: stage 25 |
+| 25 same-source edits | **run, 2010–2025, on stage 20's rerun.** Per hazard, groups the official texts (PNS section, narratives, DAT comments, LSRs) that share tornado-specific wording; calibrated on comparison pairs without hand labels (0.1–3.2% of the 29,176 links expected false), recall 95.9% on SPC's real copies of LSRs. 18,198 hazards with two or more texts: 89,785 texts, 70,296 accounts. `samples` writes a page of stratified samples with verdict buttons; **no hand check made yet** |
 | 30 Media Cloud labels | **complete.** 110,438 EVENT rows / 48,741 distinct stories. Self-consistency: 88.9% unanimous over 3 draws at T=1 |
 | 31 article linking | ran **ungated**; 18,306 of 22,896 articles linked (80%). The `--labels` gate is wired but has never been used |
 | 32 LexisNexis labels | **complete.** 15,324 EVENT articles / 12,077 distinct bodies — but see traps |
@@ -79,25 +79,22 @@ the sweep's rate had collapsed roughly tenfold, most likely because the 45 s ×
 attempt backoff in `config.HTTP_RATE_LIMIT_BACKOFF` over-corrects against
 sustained 429s. Tune that before restarting, or the last 22% will take weeks.
 
-**DAT start times are off by whole hours for ~7% of hazards.** Of 1,114 DAT
-hazards with no SPC track by the strict rule (5 km, 30 min), 690 have one within
-5 km whose start differs by a whole number of hours to within 10 min — mostly
-to the minute: the local clock saved as UTC (+4…+7 h; nearly all of 2012's
-gap, which is why 73% of 2012 was unmatched), daylight saving (±1 h) or the
-wrong date (±24 h). Stage 14's second pass links them (`link_method =
-time_repaired`, offset and cause on each link); ratings agree on 97% of them,
-as on the first pass, against 38% by chance. **DAT's `time_begin_utc` itself is
-not corrected** — anything that reads DAT times directly (a hazard's own convective
-day, the news-timing analysis) still sees the wrong hour for these hazards;
-episodes, built on SPC times, are not affected.
-
-**DAT end times are often wrong — 561 of 9,982 hazards.** `time_end_utc` in the
-stage 12 tables is hand-entered and frequently carries a mistyped *date* with a
-plausible clock time: 427 hazards "last" over a day (one 6.6 years) and 61 end
-before they start. Stage 12's episode grouping does not use end times, but its
-`time_end_utc` columns and episode durations are wrong for these rows. Stages 14
-and 51 repair them in memory (`episodes.repair_end_times`: keep the clock time
-when it gives ≤5 h, else set the end to the start); stage 12 itself is unchanged.
+**DAT's times are wrong for about one hazard in ten; read times from
+`hazard_episodes_<tag>.csv`, never from the hazards table.** `time_begin_utc` and
+`time_end_utc` in `hazards_<tag>.csv` are DAT's as entered, kept for provenance.
+Stage 14 finds the wrong starts against SPC: 881 off by whole hours to within
+10 min (the local clock saved as UTC, +4…+7 h, nearly all of 2012's gap;
+daylight saving; the wrong date; `time_repaired`), 98 more lying on SPC's exact
+footprint with another error (00:00 entered for an unknown time, a date three
+days off, an offset no clock explains; `footprint_match`), and 185 with a date
+only. Ratings agree on 97% of both repair passes, as on the strict one, against
+38% by chance. For these 1,164 stage 15 gives SPC's start and end
+(`time_source = spc_track`). DAT's end is hand-entered and often has a mistyped
+date: an end before the start or over 5 h after it keeps its clock time where
+that gives at most 5 h (`end_repaired`, 314) and is left empty otherwise, as for
+the 1,033 polygon-only hazards without an end (1,162 empty in all).
+`episode_table.event_times` is the one rule; stages 14 and 51 apply the same
+end repair in memory.
 
 **DAT is incomplete before ~2020.** Against NCEI Storm Events, 2015 DAT holds 37%
 of the officially recorded tornadoes, 2025 DAT 85%. Every count of
@@ -374,8 +371,8 @@ episodes of 27 April 2011 (HUN, JAN, BMX) that run from the morning squall line
 before 12 UTC into the afternoon supercells, which the day rule cuts in two.
 Carried to DAT hazards, SPC-built episodes matched the convective-day episodes
 closely (ARI 0.95 for the same rule). Switching invalidated every `episode_uid`
-downstream (stage 31 links, annotation sheets), which is why stages from 16 on
-need a rerun.
+downstream (stage 31 links, annotation sheets); the event stages and stages 20,
+24 and 25 have been rerun on them, the news stages have not.
 
 Storm Events episodes cannot judge over-merging across offices. The planned
 next reference is SPC watch systems, built from county-level watch records:
@@ -397,11 +394,10 @@ the former rule's weakness. The outbreak hand checks are done (space-time 400/6
 and the time-only rule match 8 of 10); the watch-pair review stopped after 21
 pairs. `python scripts/50_watch_systems.py review` opens both
 worksheets on a map (http://127.0.0.1:8800) and saves the labels into them.
-The time-repaired DAT ↔ SPC pass (stage 14, built, tested on the real data in
-a scratch copy, not run by you) raises DAT hazards with an SPC track from 88.8%
-to 95.8%; rerun stage 14 `join` + `report`, then stage 51, to use it. The 237
-hazards with no SPC track within 20 km and 72 h are listed in
-`data/interim/spc_unmatched_dat_<tag>.csv` for a hand check. Stage 51 now scores DAT
+Stage 14's repair passes (whole-hour clock errors; the same footprint at another
+time) raise DAT hazards with an SPC track from 88.2% to 96.8%; stage 51 was scored
+before the footprint pass. The 253 hazards with no SPC track within 20 km and
+72 h are listed in `data/interim/spc_unmatched_dat_<tag>.csv` for a hand check. Stage 51 now scores DAT
 hazards against a Storm Events reference extended through their SPC track
 (+687 hazards, the time-repaired ones; `--dat-reference direct` for the old
 reference): episodes built on SPC and carried to DAT keep their recall
@@ -414,7 +410,7 @@ in 2025) and dropped outbreaks such as Joplin (22 May 2011, 159 deaths). SPC's l
 is the population; `has_dat` and `hazard_source` are filters a user applies and
 reports. SPC tornadoes no DAT survey covers are hazards with SPC's straight line;
 stage 16 measures that such a line finds 98.6% of the counties and 98% of the places
-of a surveyed track. The 455 DAT hazards with no SPC tornado are in no episode,
+of a surveyed track. The 357 DAT hazards with no SPC tornado are in no episode,
 neither counted (single-hazard episodes the record does not confirm, 44 probable
 duplicates) nor dropped (`spc_match_status` says what is near them). Stages 20 and
 24–25 cover SPC hazards; the news stages adopt them when each is revisited, until

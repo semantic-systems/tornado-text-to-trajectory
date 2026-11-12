@@ -266,6 +266,92 @@ def repair_time_links(spc: pd.DataFrame, geoms: list, hazards: pd.DataFrame,
     return cand[cols].sort_values(["hazard_uid", "rank_for_hazard"]), stats
 
 
+# ── third pass: the same footprint, a time error of another kind ────────────
+# Most DAT hazards both passes leave unlinked lie exactly on an SPC tornado that
+# no DAT hazard has: DAT drew its track through the survey's coordinates, which
+# SPC also records, so both ends of SPC's track lie on DAT's within metres. The
+# time is wrong in a way the second pass does not cover: a time of 00:00 entered
+# for an unknown one, a date wrong by more than two days, or an offset that is
+# not a whole number of hours. Unlinked, the tornado is counted twice: once as
+# the DAT hazard (in no episode) and once as an SPC hazard (stage 15).
+FOOTPRINT_MAX_M = 1_000.0
+FOOTPRINT_MAX_OFFSET_H = 72.0
+
+
+def footprint_class(offset_h: float, dat_begin: pd.Timestamp) -> str:
+    """Name a footprint link's time error: ``dat_midnight``, ``whole_hours`` or ``other``.
+
+    ``dat_midnight``: DAT's start is 00:00 UTC to the minute, a placeholder for an
+    unknown time. ``whole_hours``: the offset is whole hours to within the second
+    pass's tolerance, but beyond its range. ``other``: anything else.
+    """
+    if dat_begin.hour == 0 and dat_begin.minute == 0:
+        return "dat_midnight"
+    if abs(offset_h - round(offset_h)) * 60 <= REPAIR_MAX_RESIDUAL_MIN:
+        return "whole_hours"
+    return "other"
+
+
+def footprint_links(spc: pd.DataFrame, geoms: list, hazards: pd.DataFrame,
+                    links: pd.DataFrame, *, max_m: float = FOOTPRINT_MAX_M,
+                    max_offset_h: float = FOOTPRINT_MAX_OFFSET_H
+                    ) -> tuple[pd.DataFrame, dict]:
+    """Third pass: an SPC track no DAT hazard has, lying on an unlinked DAT hazard.
+
+    A pair qualifies when both ends of the SPC track (its start, for a point) lie
+    within ``max_m`` of the hazard's track and the two starts are at most
+    ``max_offset_h`` apart. Only SPC tracks without a DAT hazard after the first
+    two passes are tried: a hazard on a track that already has one is a second
+    survey of it (``probable_duplicate`` in stage 15), not a missed link.
+    Candidates are ranked by the farther end's distance, then by the offset.
+
+    Returns the links (``link_method`` ``footprint_match``; ``endpoint_m``, the
+    farther end's distance; ``time_offset_h`` unrounded; ``offset_class`` from
+    :func:`footprint_class`) and a dict for the report.
+    """
+    from shapely import STRtree
+    from shapely.geometry import Point
+
+    cols = ["spc_id", "hazard_uid", "distance_m", "gap_s", "rank_for_event",
+            "rank_for_hazard", "link_method", "time_offset_h", "offset_class",
+            "residual_min", "spc_already_linked", "ef_agrees", "endpoint_m"]
+    taken = set(links.spc_id)
+    todo = hazards[~hazards.hazard_uid.isin(set(links.hazard_uid))
+                   & hazards.track.notna() & hazards.t0.notna()]
+    valid = [i for i, g in enumerate(geoms)
+             if g is not None and spc.spc_id.iat[i] not in taken]
+    tree = STRtree([geoms[i] for i in valid])
+    begin = spc.begin_utc.to_numpy()
+    rows = []
+    for r in todo.itertuples():
+        for hit in tree.query(r.track.buffer(max_m)):
+            i = valid[int(hit)]
+            coords = list(geoms[i].coords)
+            ends = max(r.track.distance(Point(coords[0])), r.track.distance(Point(coords[-1])))
+            offset = (pd.Timestamp(begin[i]) - r.t0).total_seconds() / 3600
+            if ends <= max_m and abs(offset) <= max_offset_h:
+                rows.append((i, r.hazard_uid, r.track.distance(geoms[i]), ends, offset,
+                             footprint_class(offset, r.t0)))
+    cand = pd.DataFrame(rows, columns=["i", "hazard_uid", "distance_m", "endpoint_m",
+                                       "time_offset_h", "offset_class"])
+    stats = {"hazards_tried": len(todo), "max_endpoint_m": max_m,
+             "max_offset_h": max_offset_h, "candidates": len(cand),
+             "hazards_with_several": int((cand.hazard_uid.value_counts() > 1).sum())
+             if len(cand) else 0}
+    if cand.empty:
+        return pd.DataFrame(columns=cols), stats
+    cand["spc_id"] = spc.spc_id.to_numpy()[cand.i]
+    cand["gap_s"] = cand.time_offset_h.abs() * 3600
+    cand = cand.sort_values(["endpoint_m", "gap_s"])
+    cand["rank_for_hazard"] = cand.groupby("hazard_uid").cumcount() + 1
+    cand["rank_for_event"] = cand.groupby("spc_id").cumcount() + 1
+    cand["link_method"] = "footprint_match"
+    cand["residual_min"] = np.nan
+    cand["spc_already_linked"] = False
+    cand["ef_agrees"] = ef_agrees(cand, spc, hazards)
+    return cand[cols].sort_values(["hazard_uid", "rank_for_hazard"]), stats
+
+
 def ef_agrees(links: pd.DataFrame, spc: pd.DataFrame, hazards: pd.DataFrame) -> pd.Series:
     """Per link: do DAT's rating and SPC's agree? Missing when either is unrated."""
     ef = links.hazard_uid.map(hazards.set_index("hazard_uid").efscale.map(ef_number))

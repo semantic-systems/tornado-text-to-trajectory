@@ -30,9 +30,9 @@ re-tiered reproducibly.
 - **Stage 20 matches DAT and SPC hazards** (stage 15; an SPC hazard by SPC's
   straight line or point) with stage 16's offices and places. LSRs and survey
   sections are matched on each hazard's start time and convective day. For the
-  1,066 DAT hazards whose clock stage 14 found wrong by whole hours (881, 378 of
-  them on the wrong date) or missing (185), these are the SPC track's
-  (`episode_table.event_times`). With DAT's own, their LSRs fell outside the time
+  1,164 DAT hazards whose time stage 14 found wrong (881 by whole hours, 378 of
+  them on the wrong date; 98 on the same footprint) or missing (185), these are
+  the SPC track's (`episode_table.event_times`). With DAT's own, their LSRs fell outside the time
   window or were looked up on the wrong day, and a date-only hazard had no window
   at all.
 - **`20_fetch_nws_text.py --cache-only`** reads nothing from the network: it
@@ -45,10 +45,11 @@ re-tiered reproducibly.
   via stage 33 — under the §60d UrhG research exception for text and data mining.
   The distinction is between local processing and redistribution: what leaves this
   project is links plus derived annotations, never the article text.
-- **Independent cross-check:** where a survey section matched a hazard, the survey's
-  own EF rating agrees with DAT's on 97.1% of cases and the fatality count on
-  97.1% (n=69, March 2025) — two descriptions of the same survey, compared rather
-  than assumed equal.
+- **Independent cross-check:** where a survey section matched a hazard and both
+  state the value, the survey's EF rating agrees with DAT's on 96.6% (n=5,348)
+  and with SPC's on 97.0% (n=631), the death count on 99.4% and 99.8%, the path
+  length within ±10% on 80.4% and 70.9% — two descriptions of the same survey,
+  compared rather than assumed equal.
 - **Coverage stops at 2017-01-01 for news**: 590 of 2,795 episodes predate the
   GDELT DOC API's earliest queryable date and are flagged, not silently empty.
 
@@ -118,23 +119,23 @@ narratives (`narrative_of`) and DAT comments (`comment_of`).
 
   The rule is the smallest number of shared tokens, from 10, at which at most
   0.1% of the first set and 1% of the second would link. It comes out at 10.
-  The two sets link 0.016% and 0.64% of their pairs, so of the 25,108 linked
-  within-hazard pairs (of 132,577), **0.1% to 3.4% are expected to be false**. A
+  The two sets link 0.016% and 0.54% of their pairs, so of the 29,176 linked
+  within-hazard pairs (of 172,739), **0.1% to 3.2% are expected to be false**. A
   comparison pair spans two hazards, so it is allowed one hazard more, and both
   kinds of pair are held to the same rule; without that, the comparison sets
   could hardly link and would understate false links.
 - **Recall**, without labels either:
   - Edited copies of 400 real texts per source type, matched back to their
     original. Dropping, reordering or inserting a sentence: ≥99%. Changing every
-    number: 95%. A random 10% of words replaced: 94%; 30% replaced: 71%, where
+    number: 94%. A random 10% of words replaced: 93%; 30% replaced: 69%, where
     copying fades into paraphrase, which the method does not claim to detect.
-    Short texts are the weak spot: a 170-character cut is missed in 18% of cases,
+    Short texts are the weak spot: a 170-character cut is missed in 17% of cases,
     and a quarter of such cuts and of one-sentence excerpts are too short to
     compare at all.
   - **Real copies:** the comments in the ten hand-saved SPC daily report files
     (`data/raw/spc_reports/`) against the LSR at the same place and minute, which
-    SPC copies (cut, office appended, or an earlier version). 95.5% are linked
-    (553 of 579; 103 too short).
+    SPC copies (cut, office appended, or an earlier version). 95.9% are linked
+    (607 of 633; 120 too short).
 - **Groups** are connected linked texts of one hazard, since two excerpts of one
   text go back to one account. `bridged` flags a group whose members are not all
   linked directly.
@@ -147,19 +148,18 @@ narratives (`narrative_of`) and DAT comments (`comment_of`).
     other members' wording, ties broken PNS, narrative, DAT comment, LSR as a
     convention.
 
-  46% of DAT comments and 22% of narratives are contained in another text; the
-  representatives are mostly narratives (3,517) and PNS sections (3,340).
-- **LSRs.** 23% of the survey LSRs, but 2% of the real-time ones, share an
+  47% of DAT comments and 24% of narratives are contained in another text; the
+  representatives are mostly narratives (4,469) and PNS sections (4,197).
+- **LSRs.** 21% of the survey LSRs, but 3% of the real-time ones, share an
   account with a survey statement, narrative or DAT comment. Stage 20 tiers every
   LSR `official_timely` by its timestamp, which is the event's time, not when the
   remark was written. The group shows which ones carry the survey's wording.
 - **Sensitivity:** run lengths 4, 6 and 8 and common-run cut-offs of 2, 5 and 10
-  hazards. Each recalibrates the rule and agrees with the main run on 97.6–99.3%
-  of pairs. With no cut-off, 25 shared tokens are needed and agreement is 94.7%.
+  hazards. Each recalibrates the rule and agrees with the main run on 97.7–99.3%
+  of pairs. With no cut-off, 23 shared tokens are needed and agreement is 95.2%.
 
-10,701 hazards with two or more texts hold 55,943 texts in 39,918 accounts. These
-figures are from the stage 20 tables before its rework, which covered DAT hazards
-only; rerun stage 25 after stage 20. Writes
+18,198 hazards with two or more texts hold 89,785 texts in 70,296 accounts (22%
+fewer accounts than texts). Writes
 `data/processed/same_source_edits_<tag>.csv` (one row per hazard and text),
 `data/interim/same_source_pairs_<tag>.csv` (every pair, both coverages),
 `manifest_same_source_<tag>.json` and `outputs/same_source_edits_report.md`.
@@ -249,6 +249,9 @@ threshold defined.
 source mix over time, how quickly coverage appears after a tornado, how it decays
 by death toll, the anniversary tail, which events get covered at all, and — the
 piece carried over from the early prototype — **when each kind of text arrives**.
+It reads stage 31's links by episode and stops if they name episodes not in the
+current table, as they do until stage 31 is rerun on stage 15's episodes; the
+report and the figures below are from August.
 
 That last figure puts NWS products and news on one axis using
 `text/tiering.py`, and reproduces at corpus scale what `TEXT_TIER_SUMMARY.md`
@@ -801,6 +804,18 @@ changed. Stage 17's report checks the pass three ways that do not use the time f
 the residual distribution against its far-from-the-hour density (an upper
 bound on chance pairs), rating agreement against the first pass and against
 chance (from which the share of wrong pairs follows), and the `event_id` dates.
+A **third pass** (`spc_tornadoes.footprint_links`) takes the DAT hazards both
+passes leave unlinked and links each to an SPC track that no DAT hazard has when
+both ends of SPC's track lie within 1 km of DAT's and the starts are at most 72 h
+apart. DAT drew its track through the survey's coordinates, which SPC also
+records, so the two coincide to metres (median 23 m for the farther end) while
+the time is wrong in a way the second pass does not cover: 00:00 entered for an
+unknown time, a date three days off, an offset that is not whole hours. 98
+hazards; ratings agree on 97%, as in the first pass. Unlinked, each was counted
+twice: as the DAT hazard, in no episode, and as an SPC hazard. `link_method =
+footprint_match`, `endpoint_m`, `time_offset_h`, `offset_class` (`dat_midnight`,
+`whole_hours`, `other`). Beyond 72 h, and for DAT hazards with no time, ratings
+agree on about 60% and the pass is not applied.
 What is still unmatched goes to `data/interim/spc_unmatched_dat_<tag>.csv`
 with its nearest SPC track within 20 km and 72 h, for a hand check.
 SPC's `om` is a per-year number up to September 2007 and a text identifier
@@ -835,27 +850,38 @@ wanting surveyed tracks filters on `has_dat` (episodes) or `hazard_source`
 The hazards of an episode come from two sources:
 
 - **DAT** (`hazard_source = dat`): each DAT hazard takes the episode of its closest
-  SPC track (stage 14's links, time-repaired and date-only ones included).
-- **SPC** (`hazard_source = spc`, 8,444): an SPC tornado with no DAT link at all is a
+  SPC track (stage 14's links, time-repaired, footprint and date-only ones included).
+- **SPC** (`hazard_source = spc`, 8,346): an SPC tornado with no DAT link at all is a
   hazard of its own, `data/processed/spc_hazards_<tag>.csv`/`.geojson`, with SPC's
-  straight start→end line (`geometry_source = spc_line`; `spc_point` for the 1,533
+  straight start→end line (`geometry_source = spc_line`; `spc_point` for the 1,530
   SPC gives no end for). An SPC track linked to a DAT hazard without being its
-  closest (1,009; median distance 0 m — mostly a piece of the same tornado) is not,
+  closest (1,010; median distance 0 m — mostly a piece of the same tornado) is not,
   or one tornado would count twice. `data/interim/spc_episodes_<tag>.csv` records
   each track's `role`.
 
-A **DAT hazard with no SPC track** (455) is in no episode: counting it as one would
+A **DAT hazard with no SPC track** (357) is in no episode: counting it as one would
 add single-hazard episodes the official record does not confirm and count 44 probable
 duplicates twice; dropping it would hide what DAT holds. It stays in the hazards
 table, `in_spc` false, with `spc_match_status` and its nearest SPC track
 (`time_mismatch`, `probable_duplicate`, `spc_far`, `no_spc_nearby`,
-`untimed_no_spc`). Only one of the 455 has a Storm Events row either.
+`untimed_no_spc`).
 
 Outputs: `data/processed/episodes_<tag>.csv` (first and all convective days, SPC
 start and end, `n_hazards`, `n_dat`, `n_spc_hazards`, `n_spc`, `n_spc_ef1plus`,
 `n_spc_unrated`, SPC casualties, DAT casualties and rating where it has DAT,
 offices from DAT and Storm Events, member IDs) and `hazard_episodes_<tag>.csv`
-(every DAT and SPC hazard → episode, SPC track, how it was matched, status).
+(every DAT and SPC hazard → episode, SPC track, how it was matched, status, and
+its times).
+
+**A hazard's times** are in `hazard_episodes_<tag>.csv`, from one rule
+(`episode_table.event_times`): `begin_utc`, `end_utc`, `convective_day`, and
+`time_source`. A DAT hazard whose time stage 14 found wrong or missing takes its
+SPC track's start and end (`spc_track`, 1,164); every other hazard keeps its own
+(`dat`, `spc`). A DAT end before the start or more than 5 h after it has a
+mistyped date: where its clock time gives at most 5 h it is kept on the start's
+date (`end_repaired`, 314), otherwise the end is left empty, as for the 1,033
+polygon-only hazards DAT gives no end for (1,162 empty in all). The hazards
+table's `time_begin_utc` and `time_end_utc` stay as DAT entered them.
 Episode IDs hash the method and the member SPC tracks, so they are stable across
 reruns. The hazards table carries no episode; stages read it through
 `episode_table.hazards_with_episodes`, `episode_of` or `geography`. Stops if
