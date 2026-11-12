@@ -7,6 +7,14 @@ radius) show the measurement that decided it.
 
     python scripts/35_qa_text.py
     python scripts/35_qa_text.py --tag march2025
+    python scripts/35_qa_text.py links          # hand check of stage 20's links
+    python scripts/35_qa_text.py links-check    # score it, once labelled
+
+``links`` draws LSRs by how their best match was found, survey sections by how
+far their endpoints lie from the track, and tornado LSRs left unlinked only by
+the time margin, and writes a worksheet, key, map and guide to
+``outputs/annotation/`` (:mod:`tornado_dataset.text.link_check`); ``links-check``
+writes ``outputs/textlink_hand_checks_report.md``.
 """
 
 from __future__ import annotations
@@ -44,14 +52,75 @@ def read_optional(path: Path) -> pd.DataFrame:
     return pd.read_csv(path) if path.exists() else pd.DataFrame()
 
 
+def cmd_links_check() -> None:
+    """Precision per stratum and weighted over the LSRs; recall at the margin."""
+    from tornado_dataset import handcheck
+    from tornado_dataset.text import link_check as lc
+
+    df, counts = handcheck.read_labelled(lc)
+    population = counts["population_by_stratum"]
+    df["label"] = df.label.str.upper().replace({"NONE": "none", "CANNOT_TELL": "cannot_tell"})
+    decided = df.label.notna() & (df.label != "cannot_tell")
+    rows = ["| stratum | right hazard | share [95% CI] | another hazard | none | cannot tell |",
+            "|---|---:|---:|---:|---:|---:|"]
+    lsr_strata = ("sole", "clear", "time", "touching", "unclear")
+    weighted, weight = 0.0, 0.0
+    for name in [n for n in lc.STRATA if n != "lsr_missed"]:
+        g = df[(df.stratum == name) & decided]
+        right = int((g.label == g.linked_h).sum())
+        other = int(((g.label != g.linked_h) & (g.label != "none")).sum())
+        rows.append(handcheck.wilson_row(f"{name} ({population.get(name, 0):,})", right, len(g),
+                                         other, int((g.label == "none").sum()),
+                                         int(((df.stratum == name)
+                                              & (df.label == "cannot_tell")).sum())))
+        if name in lsr_strata and len(g):
+            weighted += population.get(name, 0) * right / len(g)
+            weight += population.get(name, 0)
+    m = df[(df.stratum == "lsr_missed") & decided]
+    lines = ["# Official-text links — hand check", "",
+             f"{len(df)} cases from stage 20's links (`python scripts/35_qa_text.py links`); "
+             f"{int(df.label.notna().sum())} labelled. The annotator named the hazard each text "
+             "is about among those around it, numbered at random.", "",
+             "## Precision: is the linked hazard the one the text is about?", "", *rows, ""]
+    if weight:
+        lines.append(f"Weighted over the {int(weight):,} linked LSRs: **{weighted / weight:.1%}** "
+                     "go to the right hazard.")
+    lines += ["", "## Recall at the time margin", "",
+              f"{population.get('lsr_missed', 0):,} tornado LSRs lie within the radius of a track "
+              f"but more than {config.LSR_TIME_MARGIN_MIN:g} min and at most {lc.MISSED_MAX_H} h "
+              "from its time, and are not linked.", "",
+              "| answer | cases |", "|---|---:|",
+              f"| the hazard near in space (should be linked) | {int((m.label == m.near_h).sum())} |",
+              f"| another hazard | {int(((m.label != m.near_h) & (m.label != 'none')).sum())} |",
+              f"| none | {int((m.label == 'none').sum())} |", "",
+              "Read: if most belong to the hazard near in space, a wider margin (or a rule for "
+              "whole-hour offsets, as stage 14 has for DAT) would add real links; the gaps in "
+              "`textlink_key.csv` (`gap_min`) say how wide."]
+    out = config.OUTPUT_DIR / "textlink_hand_checks_report.md"
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("\n".join(lines))
+    print(f"\nwrote {out}")
+
+
 def main() -> None:
     default_tag = f"{config.WINDOW_START.isoformat()}_{config.WINDOW_END.isoformat()}"
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("command", nargs="?", default="report",
+                        choices=("report", "links", "links-check"))
+    parser.add_argument("--force", action="store_true",
+                        help="links: regenerate even if labels were entered")
     parser.add_argument("--tag", default=default_tag)
     parser.add_argument("--news-suffix", default=None,
                         help="suffix of the news files if a pilot subset was used")
     args = parser.parse_args()
     tag = args.tag
+    if args.command == "links":
+        from tornado_dataset import handcheck
+        from tornado_dataset.text import link_check
+        handcheck.write_check(link_check, tag, args.force, "35_qa_text links")
+        return
+    if args.command == "links-check":
+        return cmd_links_check()
     news_tag = args.news_suffix or tag
 
     hazards = pd.read_csv(config.PROCESSED_DIR / f"hazards_{tag}.csv")

@@ -26,13 +26,14 @@ import numpy as np
 import pandas as pd
 from shapely.ops import unary_union
 
-from .. import config
+from .. import config, handcheck
 from . import episode_table
 from . import references as refs
 from .geometry import to_equal_area, to_shapely
 from .spc_tornadoes import track_geometries
 
-ANNOTATION = config.OUTPUT_DIR / "annotation"
+ANNOTATION = handcheck.ANNOTATION
+PREFIX = "M"
 SHEET_SEED = 20261112
 LABELS = ("one_tornado", "several_tornadoes", "cannot_tell")
 # Stage 12's rules behind a hazard, and how many of each the sheet draws.
@@ -61,37 +62,10 @@ def paths() -> dict[str, Path]:
             "manifest": ANNOTATION / "manifest_annotation_merges.json"}
 
 
-def _iso_hm(value) -> str:
-    t = pd.to_datetime(value, utc=True, errors="coerce")
-    return "?" if pd.isna(t) else f"{t:%Y-%m-%d %H:%M}"
-
-
 def _features(path: Path) -> dict[str, dict]:
     """DAT features by ``objectid`` (as text)."""
     features = json.loads(path.read_text(encoding="utf-8"))["features"]
     return {str(f["properties"].get("objectid")): f for f in features}
-
-
-def _lines_of(geom) -> list[list[list[float]]]:
-    """[[lat, lon], ...] per part of a (multi)line, for Leaflet."""
-    parts = getattr(geom, "geoms", [geom])
-    return [[[round(y, 5), round(x, 5)] for x, y in part.coords] for part in parts
-            if part.geom_type == "LineString"]
-
-
-def _rings_of(geom) -> list[list[list[float]]]:
-    parts = getattr(geom, "geoms", [geom])
-    return [[[round(y, 5), round(x, 5)] for x, y in part.exterior.coords] for part in parts
-            if part.geom_type == "Polygon"]
-
-
-def _track_parts(geom) -> list[list[list[float]]]:
-    """An SPC track for Leaflet: its line, or its start point when it has no end."""
-    if geom is None:
-        return []
-    if geom.geom_type == "Point":
-        return [[[round(geom.y, 5), round(geom.x, 5)]]]
-    return _lines_of(geom)
 
 
 def candidates(tag: str) -> tuple[pd.DataFrame, dict[str, dict]]:
@@ -128,7 +102,7 @@ def candidates(tag: str) -> tuple[pd.DataFrame, dict[str, dict]]:
             p = f["properties"]
             length = p.get("length")
             line_text.append(
-                f"L{k}: {_iso_hm(p.get('starttime'))}–{_iso_hm(p.get('endtime'))[11:]} UTC, "
+                f"L{k}: {handcheck.iso_hm(p.get('starttime'))}–{handcheck.iso_hm(p.get('endtime'))[11:]} UTC, "
                 f"{p.get('efscale') or '?'}, "
                 f"{length if isinstance(length, (int, float)) and length >= 0 else '?'} mi"
                 + (f", {p['wfo']}" if p.get("wfo") else "")
@@ -140,7 +114,7 @@ def candidates(tag: str) -> tuple[pd.DataFrame, dict[str, dict]]:
 
         ids = [s for s in by_hazard.get(h.hazard_uid, []) if s in t.index]
         ids.sort(key=lambda s: (t.t0.get(s), s))
-        spc_text = [f"S{k}: {_iso_hm(t.t0[s])}–{_iso_hm(t.t1[s])[11:]} UTC, "
+        spc_text = [f"S{k}: {handcheck.iso_hm(t.t0[s])}–{handcheck.iso_hm(t.t1[s])[11:]} UTC, "
                     f"{'EF' + str(int(t.mag[s])) if t.mag[s] >= 0 else 'EFU'}, "
                     f"{t.len[s]} mi, {t.st[s]}, {int(t.fat[s])} deaths ({s})"
                     for k, s in enumerate(ids, 1)]
@@ -156,18 +130,21 @@ def candidates(tag: str) -> tuple[pd.DataFrame, dict[str, dict]]:
                 g = t_geo.get(s)
                 if g is not None and to_equal_area(g).distance(union) <= NEARBY_M:
                     near.append(s)
-        near_text = [f"{_iso_hm(t.t0[s])} UTC, "
+        near_text = [f"{handcheck.iso_hm(t.t0[s])} UTC, "
                      f"{'EF' + str(int(t.mag[s])) if t.mag[s] >= 0 else 'EFU'}, {t.len[s]} mi ({s})"
                      for s in near]
 
         polys = [to_shapely(polygons[o]["geometry"])
                  for o in str(h.polygon_objectids or "").split(";") if o in polygons]
+        map_layers = [x for g in polys for x in handcheck.layers(g, "area")]
+        map_layers += [x for s in near for x in handcheck.layers(t_geo.get(s), "grey")]
+        map_layers += [x for k, s in enumerate(ids, 1)
+                       for x in handcheck.layers(t_geo.get(s), "spc", f"S{k}")]
+        map_layers += [x for k, g in enumerate(geoms)
+                       for x in handcheck.layers(g, f"c{k}", f"L{k + 1}")]
         shapes[h.hazard_uid] = {
-            "lines": [_lines_of(g) for g in geoms if g is not None],
-            "polygons": [r for g in polys if g is not None for r in _rings_of(g)],
-            "spc": [_track_parts(t_geo.get(s)) for s in ids],
-            "nearby": [_track_parts(t_geo.get(s)) for s in near],
-            "line_text": line_text, "spc_text": spc_text, "near_text": near_text}
+            "layers": map_layers, "line_text": line_text, "spc_text": spc_text,
+            "near_text": near_text}
         rows.append({
             "hazard_uid": h.hazard_uid, "stratum": h.stratum,
             "merge_evidence": h.merge_evidence, "convective_day": h.convective_day,
@@ -185,16 +162,7 @@ def candidates(tag: str) -> tuple[pd.DataFrame, dict[str, dict]]:
 def draw(pop: pd.DataFrame, rng: np.random.Generator,
          sizes: dict[str, int] = STRATA) -> pd.DataFrame:
     """A stratified sample, in random order, with each case's weight."""
-    picked = []
-    for name, n in sizes.items():
-        group = pop[pop.stratum == name]
-        take = group.iloc[rng.choice(len(group), size=min(n, len(group)), replace=False)] \
-            if len(group) else group
-        picked.append(take.assign(weight=len(group) / max(len(take), 1)))
-    sample = pd.concat(picked, ignore_index=True)
-    sample = sample.iloc[rng.permutation(len(sample))].reset_index(drop=True)
-    sample.insert(0, "case_id", [f"M{k:03d}" for k in range(1, len(sample) + 1)])
-    return sample
+    return handcheck.draw(pop, rng, sizes, "M")
 
 
 SHEET_COLUMNS = ["case_id", "convective_day", "states", "wfo_all", "efscale", "n_lines",
@@ -213,10 +181,7 @@ def sheet_and_key(sample: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return sheet[SHEET_COLUMNS], sample[KEY_COLUMNS]
 
 
-def read_sheet(path: Path) -> pd.DataFrame:
-    df = pd.read_csv(path, dtype={"label": str, "notes": str})
-    df["label"] = df.label.str.strip().str.lower().replace("", None)
-    return df
+read_sheet = handcheck.read_sheet
 
 
 HOW_TO = """How to check stage 12's merges (stage 17)
@@ -251,95 +216,18 @@ When done:  python scripts/17_qa_events.py merges-check
 
 
 # ── the map ─────────────────────────────────────────────────────────────────
-MAP_TEMPLATE = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Stage 12 merge check</title>
-<style>__LEAFLET_CSS__</style>
-<style>
-  :root { --bg:#fff; --fg:#1d1d1f; --muted:#6b6b70; --line:#d9d9de; --link:#1f5fd1; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#17171a; --fg:#ececf0; --muted:#9a9aa3;
-    --line:#33333a; --link:#8ab4ff; } }
-  a { color:var(--link); }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
-    font:14px/1.45 system-ui, sans-serif; }
-  #wrap { display:grid; grid-template-columns: 380px 1fr; height:100%; }
-  #side { overflow:auto; border-right:1px solid var(--line); padding:12px 14px; }
-  #map { height:100%; }
-  #map .leaflet-tile-pane { filter: grayscale(1) opacity(0.75); }
-  h1 { font-size:15px; margin:0 0 6px; }
-  .nav { display:flex; gap:6px; align-items:center; margin:8px 0; }
-  button, select { font:inherit; }
-  ul { padding-left:18px; margin:4px 0 10px; }
-  li { margin:2px 0; }
-  .muted { color:var(--muted); }
-  .sw { display:inline-block; width:12px; height:3px; vertical-align:middle; margin-right:4px; }
-  @media (max-width: 760px) { #wrap { grid-template-columns: 1fr; grid-template-rows: 45% 55%; } }
-</style></head>
-<body><div id="wrap"><div id="side">
-<h1>Stage 12 merge check</h1>
-<div class="nav"><button id="prev">◀ p</button><select id="pick"></select>
-<button id="next">n ▶</button></div>
-<div id="info"></div>
-<p class="muted">Label in merge_sheet.csv: one_tornado, several_tornadoes, cannot_tell.</p>
-</div><div id="map"></div></div>
-<script>__LEAFLET_JS__</script>
-<script>
-const CASES = __CASES__;
-const COLORS = ['#2f6fdb','#d9480f','#2b8a3e','#ae3ec9','#c92a2a','#0b7285','#e67700','#5f3dc4'];
-const map = L.map('map', {zoomAnimation:false});
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18,
-  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
-let layer = L.layerGroup().addTo(map);
-const pick = document.getElementById('pick');
-CASES.forEach((c, i) => pick.add(new Option(c.case_id + '  ' + c.day, i)));
-const esc = s => String(s).replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
-function show(i) {
-  i = (i + CASES.length) % CASES.length; pick.value = i;
-  const c = CASES[i]; layer.clearLayers(); const all = [];
-  c.polygons.forEach(r => L.polygon(r, {color:'#868e96', weight:1, fillOpacity:0.15}).addTo(layer));
-  c.nearby.forEach(parts => parts.forEach(p => { all.push(...p);
-    (p.length > 1 ? L.polyline(p, {color:'#868e96', weight:3, dashArray:'4 6'})
-                  : L.circleMarker(p[0], {radius:5, color:'#868e96'})).addTo(layer); }));
-  c.spc.forEach((parts, k) => parts.forEach(p => { all.push(...p);
-    const m = p.length > 1 ? L.polyline(p, {color:'#111', weight:2, dashArray:'6 6'})
-                           : L.circleMarker(p[0], {radius:5, color:'#111'});
-    m.bindTooltip('S' + (k + 1), {permanent:true, direction:'right', opacity:0.8}).addTo(layer); }));
-  c.lines.forEach((parts, k) => parts.forEach((p, j) => { all.push(...p);
-    const m = L.polyline(p, {color:COLORS[k % COLORS.length], weight:4, opacity:0.9}).addTo(layer);
-    if (j === 0) m.bindTooltip('L' + (k + 1), {permanent:true, direction:'left', opacity:0.9}); }));
-  map.invalidateSize();
-  if (all.length) map.fitBounds(L.latLngBounds(all).pad(0.25), {maxZoom: 15});
-  const li = (xs, colour) => xs.map((x, k) => '<li>' + (colour ? '<span class="sw" style="background:'
-      + COLORS[k % COLORS.length] + '"></span>' : '') + esc(x) + '</li>').join('');
-  document.getElementById('info').innerHTML =
-    '<p><b>' + esc(c.case_id) + '</b> · ' + esc(c.day) + ' · ' + esc(c.states) + '</p>'
-    + '<p class="muted">DAT lines</p><ul>' + li(c.line_text, true) + '</ul>'
-    + '<p class="muted">SPC tornadoes linked to this hazard</p><ul>' + li(c.spc_text) + '</ul>'
-    + (c.near_text.length ? '<p class="muted">SPC tornadoes without DAT survey on the lines</p><ul>'
-       + li(c.near_text) + '</ul>' : '')
-    + '<p><a href="' + c.report + '" target="_blank" rel="noopener">SPC reports of the day</a></p>';
-}
-pick.onchange = () => show(+pick.value);
-document.getElementById('prev').onclick = () => show(+pick.value - 1);
-document.getElementById('next').onclick = () => show(+pick.value + 1);
-document.addEventListener('keydown', e => { if (e.key === 'n') show(+pick.value + 1);
-  if (e.key === 'p') show(+pick.value - 1); });
-map.setView([38, -95], 4);
-window.addEventListener('load', () => show(0));
-</script></body></html>
-"""
-
-LEAFLET = Path(__file__).resolve().parent.parent / "viewer" / "static" / "vendor"
-
-
 def review_map(sample: pd.DataFrame, sheet: pd.DataFrame, shapes: dict[str, dict]) -> str:
     """One self-contained page showing every sampled case."""
     cases = []
-    for (s, r) in zip(sample.itertuples(), sheet.itertuples()):
-        cases.append({"case_id": s.case_id, "day": s.convective_day, "states": s.states,
-                      "report": r.spc_reports, **shapes[s.hazard_uid]})
-    return (MAP_TEMPLATE
-            .replace("__LEAFLET_CSS__", (LEAFLET / "leaflet.css").read_text(encoding="utf-8"))
-            .replace("__LEAFLET_JS__", (LEAFLET / "leaflet.js").read_text(encoding="utf-8"))
-            .replace("__CASES__", json.dumps(cases).replace("</", "<\\/")))
+    for s, r in zip(sample.itertuples(), sheet.itertuples()):
+        shape = shapes[s.hazard_uid]
+        cases.append(handcheck.case(
+            s.case_id, f"{s.convective_day} · {s.states}",
+            [("DAT lines (colour)", [(x, k) for k, x in enumerate(shape["line_text"])]),
+             ("SPC tornadoes linked to this hazard (dashed black)", shape["spc_text"]),
+             ("SPC tornadoes without DAT survey on the lines (dashed grey)",
+              shape["near_text"])],
+            shape["layers"], [("SPC reports of the day", r.spc_reports)]))
+    return handcheck.review_map("Stage 12 merge check", cases,
+                                "Label in merge_sheet.csv: one_tornado, several_tornadoes, "
+                                "cannot_tell.")

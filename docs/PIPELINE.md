@@ -199,6 +199,24 @@ A pair table gives shared tokens and coverages. Each sample takes a verdict and
 a note, kept in the browser and exported as CSV, so a hand check of any stratum
 yields a precision or miss rate.
 
+### Hand check of the text links — `scripts/35_qa_text.py links`
+
+    python scripts/35_qa_text.py links
+    python scripts/35_qa_text.py links-check
+
+Stage 20's links are by rule; this measures them (`text/link_check.py`). 110
+cases: LSRs by how their best match was found (`sole` 15, `clear` 10, `time` 10,
+`touching` 10, `unclear` 20), survey sections by how far their stated endpoints
+lie from the track (within 500 m 8, beyond 12), and 25 of the 502 tornado LSRs
+that a track lies within 10.4 km of but more than 60 min and at most 72 h from
+(`lsr_missed`). Each case shows the report (a red point; a section's start and
+end) and the hazards around it as H1, H2, … in random order, so the linked one is
+not singled out; the annotator names the one the text is about, or `none`.
+`links-check` writes `outputs/textlink_hand_checks_report.md`: precision per
+stratum and weighted over the linked LSRs, and for the missed ones how many
+belong to the hazard near in space (the case for a wider margin, or a whole-hour
+rule as stage 14 has for DAT).
+
 ### Importing the LexisNexis exports — `scripts/23_import_lexisnexis.py`
 
 LexisNexis Uni offers no API for this corpus; the articles were exported by hand
@@ -920,7 +938,13 @@ reruns. The hazards table carries no episode; stages read it through
 stage 14's outputs are missing rather than grouping DAT alone. Stage 17 reports the
 result.
 
-### Hand check of stage 12's merges — `scripts/17_qa_events.py merges`
+### Hand checks of the hazards — `scripts/17_qa_events.py merges`, `unmatched`
+
+HANDOVER's *Manual checks* lists every hand check and its order. The shared
+pieces (stratified draw, sheet, key, map, label tables) are in
+`tornado_dataset.handcheck`.
+
+**Stage 12's merges.**
 
 Stage 12 joins DAT lines by union-find (shared polygon, the same `event_id` on the
 same date, an endpoint within a few km on the same convective day), and chains of
@@ -943,6 +967,21 @@ It refuses to overwrite a sheet with labels unless given `--force`.
 `merges-check` writes `outputs/merge_hand_checks_report.md`: the over-merge share
 per rule with a Wilson interval, weighted to the 581, and the key's measures for
 over-merged against single tornadoes, which say whether a rule can be tightened.
+
+**DAT hazards with no SPC track** (`dat/unmatched_check.py`).
+
+    python scripts/17_qa_events.py unmatched
+    python scripts/17_qa_events.py unmatched-check
+
+The 357 DAT hazards in no episode, drawn by `spc_match_status` (no SPC nearby 20,
+untimed 12, SPC 5–20 km away 12, probable duplicate 12, time mismatch all 14).
+The map shows the hazard, the SPC tornadoes within 20 km and 3 days (S1, …,
+nearest first) and other DAT hazards within 5 km (D1, …); the panel adds DAT's
+comment, the office, `event_id`, a Storm Events match and the reports and survey
+statements stage 20 linked to it. Labels: `real_tornado`, `same_as_spc`,
+`duplicate_dat`, `not_a_tornado`, `cannot_tell` (S or D number in notes; the key
+maps them to IDs). `unmatched-check` writes `outputs/unmatched_hand_checks_report.md`:
+labels per status, weighted to the 357.
 
 ### Geography — `scripts/16_enrich_geography.py`
 

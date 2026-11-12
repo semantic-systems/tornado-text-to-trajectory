@@ -12,11 +12,16 @@ it is an estimate, and the caveat that limits it.
     python scripts/17_qa_events.py
     python scripts/17_qa_events.py merges        # hand check of stage 12's merges
     python scripts/17_qa_events.py merges-check  # score it, once labelled
+    python scripts/17_qa_events.py unmatched     # hand check of DAT hazards with no SPC track
+    python scripts/17_qa_events.py unmatched-check
 
 ``merges`` draws a stratified sample of the hazards stage 12 built from several
 DAT lines that SPC records as two or more tornadoes, and writes a worksheet, a
 map and a guide to ``outputs/annotation/`` (:mod:`tornado_dataset.dat.merge_check`);
 ``merges-check`` reads the labels back and writes ``outputs/merge_hand_checks_report.md``.
+``unmatched`` and ``unmatched-check`` do the same for the 357 DAT hazards with no
+SPC track (:mod:`tornado_dataset.dat.unmatched_check`), stratified by
+``spc_match_status``.
 """
 
 from __future__ import annotations
@@ -289,35 +294,40 @@ in deaths, for checking:
 """
 
 
-def cmd_merges(tag: str, force: bool) -> None:
-    """Worksheet, key, map and guide for the hand check of stage 12's merges."""
-    import numpy as np
-    from tornado_dataset.dat import merge_check as mc
-    from tornado_dataset.ids import write_manifest
+def cmd_sheet(name: str, tag: str, force: bool) -> None:
+    """Worksheet, key, map and guide of a hand check (``merges`` or ``unmatched``)."""
+    from tornado_dataset import handcheck
+    from tornado_dataset.dat import merge_check, unmatched_check
+    check = {"merges": merge_check, "unmatched": unmatched_check}[name]
+    handcheck.write_check(check, tag, force, f"17_qa_events {name}")
 
-    paths = mc.paths()
-    if paths["sheet"].exists() and mc.read_sheet(paths["sheet"]).label.notna().any() and not force:
-        raise SystemExit(f"labels already entered in {paths['sheet'].name} — not overwriting "
-                         "(use --force to regenerate)")
-    pop, shapes = mc.candidates(tag)
-    sample = mc.draw(pop, np.random.default_rng(mc.SHEET_SEED))
-    sheet, key = mc.sheet_and_key(sample)
-    paths["sheet"].parent.mkdir(parents=True, exist_ok=True)
-    sheet.to_csv(paths["sheet"], index=False)
-    key.to_csv(paths["key"], index=False)
-    paths["map"].write_text(mc.review_map(sample, sheet, shapes), encoding="utf-8")
-    paths["how_to"].write_text(mc.HOW_TO, encoding="utf-8")
-    write_manifest(paths["manifest"], "17_qa_events merges",
-                   counts={"population": len(pop),
-                           "population_by_stratum": pop.stratum.value_counts().to_dict(),
-                           "cases": len(sample),
-                           "cases_by_stratum": sample.stratum.value_counts().to_dict(),
-                           "seed": mc.SHEET_SEED},
-                   outputs=[paths[k] for k in ("sheet", "key", "map", "how_to")])
-    print(f"{len(pop):,} multi-line hazards on two or more SPC tracks; drew {len(sample)} "
-          "(" + ", ".join(f"{k} {v}" for k, v in sample.stratum.value_counts().items()) + ")")
-    for k in ("sheet", "key", "map", "how_to"):
-        print(f"wrote {paths[k]}")
+
+def cmd_unmatched_check(tag: str) -> None:
+    """What the DAT hazards with no SPC track are, per status, from the labels."""
+    from tornado_dataset import handcheck
+    from tornado_dataset.dat import unmatched_check as uc
+
+    df, counts = handcheck.read_labelled(uc)
+    population = counts["population_by_stratum"]
+    lines = ["# DAT hazards with no SPC track — hand check", "",
+             f"{counts['population']:,} DAT hazards have no SPC track; {len(df)} were drawn "
+             "by `spc_match_status` (`python scripts/17_qa_events.py unmatched`). What each is:",
+             "", *handcheck.label_table(df, uc.LABELS, list(uc.STRATA), population), "",
+             "Read: `real_tornado` stays a DAT-only hazard; `same_as_spc` and `duplicate_dat` "
+             "point to a matching rule to widen (stage 14) or a duplicate to drop (stage 12); "
+             "`not_a_tornado` to a filter. The key holds the S/D numbers' IDs.", "",
+             "## Measures", "",
+             "| label | cases | Storm Events match | has a time | nearest SPC (km, median) |",
+             "|---|---:|---:|---:|---:|"]
+    for label in uc.LABELS:
+        g = df[df.label == label]
+        if len(g):
+            lines.append(f"| {label} | {len(g)} | {int(g.has_storm_events.sum())} | "
+                         f"{int(g.has_time.sum())} | {g.nearest_spc_km.median():.1f} |")
+    out = config.OUTPUT_DIR / "unmatched_hand_checks_report.md"
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("\n".join(lines))
+    print(f"\nwrote {out}")
 
 
 def cmd_merges_check(tag: str) -> None:
@@ -377,16 +387,19 @@ def main() -> None:
     default_tag = f"{config.WINDOW_START.isoformat()}_{config.WINDOW_END.isoformat()}"
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("command", nargs="?", default="report",
-                        choices=("report", "merges", "merges-check"))
+                        choices=("report", "merges", "merges-check", "unmatched",
+                                 "unmatched-check"))
     parser.add_argument("--tag", default=default_tag)
     parser.add_argument("--force", action="store_true",
                         help="merges: regenerate even if labels were entered")
     args = parser.parse_args()
     tag = args.tag
-    if args.command == "merges":
-        return cmd_merges(tag, args.force)
+    if args.command in ("merges", "unmatched"):
+        return cmd_sheet(args.command, tag, args.force)
     if args.command == "merges-check":
         return cmd_merges_check(tag)
+    if args.command == "unmatched-check":
+        return cmd_unmatched_check(tag)
 
     figures_dir = config.OUTPUT_DIR / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)

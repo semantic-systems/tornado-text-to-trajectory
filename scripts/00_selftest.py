@@ -40,6 +40,8 @@ MODULES = [
     "tornado_dataset.dat.episodes", "tornado_dataset.dat.spc_tornadoes",
     "tornado_dataset.dat.episode_table", "tornado_dataset.dat.references",
     "tornado_dataset.dat.spc_watches", "tornado_dataset.dat.merge_check",
+    "tornado_dataset.dat.unmatched_check", "tornado_dataset.handcheck",
+    "tornado_dataset.text.link_check",
     "tornado_dataset.geo.gazetteer", "tornado_dataset.geo.pixels",
     "tornado_dataset.text.tiering", "tornado_dataset.text.iem",
     "tornado_dataset.text.gdelt", "tornado_dataset.text.lexisnexis",
@@ -876,6 +878,29 @@ def merge_check_samples_by_rule() -> None:
     assert list(a.case_id) == [f"M{k:03d}" for k in range(1, 7)]
 
 
+def hand_checks_weigh_and_validate() -> None:
+    """Hand checks: labels per stratum weighted back; sheets keep their labels."""
+    import tempfile
+    import pandas as pd
+    from tornado_dataset import handcheck
+    from tornado_dataset.text import link_check
+    df = pd.DataFrame({"stratum": ["a", "a", "b", "b"], "weight": [10.0, 10.0, 1.0, 1.0],
+                       "label": ["x", "y", "x", None]})
+    lines = handcheck.label_table(df, ("x", "y"), ["a", "b"], {"a": 20, "b": 2})
+    assert lines[2] == "| a (20) | 2/2 | 1 | 1 |" and lines[3] == "| b (2) | 1/2 | 1 | 0 |"
+    assert lines[4] == "| **weighted to all** | 3/4 | 52% | 48% |", lines[4]
+    assert handcheck.wilson_row("s", 0, 0) == "| s | 0 of 0 | n/a |"
+    with tempfile.TemporaryDirectory() as tmp:
+        sheet = Path(tmp) / "s.csv"
+        pd.DataFrame({"case_id": ["A1", "A2"], "label": ["", " One_Tornado "]}).to_csv(sheet)
+        assert handcheck.has_labels(sheet)
+        assert handcheck.read_sheet(sheet).label.tolist()[1] == "one_tornado"
+    # An LSR is the same report whether its time carries seconds or not.
+    assert (link_check._key("2013-10-04T22:59:00+00:00", 42.3401, -96.77)
+            == link_check._key("2013-10-04T22:59+00:00", 42.34, -96.7700))
+    assert {"h1", "h9", "none", "cannot_tell"} <= set(link_check.LABELS)
+
+
 def official_texts_are_counted_per_hazard() -> None:
     """Texts per hazard and kind; census divisions are the Census Bureau's."""
     import tempfile
@@ -1161,6 +1186,7 @@ for name, fn in [
     ("LSRs go to one hazard", lsrs_go_to_one_hazard),
     ("each SPC track counts once", each_spc_track_counts_once),
     ("merge check samples by rule", merge_check_samples_by_rule),
+    ("hand checks weigh and validate", hand_checks_weigh_and_validate),
     ("official texts are counted per hazard", official_texts_are_counted_per_hazard),
     ("map coordinates match Leaflet", map_coordinates_match_leaflet),
     ("NWS text matches on repaired times", nws_text_matches_on_repaired_times),

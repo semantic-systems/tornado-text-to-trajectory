@@ -22,7 +22,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 
 | stage | state |
 |---|---|
-| 10–12, 16–17 DAT (fetch, link, hazards, geography, QA) | **complete.** 11,520 lines + 9,989 polygons → 11,316 DAT hazards (1,475 from polygons alone; 300 lines and 1,076 polygons rated `TSTM/Wind` left out). Stage 15: all 4,325 SPC episodes (space-time 400 km / 6 h on SPC tracks), 2,144 with a DAT survey; 10,959 DAT hazards carried over, 8,346 SPC tornadoes without a DAT survey as hazards of their own (straight SPC line); 357 DAT hazards with no SPC track in no episode, with a `spc_match_status`. Each hazard's times, with their source, are in `hazard_episodes_<tag>.csv`, and its rating, deaths and injuries: SPC's where it has an SPC track (each track counted on one hazard), DAT's where it has none, both records beside them with a flag where they differ (`values_source`, `values_compare`, `*_differ`). Stage 12's merges are under a hand check: `python scripts/17_qa_events.py merges` draws 75 of the 581 multi-line hazards SPC records as two or more tornadoes, stratified by merge rule, with a map (`outputs/annotation/merge_review.html`); `merges-check` scores the labels. Stage 16: counties, offices (DAT → Storm Events → county join; every hazard has one) and places for DAT and SPC hazards. Stage 20 (NWS text) and 24–25 cover DAT and SPC hazards; stages 21, 30–34 and 42 (news) still rest on the 9,982 hazards and convective-day episodes from before, until revisited and rerun. Geometry linker validated at 99.3% precision / 96.2% recall on the 289-polygon `path_guid` gold set |
+| 10–12, 16–17 DAT (fetch, link, hazards, geography, QA) | **complete.** 11,520 lines + 9,989 polygons → 11,316 DAT hazards (1,475 from polygons alone; 300 lines and 1,076 polygons rated `TSTM/Wind` left out). Stage 15: all 4,325 SPC episodes (space-time 400 km / 6 h on SPC tracks), 2,144 with a DAT survey; 10,959 DAT hazards carried over, 8,346 SPC tornadoes without a DAT survey as hazards of their own (straight SPC line); 357 DAT hazards with no SPC track in no episode, with a `spc_match_status`. Each hazard's times, with their source, are in `hazard_episodes_<tag>.csv`, and its rating, deaths and injuries: SPC's where it has an SPC track (each track counted on one hazard), DAT's where it has none, both records beside them with a flag where they differ (`values_source`, `values_compare`, `*_differ`). Stage 12's merges and the DAT hazards with no SPC track await hand checks (see Manual checks). Stage 16: counties, offices (DAT → Storm Events → county join; every hazard has one) and places for DAT and SPC hazards. Stage 20 (NWS text) and 24–25 cover DAT and SPC hazards; stages 21, 30–34 and 42 (news) still rest on the 9,982 hazards and convective-day episodes from before, until revisited and rerun. Geometry linker validated at 99.3% precision / 96.2% recall on the 289-polygon `path_guid` gold set |
 | 13–14 Storm Events + SPC | **run, 2010–2025.** SPC's reviewed whole-track tornado file matched to DAT as the tornado-level reference (98.3% of Storm Events chains match one SPC track); NCEI Storm Events tornado rows chained into whole tornadoes through `TOR_OTHER_*` and cross-checked against SPC, matched to DAT hazards by space and time, episodes linked across offices where a tornado crossed between them; SPC tracks linked to DAT in three passes (strict; whole-hour clock errors; the same footprint at another time, 98 tornadoes that were counted twice before); DAT completeness rises from 1% of tornadoes (2010) to 85% (2025) |
 | 35, 17–19 QA, analysis, map | **run 11 Nov after stage 20.** 35 reports NWS text for DAT and SPC hazards apart; its GDELT section names stage 21's links as stale (no current episode has news) until 21 is rerun. 17 adds DAT against SPC on the same tornado (rating, length, width, deaths, injuries); 18 describes SPC's population and the DAT subset side by side, with representativeness by category and era, and official text per hazard (no news); 19 maps all DAT and SPC hazards over an OpenStreetMap basemap (Leaflet, Web Mercator; serve `outputs/` over http for the tiles), by month or by day, with episode focus and text filters |
 | 20 NWS text (IEM) | **run, 2010–2025 (11 Nov), fetch complete.** Matches DAT and SPC hazards (SPC's straight line or point), on SPC's time where DAT's was wrong or missing (1,164 hazards). 45,361 texts (26,357 LSRs, 19,004 survey sections), 53,609 links. Each LSR is linked to every hazard within 10.4 km and 60 min of its begin–end and counts for one, its best match (`is_best_match`; 609 flagged `unclear`). NWS text for 90.2% of DAT and 82.1% of SPC hazards, an LSR for 83.1% and 77.9%; a primary survey section for 49.3% (5,582) and 8.1% (675). Everything is cached: a rerun with `--cache-only` needs no network. Before the rework: 30,643 texts on 9,982 DAT hazards |
@@ -132,6 +132,43 @@ in fact.
 linker, has a gold standard. Every accuracy-shaped number in the reports is either
 model-versus-model agreement or model-versus-rules agreement. The geometry linker
 is the one exception, and its gold set covers 289 of 9,989 polygons.
+
+## Manual checks
+
+Every check that needs a person, in the order to do them. Each command writes
+a worksheet (fill in `label`, `notes`), a key (do not open before you are done),
+a map and a guide (`HOW_TO_ANNOTATE_*.txt`) to `outputs/annotation/` (git-ignored);
+serve the maps with `python -m http.server 8792 --directory outputs/annotation`.
+The `*-check` command writes the report to `outputs/`. A sheet with labels is
+never overwritten without `--force`.
+
+**Before article linking** (they can change the hazards and episodes stage 31 links to):
+
+| # | check | cases | draw / score | decides |
+|---|---|---:|---|---|
+| 1 | Stage 12 merges: is a multi-line hazard on several SPC tracks one tornado or several? | 75 of 581 | `17_qa_events.py merges` / `merges-check` | whether, and which, merge rule to tighten |
+| 2 | DAT hazards with no SPC track: real, same as an SPC track, duplicate, or not a tornado? | 70 of 357 | `17_qa_events.py unmatched` / `unmatched-check` | widen stage 14's matching, drop duplicates, filter non-tornadoes |
+
+A DAT refetch (parked) changes hazard IDs where lines change: refetch before
+labelling 1–2, or redraw the affected cases after.
+
+**Before the paper, not blocking linking** (precision of the official text):
+
+| # | check | cases | draw / score | decides |
+|---|---|---:|---|---|
+| 3 | Stage 25 same-source groups: are linked texts edits of one account? | per stratum | `25_find_same_source_edits.py samples` (page with verdict buttons, CSV export) | the precision of the accounts |
+| 4–5 | Official-text links: which hazard is an LSR or survey section about? LSRs by how the best match was found (incl. the 609 `unclear`), survey sections by endpoint distance, and tornado LSRs unlinked only by the time margin (502) | 110 of 33,116 | `35_qa_text.py links` / `links-check` | LSR and PNS link precision; whether a wider margin would add real links |
+
+Not a hand check: DAT against SPC on deaths and ratings. Values follow SPC; the
+differences are data (`*_differ` in `hazard_episodes`), the largest listed in
+`events_qa_report.md` section 6.
+
+**After stage 31 is rerun** (thread 5): article-link precision, recall and
+agreement, stage 30/32 label accuracy (`UNCLEAR` stratum), with sheets redrawn by
+`40_sample_annotation.py` — the existing ones rest on the old hazards — and the
+codebook v2.
+
+**Done:** the watch and outbreak checks (stage 50, `watch_hand_checks_report.md`).
 
 ## Open threads
 
@@ -338,17 +375,8 @@ annotator not to open the full article, but the viewer now shows the body — th
 same evidence the linker used. That changes what the precision figure means and
 has to be recorded in the codebook version line and in the datasheet.
 
-Stage 12's merges (DAT side, no news involved): `python scripts/17_qa_events.py
-merges` writes `outputs/annotation/merge_sheet.csv`, its key, a map
-(`merge_review.html`, served with `python -m http.server 8792 --directory
-outputs/annotation`) and `HOW_TO_ANNOTATE_merges.txt`. 75 cases from the 581
-hazards that stage 12 built from several DAT lines and SPC records as two or more
-tornadoes, stratified by the rules that joined them (endpoint gap 30, event_id 20,
-shared polygon 15, mixed 10). `merges-check` gives the over-merge share per rule
-and weighted to the 581, and which measures in the key (SPC tracks overlapping in
-time, gap between lines, spread of start times) separate over-merges; that decides
-whether, and which, stage 12 rule to tighten. The 1,114 single-line hazards on two
-or more SPC tracks are not stage 12's doing and are not in the sample.
+The hand checks of the official layer (DAT, SPC, NWS text) are listed under
+**Manual checks** above, with their order.
 
 ### 6. Episode definition
 
