@@ -22,8 +22,8 @@ own. For two texts of one hazard that is fewer than ``min_hazards`` hazards in
 all. A run found in the texts of three or more tornadoes is a phrase of the
 language or a formula of the office ("an nws storm survey found that an ef1
 tornado began"), not a trace of one account. Each text counts for one hazard,
-an LSR within reach of several for the nearest, so that one LSR does not count
-as several tornadoes. One other hazard is allowed because the hazard list holds
+an LSR for its best match (stage 20), so that one LSR does not count as
+several tornadoes. One other hazard is allowed because the hazard list holds
 a few pieces and duplicates of one tornado.
 
 **Link.** Two texts of one hazard are linked when at least ``min_shared`` of

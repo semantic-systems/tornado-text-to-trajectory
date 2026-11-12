@@ -124,6 +124,15 @@ Key fields: `textref_uid` (FK), `target_uid` (FK), `link_level` (episode | hazar
 episode_narrative_of), `time_offset` (published_at −
 hazard/episode begin, ISO 8601 duration, signed), `linker` (auto | manual), `link_confidence`.
 
+An LSR (`describes`, stage 20) is linked to every hazard within reach and is
+*about* one of them: `is_best_match` marks that one, and every count of a
+hazard's texts uses it alone. `lsr_candidates` is how many hazards were within
+reach; `lsr_time_gap_min` the minutes from the hazard's begin–end to the report
+(0 inside it); `lsr_assignment` how the best match was found — `sole`, `clear`
+(every other track at least 3× as far), `time` (of tracks about as near, the
+report falls in one's begin–end), `touching` (tracks within 1 km: pieces of one
+tornado, or crossing) or `unclear` (closest in time, a guess).
+
 ### 6. Same-source edit group (stage 25)
 Which official texts of one hazard are edits of one account
 (`same_source_edits_<tag>.csv`, one row per hazard and text). Two texts are linked

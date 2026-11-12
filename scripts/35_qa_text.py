@@ -25,7 +25,7 @@ import pandas as pd
 from tornado_dataset import config
 from tornado_dataset.dat import episode_table
 from tornado_dataset.dat.spc_tornadoes import ef_number
-from tornado_dataset.text import tiering
+from tornado_dataset.text import official, tiering
 
 plt.rcParams.update({
     "figure.facecolor": "white", "axes.facecolor": "white",
@@ -78,7 +78,7 @@ def main() -> None:
     # ── coverage per hazard / episode, DAT and SPC hazards apart ──
     oracle_links = (nws_links[nws_links.link_relation == "primary_survey_of"]
                     if len(nws_links) else pd.DataFrame(columns=["target_uid", "textref_uid"]))
-    lsr_links = (nws_links[nws_links.link_relation == "describes"]
+    lsr_links = (official.best_lsr_links(nws_links)
                  if len(nws_links) else pd.DataFrame(columns=["target_uid"]))
     sources = {"DAT": set(hazards.hazard_uid), "SPC": set(spc.hazard_uid)}
 
@@ -86,7 +86,18 @@ def main() -> None:
         n = links.target_uid[links.target_uid.isin(sources[source])].nunique() if len(links) else 0
         return f"{n:,} ({pct(n, len(sources[source]))})"
 
-    any_nws = nws_links if len(nws_links) else pd.DataFrame(columns=["target_uid"])
+    # An LSR counts for its best match only, here as in "with an LSR".
+    any_nws = (pd.concat([nws_links[nws_links.link_relation != "describes"], lsr_links])
+               if len(nws_links) else pd.DataFrame(columns=["target_uid"]))
+    basis = nws_manifest.get("lsrs_by_assignment", {})
+    lsr_radius_km = nws_manifest.get("parameters", {}).get("lsr_radius_m", 0) / 1000
+    lsr_margin_min = nws_manifest.get("parameters", {}).get("lsr_time_margin_min", 0)
+    lsr_basis = "\n".join(f"- {label}: {basis.get(key, 0):,}" for key, label in (
+        ("sole", "the only candidate"),
+        ("clear", "every other track at least 3× as far"),
+        ("time", "of tracks about as near, the one whose begin–end holds the report"),
+        ("touching", "tracks within 1 km of each other (pieces of one tornado, or crossing)"),
+        ("unclear", "none of these: the closest in time, flagged `unclear`")))
     time_sources = nws_manifest.get("matched_on_time_of", {})
     # Stage 21 links to episodes by uid; counted only where the episode is in
     # this table, so links made on an earlier episode table are not mixed in.
@@ -182,12 +193,18 @@ SPC's straight line or point).
 | with a primary survey section (oracle) | {with_text(oracle_links, "DAT")} | {with_text(oracle_links, "SPC")} |
 | with DAT survey comments (stage 24) | {int(hazards.has_oracle_text.sum()):,} ({pct(hazards.has_oracle_text.sum(), len(hazards))}) | — |
 
-LSRs and survey sections are matched on each hazard's start time and convective
+LSRs are matched on each hazard's begin–end, survey sections on its convective
 day. For {time_sources.get("spc_track", 0):,} DAT hazards whose time stage 14 found
 wrong (by whole hours, or on the same footprint as their SPC track) or missing,
 these are the SPC track's (`episode_table.event_times`). With DAT's own, a wrong clock put their LSRs
 outside the time window or looked them up on the wrong day, and a missing one
 left no time window at all.
+
+An LSR is a candidate for every hazard whose track lies within {lsr_radius_km:g} km
+and whose begin–end lies within {lsr_margin_min:g} min of the report. It counts for
+one of them, its best match (`iem.assign_lsr`):
+
+{lsr_basis}
 
 Storm-survey products are compendia: one PNS covers every tornado an office
 surveyed, so sections are split apart and matched individually by the start/end

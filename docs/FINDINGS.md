@@ -22,7 +22,7 @@ bounds and are marked as such.
 
 | report | headline finding |
 |---|---|
-| [text_qa_report.md](../outputs/text_qa_report.md) | NWS text for 94.1% of DAT and 89.1% of SPC hazards, a primary survey section for 49.3% and 8.1%. Where survey and record both state the value, the survey's rating agrees with DAT's on **96.6%** (n=5,348) and the death count on **99.4%** — two descriptions of the same survey, compared rather than assumed equal. GDELT's links name episodes from before stage 15's rework until stage 21 is rerun. |
+| [text_qa_report.md](../outputs/text_qa_report.md) | NWS text for 90.2% of DAT and 82.1% of SPC hazards (an LSR counted for its best match only), a primary survey section for 49.3% and 8.1%. Where survey and record both state the value, the survey's rating agrees with DAT's on **96.6%** (n=5,348) and the death count on **99.4%** — two descriptions of the same survey, compared rather than assumed equal. GDELT's links name episodes from before stage 15's rework until stage 21 is rerun. |
 | [news_time_report.md](../outputs/news_time_report.md) | *(August, on the episodes before stage 15's rework; stage 42 stops until stage 31 is rerun.)* Coverage arrives in a consistent order: LSRs at 0.0 h after onset, news at 9.2 h, the oracle survey at 58.3 h, retrospectives at 96.6 h. Reproduces the single-outbreak prototype's ordering at corpus scale. Publication timestamps are date-only for about half the corpus. |
 | [link_qa_report.md](../outputs/link_qa_report.md) | What the article→event linker produced. **No annotations have been made**, so this reports volume and score distributions, not precision. |
 

@@ -482,7 +482,8 @@ statement (PNS) exists for {pct(dat_cov.pns.sum(), len(dat_cov))} of DAT hazards
 
 Oracle texts are written by the surveying office from its survey (survey
 statement, narrative, DAT comment); LSRs are the office's reports during and just
-after the event. News is not part of this report: it is independent text and
+after the event, each counted for the one hazard it is about (its best match,
+stage 20). News is not part of this report: it is independent text and
 enters the pipeline later (stages 21–23, 30–34). Text matching: `text_qa_report.md`;
 which texts are edits of one account: `same_source_edits_report.md`."""
     else:

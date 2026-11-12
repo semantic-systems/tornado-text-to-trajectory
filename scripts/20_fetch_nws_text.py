@@ -3,7 +3,9 @@
 Produces the two same-org text streams:
 
 * ``official_timely`` — Local Storm Reports, matched to a hazard by distance from
-  the track and time from onset.
+  the track and time within its begin-end. An LSR within reach of several hazards
+  is linked to each, and ``is_best_match`` marks the one it is about; counts use
+  that one only.
 * ``oracle`` — the per-tornado section of a Public Information Statement storm
   survey, matched to a hazard by the coordinates the section itself states.
 
@@ -44,7 +46,6 @@ from shapely.geometry import LineString, Point
 
 from tornado_dataset import config
 from tornado_dataset.dat import episode_table
-from tornado_dataset.dat import references
 from tornado_dataset.dat.geometry import to_equal_area, to_shapely
 from tornado_dataset.ids import uid, write_manifest
 from tornado_dataset.text import iem, tiering
@@ -58,16 +59,14 @@ def load_hazards(tag: str) -> list[dict]:
         if not path.exists():
             raise SystemExit(f"no {path.name} — run scripts/{stage}.py")
         features += json.loads(path.read_text(encoding="utf-8"))["features"]
-    if not references.SPC_TRACKS.exists():
-        raise SystemExit(f"no {references.SPC_TRACKS.name} — run scripts/13_fetch_references.py")
-    table = pd.DataFrame([{k: f["properties"].get(k) for k in
-                           ("hazard_uid", "hazard_source", "time_begin_utc", "convective_day")}
-                          for f in features])
-    table["hazard_source"] = table.hazard_source.fillna("dat")
-    tracks = pd.read_csv(references.SPC_TRACKS, usecols=["spc_id", "begin_utc"])
-    times = episode_table.event_times(table, episode_table.membership(tag), tracks)
-    times = times.set_index("hazard_uid").to_dict("index")
-    source = dict(zip(table.hazard_uid, table.hazard_source))
+    # Times as stage 15 wrote them (episode_table.event_times): the begin, the
+    # end where one is known or repaired, the day, and whose they are.
+    member = episode_table.membership(tag)
+    if "end_utc" not in member.columns:
+        raise SystemExit("hazard_episodes has no hazard times — run scripts/15_build_episodes.py")
+    times = (member[["hazard_uid", "begin_utc", "end_utc", "convective_day", "time_source"]]
+             .set_index("hazard_uid").to_dict("index"))
+    source = dict(zip(member.hazard_uid, member.hazard_source))
     episode_of = episode_table.episode_of(tag)
     geography = (episode_table.geography(tag, ("dat", "spc"))
                  .set_index("hazard_uid").to_dict("index"))
@@ -78,7 +77,10 @@ def load_hazards(tag: str) -> list[dict]:
         geom = to_shapely(feature.get("geometry"))
         if geom is None:
             continue
-        time = times[props["hazard_uid"]]
+        time = times.get(props["hazard_uid"])
+        if time is None:
+            raise SystemExit(f"{props['hazard_uid']} is not in hazard_episodes — "
+                             "rerun scripts/15_build_episodes.py")
         info = geography.get(props["hazard_uid"], {})
         # Every office of every source (stage 16); older tables had two columns.
         wfos = {w for col in ("wfo_all", "wfo_dat", "wfo_spatial")
@@ -90,8 +92,9 @@ def load_hazards(tag: str) -> list[dict]:
             "uid": props["hazard_uid"],
             "source": source[props["hazard_uid"]],
             "episode_uid": episode_of.get(props["hazard_uid"]),
-            "day": time["convective_day"],
+            "day": time["convective_day"] if isinstance(time["convective_day"], str) else None,
             "begin": time["begin_utc"] if isinstance(time["begin_utc"], str) else None,
+            "end": time["end_utc"] if isinstance(time["end_utc"], str) else None,
             "time_source": time["time_source"],
             "efscale": props.get("efscale"),
             "path_length_mi": props.get("path_length_mi"),
@@ -104,11 +107,33 @@ def load_hazards(tag: str) -> list[dict]:
 
 
 # ── Local Storm Reports ──────────────────────────────────────────────────────
+def lsr_interval(hazard: dict) -> tuple[dt.datetime, dt.datetime | None] | None:
+    """The time an LSR is held against: the hazard's begin-end, or its
+    convective day when it has no time. ``None`` without either."""
+    begin = tiering._as_datetime(hazard["begin"])
+    if begin:
+        return begin, tiering._as_datetime(hazard["end"])
+    if not hazard["day"]:
+        return None
+    start = dt.datetime.fromisoformat(hazard["day"]).replace(
+        hour=config.CONVECTIVE_DAY_START_HOUR, tzinfo=dt.timezone.utc)
+    return start, start + dt.timedelta(days=1)
+
+
 def collect_lsrs(hazards: list[dict], *, refresh: bool = False, offline: bool = False,
                  missing: Counter | None = None) -> list[dict]:
-    """Match tornado LSRs to hazards by distance from the track and time."""
+    """Match tornado LSRs to hazards by distance from the track and time.
+
+    A hazard's candidates are the LSRs within ``LSR_MATCH_RADIUS_M`` of its track
+    whose time lies within ``LSR_TIME_MARGIN_MIN`` of its begin-end (its
+    convective day when it has no time). An LSR within reach of several hazards
+    is linked to each, and one of them is its best match (:func:`iem.assign_lsr`).
+    """
     cache_dir = config.RAW_DIR / "iem" / "lsr"
-    years = sorted({int(h["day"][:4]) for h in hazards if h["day"]})
+    margin = dt.timedelta(minutes=config.LSR_TIME_MARGIN_MIN)
+    intervals = {h["uid"]: lsr_interval(h) for h in hazards}
+    years = sorted({y for iv in intervals.values() if iv
+                    for y in range((iv[0] - margin).year, ((iv[1] or iv[0]) + margin).year + 1)})
     by_year: dict[int, list[dict]] = {}
     for year in years:
         rows = iem.fetch_lsr_year(year, cache_dir=cache_dir, refresh=refresh, offline=offline)
@@ -123,33 +148,46 @@ def collect_lsrs(hazards: list[dict], *, refresh: bool = False, offline: bool = 
     prepared = {}
     for year, rows in by_year.items():
         points = [to_equal_area(Point(r["lon"], r["lat"])) for r in rows]
-        prepared[year] = (rows, points, STRtree(points) if points else None)
+        valid = [tiering._as_datetime(r["valid_utc"]) for r in rows]
+        prepared[year] = (rows, points, valid, STRtree(points) if points else None)
 
     matches = []
     for hazard in hazards:
-        if not hazard["day"]:
+        interval = intervals[hazard["uid"]]
+        if interval is None:
             continue
-        year = int(hazard["day"][:4])
-        rows, points, tree = prepared.get(year, ([], [], None))
-        if tree is None:
-            continue
-        begin = tiering._as_datetime(hazard["begin"])
-        for index in tree.query(hazard["proj"].buffer(config.LSR_MATCH_RADIUS_M)):
-            row = rows[index]
-            distance = hazard["proj"].distance(points[index])
-            if distance > config.LSR_MATCH_RADIUS_M:
+        begin, end = interval
+        last = max(begin, end or begin)
+        for year in range((begin - margin).year, (last + margin).year + 1):
+            rows, points, valid, tree = prepared.get(year, ([], [], [], None))
+            if tree is None:
                 continue
-            valid = tiering._as_datetime(row["valid_utc"])
-            offset_hours = None
-            if begin and valid:
-                offset_hours = (valid - begin).total_seconds() / 3600
-                # An LSR that precedes onset by more than an hour, or trails it by
-                # more than the window, belongs to a different tornado.
-                if not (-1 <= offset_hours <= config.LSR_MATCH_WINDOW_HOURS):
+            for index in tree.query(hazard["proj"].buffer(config.LSR_MATCH_RADIUS_M)):
+                distance = hazard["proj"].distance(points[index])
+                if distance > config.LSR_MATCH_RADIUS_M or valid[index] is None:
                     continue
-            matches.append({"hazard": hazard, "row": row,
-                            "distance_m": round(distance, 1),
-                            "offset_hours": None if offset_hours is None else round(offset_hours, 2)})
+                gap = iem.lsr_time_gap_min(valid[index], begin, end)
+                if gap > config.LSR_TIME_MARGIN_MIN:
+                    continue
+                offset = ((valid[index] - tiering._as_datetime(hazard["begin"])).total_seconds()
+                          / 3600 if hazard["begin"] else None)
+                matches.append({"hazard": hazard, "row": rows[index], "lsr": (year, index),
+                                "distance_m": round(distance, 1), "gap_min": round(gap, 1),
+                                "offset_hours": None if offset is None else round(offset, 2)})
+
+    # One best match per LSR, among every hazard it is within reach of.
+    proj = {h["uid"]: h["proj"] for h in hazards}
+    by_lsr: dict[tuple[int, int], list[dict]] = defaultdict(list)
+    for match in matches:
+        by_lsr[match["lsr"]].append(match)
+    for group in by_lsr.values():
+        best, basis = iem.assign_lsr(
+            [{"uid": m["hazard"]["uid"], "distance_m": m["distance_m"], "gap_min": m["gap_min"]}
+             for m in group],
+            lambda a, b: proj[a].distance(proj[b]))
+        for match in group:
+            match.update(is_best_match=match["hazard"]["uid"] == best,
+                         lsr_candidates=len(group), lsr_assignment=basis)
     return matches
 
 
@@ -438,6 +476,8 @@ def main() -> None:
             "distance_m": match["distance_m"], "time_offset_hours": match["offset_hours"],
             "link_evidence": "lsr_point_within_radius_and_window",
             "link_confidence": round(max(0.0, 1 - match["distance_m"] / config.LSR_MATCH_RADIUS_M), 3),
+            "is_best_match": match["is_best_match"], "lsr_candidates": match["lsr_candidates"],
+            "lsr_assignment": match["lsr_assignment"], "lsr_time_gap_min": match["gap_min"],
         })
 
     for match in pns_matches:
@@ -514,7 +554,9 @@ def main() -> None:
     # not merely any survey product that mentioned the area.
     primary = set(links.target_uid[links.link_relation == "primary_survey_of"]) if len(links) else set()
     mentioned = set(links.target_uid[links.link_relation == "mentions"]) if len(links) else set()
-    with_lsr = set(links.target_uid[links.link_relation == "describes"]) if len(links) else set()
+    lsr_links = (links[(links.link_relation == "describes") & (links.is_best_match == True)]  # noqa: E712
+                 if len(links) else pd.DataFrame(columns=["target_uid", "textref_uid"]))
+    with_lsr = set(lsr_links.target_uid)
     counts = {
         "hazards_considered": len(hazards),
         "hazards_by_source": dict(Counter(h["source"] for h in hazards)),
@@ -523,8 +565,15 @@ def main() -> None:
         "textlinks": len(links),
         "by_source_type": refs.source_type.value_counts().to_dict() if len(refs) else {},
         "by_text_role": refs.text_role.value_counts().to_dict() if len(refs) else {},
-        "hazards_with_any_nws_text": per_source(links.target_uid if len(links) else []),
+        "hazards_with_any_nws_text": per_source(
+            (set(links.target_uid[links.link_relation != "describes"]) | with_lsr)
+            if len(links) else []),
         "hazards_with_lsr": per_source(with_lsr),
+        "lsrs_by_assignment": (lsr_links.lsr_assignment.value_counts().to_dict()
+                               if len(lsr_links) else {}),
+        "lsr_links_not_best": int(((links.link_relation == "describes")
+                                   & (links.is_best_match != True)).sum())  # noqa: E712
+                              if len(links) else 0,
         "hazards_with_oracle_survey": per_source(primary),
         "hazards_with_survey_mention_only": per_source(mentioned - primary),
         "by_survey_format": (refs[refs.source_type == "pns"].survey_format.value_counts().to_dict()
@@ -533,7 +582,10 @@ def main() -> None:
         "not_cached": dict(missing) if args.cache_only else None,
         "parameters": {"window_days": args.window_days,
                        "lsr_radius_m": config.LSR_MATCH_RADIUS_M,
-                       "lsr_window_hours": config.LSR_MATCH_WINDOW_HOURS,
+                       "lsr_time_margin_min": config.LSR_TIME_MARGIN_MIN,
+                       "lsr_near_factor": config.LSR_NEAR_FACTOR,
+                       "lsr_near_floor_m": config.LSR_NEAR_FLOOR_M,
+                       "lsr_touch_m": config.LSR_TOUCH_M,
                        "pns_radius_m": config.PNS_MATCH_RADIUS_M,
                        "tier_rule_version": tiering.TIER_RULE_VERSION},
     }

@@ -3,10 +3,10 @@
 
 For every hazard, compares its official texts pairwise — the survey statement
 (PNS section, ``primary_survey_of``), the Storm Events narratives
-(``narrative_of``), the DAT comments (``comment_of``) and the LSRs
-(``describes``) — by shared verbatim wording, and groups the texts that go back
-to one account. The method, and why it needs no hand labels, is in
-:mod:`tornado_dataset.text.same_source`; in short:
+(``narrative_of``), the DAT comments (``comment_of``) and the LSRs whose best
+match it is (``describes``, ``is_best_match``) — by shared verbatim wording, and
+groups the texts that go back to one account. The method, and why it needs no
+hand labels, is in :mod:`tornado_dataset.text.same_source`; in short:
 
 1. **wording specific to the tornado**: 5-token runs found in the texts of at
    most one hazard besides the pair's own; anything more common is a phrase or
@@ -60,6 +60,7 @@ import pandas as pd
 from tornado_dataset import config
 from tornado_dataset.dat import episode_table
 from tornado_dataset.ids import uid, write_manifest
+from tornado_dataset.text import official
 from tornado_dataset.text import same_source as ss
 from tornado_dataset.text import same_source_view
 
@@ -99,6 +100,10 @@ def load(tag: str) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     links = pd.concat([pd.read_csv(P / f"textlinks_nws_{tag}.csv"),
                        pd.read_csv(P / f"textlinks_records_{tag}.csv")], ignore_index=True)
     links = links[(links.link_level == "hazard") & links.link_relation.isin(HAZARD_RELATIONS)]
+    # An LSR is a text of its best match only; its other candidates are not
+    # its tornado (stage 20, iem.assign_lsr).
+    lsr = links.link_relation == "describes"
+    links = links[~lsr | official.is_true(links.is_best_match)]
     links = links[["textref_uid", "target_uid", "link_relation", "distance_m"]].rename(
         columns={"target_uid": "hazard_uid"}).drop_duplicates(["hazard_uid", "textref_uid"])
 
@@ -130,8 +135,8 @@ def run(links: pd.DataFrame, texts: pd.DataFrame, k: int, min_hazards: int | Non
     years = links.groupby("textref_uid").year.min().to_dict()
     bodies = dict(zip(texts.textref_uid, texts.body))
     toks = {u: ss.tokens(b) for u, b in bodies.items()}
-    # Each text counts for one hazard: an LSR within reach of several for the
-    # nearest, so that the same LSR does not count as several tornadoes.
+    # Each text counts for one hazard (an LSR already does, its best match): a
+    # survey section that is the primary of two hazards for the nearest.
     nearest = (links.sort_values(["distance_m", "hazard_uid"], na_position="last")
                .drop_duplicates("textref_uid").set_index("textref_uid").hazard_uid)
     counts = ss.hazard_counts((set(ss.runs(toks[u], k)), {nearest[u]}) for u in bodies)
@@ -351,7 +356,7 @@ def write_report(path: Path, tag: str, settings: dict, r: dict, rows: pd.DataFra
     rule = (f"A shared run of {r['k']} tokens is *specific* when it occurs in the texts of at "
             f"most {WORDS.get(r['min_hazards'] - 2, r['min_hazards'] - 2)} hazard"
             f"{'' if r['min_hazards'] == 3 else 's'} besides the pair's own (each text counted "
-            "for its nearest hazard)" if r["min_hazards"] else
+            "for one hazard: an LSR for its best match, stage 20)" if r["min_hazards"] else
             f"Every shared run of {r['k']} tokens counts (no filter for common runs)")
     L = [
         "# Same-source edits among the official texts",

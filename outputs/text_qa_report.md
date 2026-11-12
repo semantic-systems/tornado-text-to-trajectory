@@ -12,24 +12,34 @@ layer: 100.0% of the
 
 ## 2. NWS text (same-org)
 
-47,119 text references (LSRs and survey sections), 72,535 links to
+45,361 text references (LSRs and survey sections), 53,609 links to
 hazards, for the DAT hazards and the SPC tornadoes without a DAT survey (matched on
 SPC's straight line or point).
 
 | | DAT hazards | SPC hazards |
 |---|---|---|
 | hazards | 11,316 | 8,346 |
-| with any NWS text | 10,647 (94.1%) | 7,433 (89.1%) |
-| with an LSR | 10,219 (90.3%) | 7,221 (86.5%) |
+| with any NWS text | 10,210 (90.2%) | 6,849 (82.1%) |
+| with an LSR | 9,407 (83.1%) | 6,500 (77.9%) |
 | with a primary survey section (oracle) | 5,582 (49.3%) | 675 (8.1%) |
 | with DAT survey comments (stage 24) | 7,850 (69.4%) | — |
 
-LSRs and survey sections are matched on each hazard's start time and convective
+LSRs are matched on each hazard's begin–end, survey sections on its convective
 day. For 1,164 DAT hazards whose time stage 14 found
 wrong (by whole hours, or on the same footprint as their SPC track) or missing,
 these are the SPC track's (`episode_table.event_times`). With DAT's own, a wrong clock put their LSRs
 outside the time window or looked them up on the wrong day, and a missing one
 left no time window at all.
+
+An LSR is a candidate for every hazard whose track lies within 10.4 km
+and whose begin–end lies within 60 min of the report. It counts for
+one of them, its best match (`iem.assign_lsr`):
+
+- the only candidate: 20,922
+- every other track at least 3× as far: 3,815
+- of tracks about as near, the one whose begin–end holds the report: 794
+- tracks within 1 km of each other (pieces of one tornado, or crossing): 217
+- none of these: the closest in time, flagged `unclear`: 609
 
 Storm-survey products are compendia: one PNS covers every tornado an office
 surveyed, so sections are split apart and matched individually by the start/end
@@ -116,7 +126,7 @@ articles; slicing recovered them. Episodes whose slices hit the cap are flagged
 |:--------------------------|------:|
 | independent_timely        | 53795 |
 | independent_retrospective | 29977 |
-| official_timely           | 28159 |
+| official_timely           | 26401 |
 | oracle                    | 18966 |
 
 The two axes behind these labels (`same_org_as_geometry` × `temporal_class`) are
@@ -128,8 +138,8 @@ row so the corpus can be re-tiered reproducibly. Timing is in
 
 Stage 25 compares each hazard's official texts (survey statement, Storm Events narratives, DAT comments, LSRs) by shared wording specific to the tornado; method, calibration, recall and sensitivity are in [`same_source_edits_report.md`](same_source_edits_report.md).
 
-- 29,176 of 172,739 within-hazard pairs are linked (at least 10 shared tokens); expected false links 0.1% to 3.2% of them, by the two comparison sets.
-- 11,590 groups of two or more texts. The 18,198 hazards with two or more texts hold 89,785 texts in 70,296 accounts (22% fewer accounts than texts).
+- 27,660 of 92,951 within-hazard pairs are linked (at least 10 shared tokens); expected false links 0.1% to 2.8% of them, by the two comparison sets.
+- 10,452 groups of two or more texts. The 17,294 hazards with two or more texts hold 63,016 texts in 44,855 accounts (29% fewer accounts than texts).
 
 ## 6. Limitations
 

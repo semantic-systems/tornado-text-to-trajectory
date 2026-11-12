@@ -789,6 +789,28 @@ def nws_text_matches_on_repaired_times() -> None:
         "an SPC hazard's survey counts for its episode"
 
 
+def lsrs_go_to_one_hazard() -> None:
+    """LSR time gap to begin-end; best match by distance, then time; its basis."""
+    import datetime as dt
+    from tornado_dataset.text import iem
+    t = lambda h, m=0: dt.datetime(2020, 4, 12, h, m, tzinfo=dt.timezone.utc)
+    assert iem.lsr_time_gap_min(t(20, 5), t(20), t(20, 30)) == 0
+    assert iem.lsr_time_gap_min(t(19, 15), t(20), t(20, 30)) == 45
+    assert iem.lsr_time_gap_min(t(21), t(20), t(20, 30)) == 30
+    assert iem.lsr_time_gap_min(t(20, 10), t(20), None) == 10, "no end: the moment it began"
+    far = lambda a, b: 20_000.0
+    c = lambda uid, d, gap: {"uid": uid, "distance_m": d, "gap_min": gap}
+    assert iem.assign_lsr([c("a", 900, 30)], far) == ("a", "sole")
+    assert iem.assign_lsr([c("a", 300, 30), c("b", 8_000, 0)], far) == ("a", "clear"), \
+        "a track 3x as far does not compete, however close in time"
+    assert iem.assign_lsr([c("a", 2_000, 20), c("b", 4_000, 0)], far) == ("b", "time")
+    assert iem.assign_lsr([c("a", 200, 0), c("b", 600, 0)],
+                          lambda a, b: 300.0) == ("a", "touching")
+    assert iem.assign_lsr([c("a", 2_000, 0), c("b", 3_000, 0)], far) == ("a", "unclear")
+    assert iem.assign_lsr([c("a", 2_000, 15), c("b", 3_000, 5)], far) == ("b", "unclear"), \
+        "unclear: the closest in time"
+
+
 def official_texts_are_counted_per_hazard() -> None:
     """Texts per hazard and kind; census divisions are the Census Bureau's."""
     import tempfile
@@ -804,7 +826,9 @@ def official_texts_are_counted_per_hazard() -> None:
             assert official.counts("t") is None, "nothing on disk: no table"
             pd.DataFrame({"textref_uid": ["p", "l1", "l2", "l1"], "target_uid": ["h1", "h1", "h1", "h2"],
                           "link_relation": ["primary_survey_of", "describes", "describes",
-                                            "describes"]}).to_csv(Path(tmp) / "textlinks_nws_t.csv")
+                                            "describes"],
+                          "is_best_match": [True, False, True, True]}).to_csv(
+                Path(tmp) / "textlinks_nws_t.csv")
             pd.DataFrame({"textref_uid": ["p", "l1", "l2"],
                           "lsr_source": [None, "NWS Storm Survey", "TRAINED SPOTTER"]}).to_csv(
                 Path(tmp) / "textrefs_nws_t.csv")
@@ -816,8 +840,8 @@ def official_texts_are_counted_per_hazard() -> None:
         finally:
             config.PROCESSED_DIR = saved
     assert list(table.columns) == list(official.KINDS)
-    assert table.loc["h1"].tolist() == [1, 0, 1, 1, 1], table.loc["h1"].tolist()
-    assert table.loc["h2"].tolist() == [0, 1, 0, 1, 0], "an LSR may describe two hazards"
+    assert table.loc["h1"].tolist() == [1, 0, 1, 0, 1], table.loc["h1"].tolist()
+    assert table.loc["h2"].tolist() == [0, 1, 0, 1, 0], "an LSR counts for its best match"
     assert "ep" not in table.index, "episode-level narratives are not a hazard's"
 
 
@@ -1069,6 +1093,7 @@ for name, fn in [
     ("record texts link once and count as oracle", record_texts_link_once_and_count_as_oracle),
     ("same-source links need specific wording", same_source_links_need_specific_wording),
     ("sample page marks what was counted", sample_page_marks_what_was_counted),
+    ("LSRs go to one hazard", lsrs_go_to_one_hazard),
     ("official texts are counted per hazard", official_texts_are_counted_per_hazard),
     ("map coordinates match Leaflet", map_coordinates_match_leaflet),
     ("NWS text matches on repaired times", nws_text_matches_on_repaired_times),

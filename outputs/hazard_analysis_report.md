@@ -174,10 +174,10 @@ statement (PNS) exists for 49.3% of DAT hazards and
 | survey statement (PNS) | 5,582 (49.3%) | 675 (8.1%) |
 | Storm Events narrative | 10,696 (94.5%) | 8,270 (99.1%) |
 | DAT comment | 7,850 (69.4%) | 0 (0.0%) |
-| survey LSR | 7,358 (65.0%) | 2,578 (30.9%) |
-| real-time LSR | 5,839 (51.6%) | 5,813 (69.7%) |
+| survey LSR | 6,676 (59.0%) | 2,219 (26.6%) |
+| real-time LSR | 4,402 (38.9%) | 4,845 (58.1%) |
 | any oracle text (first three) | 11,078 (97.9%) | 8,278 (99.2%) |
-| any official text | 11,167 (98.7%) | 8,331 (99.8%) |
+| any official text | 11,099 (98.1%) | 8,313 (99.6%) |
 
 Independent accounts among a hazard's oracle texts (stage 25: texts that share tornado-specific wording count once):
 
@@ -192,7 +192,8 @@ Independent accounts among a hazard's oracle texts (stage 25: texts that share t
 
 Oracle texts are written by the surveying office from its survey (survey
 statement, narrative, DAT comment); LSRs are the office's reports during and just
-after the event. News is not part of this report: it is independent text and
+after the event, each counted for the one hazard it is about (its best match,
+stage 20). News is not part of this report: it is independent text and
 enters the pipeline later (stages 21–23, 30–34). Text matching: `text_qa_report.md`;
 which texts are edits of one account: `same_source_edits_report.md`.
 

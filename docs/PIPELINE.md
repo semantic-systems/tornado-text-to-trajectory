@@ -34,7 +34,21 @@ re-tiered reproducibly.
   them on the wrong date; 98 on the same footprint) or missing (185), these are
   the SPC track's (`episode_table.event_times`). With DAT's own, their LSRs fell outside the time
   window or were looked up on the wrong day, and a date-only hazard had no window
-  at all.
+  at all. Stage 20 reads these times from `hazard_episodes_<tag>.csv`.
+- **An LSR is linked to every hazard within reach, and is about one of them.**
+  A candidate's track lies within 10.4 km of the report and its begin–end within
+  60 min of the report's time (a hazard with no time: its convective day; with no
+  end: its start). The radius is the 90% quantile of real-time LSRs' distance to
+  their track (survey LSRs: median 360 m). The margin keeps 98.0% of 13,666 LSRs
+  that lie within 1 km of one track and 10 km of no other; the rest are whole
+  hours or days off. `is_best_match` marks the hazard the LSR is about
+  (`iem.assign_lsr`): the nearest track, or, where others lie within 3× its
+  distance (at least 1 km), the one closest in time. `lsr_assignment` records how
+  sure: `sole`, `clear`, `time`, `touching` (tracks within 1 km: pieces of one
+  tornado, or crossing) or `unclear`. Every count of a hazard's texts (stages
+  18, 19, 25, 35) uses the best match only. Before: 25 km, 1 h before to 6 h
+  after the start, no best match — 47% of LSRs counted for two or more hazards,
+  and the 52 hazards with no time took every LSR within 25 km of the whole year.
 - **`20_fetch_nws_text.py --cache-only`** reads nothing from the network: it
   builds from the IEM cache, prints what is missing, and writes its tables with
   the suffix `_cacheonly` unless nothing was missing. Product downloads are
@@ -101,10 +115,8 @@ narratives (`narrative_of`) and DAT comments (`comment_of`).
   occurs in the texts of at most one hazard besides the pair's own. Anything more
   common is a phrase of the language or an office formula ("an NWS storm survey
   found that an EF1 tornado began at"). Each text counts for one hazard, an LSR
-  within reach of several for the nearest. Counting by episode instead let
-  formulas through that an office repeats for every tornado of one outbreak.
-  Counting only single-hazard texts missed the LSRs' templates, because almost
-  half of the LSRs are linked to several hazards.
+  for its best match (stage 20). Counting by episode instead let formulas
+  through that an office repeats for every tornado of one outbreak.
 - **Link: at least 10 tokens in shared specific runs** (counted in both texts,
   the lower count used). This is two runs' worth, so one shared place description
   ("2 miles southwest of Whigham") never links. Coverage, the share of a text's
@@ -119,23 +131,23 @@ narratives (`narrative_of`) and DAT comments (`comment_of`).
 
   The rule is the smallest number of shared tokens, from 10, at which at most
   0.1% of the first set and 1% of the second would link. It comes out at 10.
-  The two sets link 0.016% and 0.54% of their pairs, so of the 29,176 linked
-  within-hazard pairs (of 172,739), **0.1% to 3.2% are expected to be false**. A
+  The two sets link 0.024% and 0.84% of their pairs, so of the 27,660 linked
+  within-hazard pairs (of 92,951), **0.1% to 2.8% are expected to be false**. A
   comparison pair spans two hazards, so it is allowed one hazard more, and both
   kinds of pair are held to the same rule; without that, the comparison sets
   could hardly link and would understate false links.
 - **Recall**, without labels either:
   - Edited copies of 400 real texts per source type, matched back to their
     original. Dropping, reordering or inserting a sentence: ≥99%. Changing every
-    number: 94%. A random 10% of words replaced: 93%; 30% replaced: 69%, where
+    number: 95%. A random 10% of words replaced: 93%; 30% replaced: 71%, where
     copying fades into paraphrase, which the method does not claim to detect.
-    Short texts are the weak spot: a 170-character cut is missed in 17% of cases,
+    Short texts are the weak spot: a 170-character cut is missed in 16% of cases,
     and a quarter of such cuts and of one-sentence excerpts are too short to
     compare at all.
   - **Real copies:** the comments in the ten hand-saved SPC daily report files
     (`data/raw/spc_reports/`) against the LSR at the same place and minute, which
-    SPC copies (cut, office appended, or an earlier version). 95.9% are linked
-    (607 of 633; 120 too short).
+    SPC copies (cut, office appended, or an earlier version). 95.7% are linked
+    (600 of 627; 110 too short).
 - **Groups** are connected linked texts of one hazard, since two excerpts of one
   text go back to one account. `bridged` flags a group whose members are not all
   linked directly.
@@ -149,16 +161,17 @@ narratives (`narrative_of`) and DAT comments (`comment_of`).
     convention.
 
   47% of DAT comments and 24% of narratives are contained in another text; the
-  representatives are mostly narratives (4,469) and PNS sections (4,197).
-- **LSRs.** 21% of the survey LSRs, but 3% of the real-time ones, share an
+  representatives are mostly narratives (4,481) and PNS sections (4,168).
+- **LSRs.** 38% of the survey LSRs, but 5% of the real-time ones, share an
   account with a survey statement, narrative or DAT comment. Stage 20 tiers every
   LSR `official_timely` by its timestamp, which is the event's time, not when the
   remark was written. The group shows which ones carry the survey's wording.
 - **Sensitivity:** run lengths 4, 6 and 8 and common-run cut-offs of 2, 5 and 10
-  hazards. Each recalibrates the rule and agrees with the main run on 97.7–99.3%
-  of pairs. With no cut-off, 23 shared tokens are needed and agreement is 95.2%.
+  hazards. Each recalibrates the rule (10 to 13 tokens) and agrees with the main
+  run on 96.7–98.6% of pairs. With no cut-off, 26 shared tokens are needed and
+  agreement is 90.9%.
 
-18,198 hazards with two or more texts hold 89,785 texts in 70,296 accounts (22%
+17,294 hazards with two or more texts hold 63,016 texts in 44,855 accounts (29%
 fewer accounts than texts). Writes
 `data/processed/same_source_edits_<tag>.csv` (one row per hazard and text),
 `data/interim/same_source_pairs_<tag>.csv` (every pair, both coverages),

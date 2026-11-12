@@ -29,7 +29,7 @@ import io
 import re
 import time
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from .. import config
 from ..http import get_json, session_get, utcnow_iso
@@ -81,6 +81,58 @@ def fetch_lsr_year(year: int, *, cache_dir: Path, refresh: bool = False, offline
             "magnitude": row.get("MAG"),
         })
     return rows
+
+
+def lsr_time_gap_min(valid: dt.datetime, begin: dt.datetime,
+                     end: dt.datetime | None) -> float:
+    """Minutes from the hazard's begin-end to the report; 0 inside it.
+
+    A hazard without an end is the moment it began.
+    """
+    end = end if end and end >= begin else begin
+    if valid < begin:
+        return (begin - valid).total_seconds() / 60
+    if valid > end:
+        return (valid - end).total_seconds() / 60
+    return 0.0
+
+
+LSR_ASSIGNMENTS = ("sole", "clear", "time", "touching", "unclear")
+
+
+def assign_lsr(candidates: list[dict[str, Any]],
+               apart: Callable[[str, str], float]) -> tuple[str, str]:
+    """The hazard one LSR is about, and on what basis.
+
+    ``candidates``: the hazards within reach of the report, each a dict with
+    ``uid``, ``distance_m`` and ``gap_min`` (:func:`lsr_time_gap_min`).
+    ``apart(uid_a, uid_b)``: the distance between two hazards' tracks in metres.
+
+    The best match is the nearest track; tracks within ``LSR_NEAR_FACTOR`` times
+    its distance (at least ``LSR_NEAR_FLOOR_M``) compete with it, and of those
+    the one closest in time wins. The basis says how sure that is:
+
+    * ``sole`` — the only candidate;
+    * ``clear`` — every other track is farther than that;
+    * ``time`` — of the competing tracks, the report falls within one's begin-end;
+    * ``touching`` — the competing tracks lie within ``LSR_TOUCH_M`` of the
+      nearest: pieces of one tornado, or tracks that cross;
+    * ``unclear`` — none of these: the pick is the closest in time, but a guess.
+    """
+    ranked = sorted(candidates, key=lambda c: (c["distance_m"], c["uid"]))
+    nearest = ranked[0]
+    reach = max(config.LSR_NEAR_FACTOR * nearest["distance_m"], config.LSR_NEAR_FLOOR_M)
+    close = [c for c in ranked if c["distance_m"] <= reach]
+    best = min(close, key=lambda c: (c["gap_min"], c["distance_m"], c["uid"]))["uid"]
+    if len(ranked) == 1:
+        return best, "sole"
+    if len(close) == 1:
+        return best, "clear"
+    if sum(c["gap_min"] == 0 for c in close) == 1:
+        return best, "time"
+    if all(apart(nearest["uid"], c["uid"]) <= config.LSR_TOUCH_M for c in close[1:]):
+        return best, "touching"
+    return best, "unclear"
 
 
 def _parse_lsr_time(value: Any) -> dt.datetime | None:

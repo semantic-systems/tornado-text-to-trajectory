@@ -209,12 +209,22 @@ COUNTY_MIN_AREA_M2 = 1_000_000.0
 IEM_BASE = "https://mesonet.agron.iastate.edu"
 # LSR types that describe a tornado (as opposed to wind/hail damage).
 LSR_TORNADO_TYPES = ("TORNADO", "FUNNEL CLOUD", "LANDSPOUT", "WATERSPOUT")
-# An LSR belongs to a hazard when it falls within this distance of the track and
-# inside the time window. Tornado LSRs are point estimates reported by spotters
-# under duress; 25 km absorbs that positional error without spanning two
-# tornadoes in an outbreak.
-LSR_MATCH_RADIUS_M = 25_000.0
-LSR_MATCH_WINDOW_HOURS = 6
+# An LSR is a candidate for a hazard when it lies within this distance of the
+# track and its time within the margin of the hazard's begin-end. The radius is
+# the 90% quantile of real-time LSRs' distance to the track they were assigned
+# to (10.4 km; survey LSRs: median 360 m). The margin keeps 98.0% of 13,666 LSRs
+# within 1 km of a track and with no other track within 10 km; the rest are off
+# by whole hours or days (DAT times stage 14 could not repair), which no margin
+# short of a day would catch.
+LSR_MATCH_RADIUS_M = 10_400.0
+LSR_TIME_MARGIN_MIN = 60.0
+# One candidate per LSR is its best match (iem.assign_lsr): the nearest track,
+# unless other tracks lie within LSR_NEAR_FACTOR times its distance (at least
+# LSR_NEAR_FLOOR_M), when the one closest in time wins. Tracks within
+# LSR_TOUCH_M of each other are pieces of one tornado or tracks that cross.
+LSR_NEAR_FACTOR = 3.0
+LSR_NEAR_FLOOR_M = 1_000.0
+LSR_TOUCH_M = 1_000.0
 # Storm-survey PNS products are issued in the days after an event; this is how
 # far ahead of the convective day to look for them.
 PNS_SURVEY_WINDOW_DAYS = 10
