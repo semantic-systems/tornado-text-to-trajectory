@@ -895,11 +895,54 @@ mistyped date: where its clock time gives at most 5 h it is kept on the start's
 date (`end_repaired`, 314), otherwise the end is left empty, as for the 1,033
 polygon-only hazards DAT gives no end for (1,162 empty in all). The hazards
 table's `time_begin_utc` and `time_end_utc` stay as DAT entered them.
+
+**A hazard's rating, deaths and injuries** are there as well
+(`episode_table.hazard_values`). SPC's reviewed record is the primary source;
+DAT's survey fields are linked beside it to show provenance and differences in
+reporting. Each SPC track is counted on exactly one hazard (`spc_ids_counted`): an
+SPC hazard holds its own; a DAT hazard its closest, or, where several DAT hazards
+share one (137 tracks, 288 hazards), the one stage 14 ranks first; a track that is
+no one's closest (1,010) goes to its first-ranked DAT hazard. `rating`, `deaths`
+and `injuries` are then SPC's (`values_source = spc`), DAT's for the 357 hazards
+with no SPC track (`dat`), and for the 141 DAT pieces whose track another DAT
+hazard holds, the track's rating with deaths and injuries counted there
+(`spc_piece`, `values_held_by`). Deaths over all hazards are 1,329: SPC's 1,318
+plus 11 on DAT-only hazards; stage 15 stops if a track would count twice or not at
+all. `dat_*` and `spc_*` keep both records; `values_compare` says how they were
+compared (`one_to_one` 9,978, `several_tracks` 693; pieces and DAT-only hazards are
+not compared), and `rating_differs` (178 of 10,046), `deaths_differ` (55 of 10,665)
+and `injuries_differ` (301 of 10,664) flag the disagreements. Moore, 20 May 2013,
+is one: SPC 24 deaths and EF5, DAT 0 and EF4. Stage 17 lists the largest.
+
 Episode IDs hash the method and the member SPC tracks, so they are stable across
 reruns. The hazards table carries no episode; stages read it through
 `episode_table.hazards_with_episodes`, `episode_of` or `geography`. Stops if
 stage 14's outputs are missing rather than grouping DAT alone. Stage 17 reports the
 result.
+
+### Hand check of stage 12's merges — `scripts/17_qa_events.py merges`
+
+Stage 12 joins DAT lines by union-find (shared polygon, the same `event_id` on the
+same date, an endpoint within a few km on the same convective day), and chains of
+such unions can join neighbouring tornadoes. 581 hazards built from several lines
+lie on two or more SPC tracks: either the merge joined several tornadoes, or SPC
+records one tornado in pieces. Only a person can tell, from the map and the times.
+
+    python scripts/17_qa_events.py merges          # sheet, key, map, guide
+    python -m http.server 8792 --directory outputs/annotation   # then merge_review.html
+    python scripts/17_qa_events.py merges-check    # once labelled
+
+`merges` draws 75 cases stratified by the rules behind them (`merge_check.STRATA`:
+endpoint gap 30, event_id 20, shared polygon 15, mixed 10; seed fixed) and writes
+`outputs/annotation/merge_sheet.csv` (each DAT line and SPC track with times,
+rating, length, office; labels `one_tornado`, `several_tornadoes`,
+`cannot_tell`), `merge_key.csv` (hazard, stratum, weight, and measures that
+might predict an over-merge), `merge_review.html` (one page, Leaflet over
+OpenStreetMap, lines numbered as in the sheet) and `HOW_TO_ANNOTATE_merges.txt`.
+It refuses to overwrite a sheet with labels unless given `--force`.
+`merges-check` writes `outputs/merge_hand_checks_report.md`: the over-merge share
+per rule with a Wilson interval, weighted to the 581, and the key's measures for
+over-merged against single tornadoes, which say whether a rule can be tightened.
 
 ### Geography — `scripts/16_enrich_geography.py`
 

@@ -15,7 +15,7 @@ bounds and are marked as such.
 
 | report | headline finding |
 |---|---|
-| [events_qa_report.md](../outputs/events_qa_report.md) | The line↔polygon linker scores **99.3% precision** [97.4, 99.8] and **96.2% recall** [93.3, 97.9] against DAT's own `path_guid` key. Only 289 of 9,989 polygons carry a real `path_guid` — the rest hold an all-zero placeholder — so this is a sanity check, not a dataset-wide error rate. For the same tornado, DAT and SPC agree on the rating for 97.0% and on deaths for 99.4%, but differ widely for a few (listed in section 6). |
+| [events_qa_report.md](../outputs/events_qa_report.md) | The line↔polygon linker scores **99.3% precision** [97.4, 99.8] and **96.2% recall** [93.3, 97.9] against DAT's own `path_guid` key. Only 289 of 9,989 polygons carry a real `path_guid` — the rest hold an all-zero placeholder — so this is a sanity check, not a dataset-wide error rate. For the same tornado (9,978 DAT hazards holding one SPC track alone), DAT and SPC agree on the rating for 98.3% and on deaths for 99.5%, but differ widely for a few (listed in section 6; flagged per hazard in `hazard_episodes`, whose values are SPC's). |
 | [hazard_analysis_report.md](../outputs/hazard_analysis_report.md) | Of SPC's 20,164 tornadoes (2010–2025), **59% have a DAT survey**, rising from 2% (2010) to 89% (2025). Within an era DAT is not a random subset (2020–2025: 64% of tracks under 1 mile against 97% of 15 miles or more; 82% of tornadoes without deaths against 98% with; East South Central 98% against about 25% in the Mountain and Pacific divisions). Deaths from SPC's record. |
 
 ## Text layer

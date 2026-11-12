@@ -39,7 +39,7 @@ MODULES = [
     "tornado_dataset.dat.hazards", "tornado_dataset.dat.storm_events",
     "tornado_dataset.dat.episodes", "tornado_dataset.dat.spc_tornadoes",
     "tornado_dataset.dat.episode_table", "tornado_dataset.dat.references",
-    "tornado_dataset.dat.spc_watches",
+    "tornado_dataset.dat.spc_watches", "tornado_dataset.dat.merge_check",
     "tornado_dataset.geo.gazetteer", "tornado_dataset.geo.pixels",
     "tornado_dataset.text.tiering", "tornado_dataset.text.iem",
     "tornado_dataset.text.gdelt", "tornado_dataset.text.lexisnexis",
@@ -811,6 +811,71 @@ def lsrs_go_to_one_hazard() -> None:
         "unclear: the closest in time"
 
 
+def each_spc_track_counts_once() -> None:
+    """Rating, deaths, injuries: SPC's, each track on one hazard; DAT's beside them."""
+    import pandas as pd
+    from tornado_dataset.dat import episode_table as et
+    # d1 holds t1 alone; d2 and d3 share t2 (d2 ranked first), d3 also links t3
+    # (no one's closest); d4 has no SPC track; s1 is the SPC hazard of t4.
+    member = pd.DataFrame({
+        "hazard_uid": ["d1", "d2", "d3", "d4", "s1"],
+        "hazard_source": ["dat", "dat", "dat", "dat", "spc"],
+        "spc_id": ["t1", "t2", "t2", None, "t4"]})
+    hazards = pd.DataFrame({"hazard_uid": ["d1", "d2", "d3", "d4"],
+                            "efscale": ["EF2", "EF1", "EF3+", "UNKNOWN"],
+                            "fatalities": [0, 2, 2, 1], "injuries": [5, 3, 3, None]})
+    tracks = pd.DataFrame({"spc_id": ["t1", "t2", "t3", "t4"], "mag": [3, 1, 2, -9],
+                           "fat": [1, 2, 0, 4], "inj": [5, 3, 1, 0]})
+    links = pd.DataFrame({"spc_id": ["t1", "t2", "t2", "t3"], "hazard_uid": ["d1", "d2", "d3", "d3"],
+                          "rank_for_event": [1, 1, 2, 1], "distance_m": [0.0, 10.0, 5.0, 50.0]})
+    v = et.hazard_values(member, hazards, tracks, links).set_index("hazard_uid")
+    assert v.spc_ids_counted.fillna("").to_dict() == {"d1": "t1", "d2": "t2", "d3": "t3",
+                                                      "d4": "", "s1": "t4"}
+    assert int(v.deaths.sum()) == int(tracks.fat.sum()) + 1, "every track once, plus DAT-only"
+    assert v.values_source.to_dict() == {"d1": "spc", "d2": "spc", "d3": "spc", "d4": "dat",
+                                         "s1": "spc"}
+    assert v.values_compare.to_dict() == {"d1": "one_to_one", "d2": "shared_track",
+                                          "d3": "shared_track", "d4": "dat_only",
+                                          "s1": "spc_only"}
+    assert v.values_held_by.get("d3") == "d2" and pd.isna(v.values_held_by.get("d2"))
+    assert v.rating.to_dict() == {"d1": "EF3", "d2": "EF1", "d3": "EF2", "d4": "EFU",
+                                  "s1": "EFU"}, "rating: the highest of held and closest"
+    assert bool(v.rating_differs.get("d1")) and bool(v.deaths_differ.get("d1"))
+    assert not bool(v.injuries_differ.get("d1"))
+    assert pd.isna(v.deaths_differ.get("d2")), "a shared track is not compared"
+    assert v.dat_rating.get("d3") == "EF3+" and pd.isna(v.dat_rating.get("s1"))
+    # Without d3's own secondary track it holds nothing: a piece of d2's tornado.
+    v = et.hazard_values(member, hazards, tracks[tracks.spc_id != "t3"],
+                         links[links.spc_id != "t3"]).set_index("hazard_uid")
+    assert v.values_source.get("d3") == "spc_piece" and pd.isna(v.deaths.get("d3"))
+    assert v.rating.get("d3") == "EF1", "a piece takes its track's rating"
+    # Several tracks on one DAT hazard: compared with their sum.
+    v = et.hazard_values(member.iloc[[0, 1, 3, 4]], hazards,
+                         tracks, links.assign(hazard_uid=["d1", "d2", "d2", "d2"])
+                         ).set_index("hazard_uid")
+    assert v.values_compare.get("d2") == "several_tracks" and v.spc_deaths.get("d2") == 2
+    assert v.spc_injuries.get("d2") == 4 and bool(v.injuries_differ.get("d2"))
+
+
+def merge_check_samples_by_rule() -> None:
+    """Stage 12's rules as strata; the sample is drawn per stratum with weights."""
+    import numpy as np
+    import pandas as pd
+    from tornado_dataset.dat import merge_check as mc
+    assert mc.stratum("endpoint_gap") == "endpoint_gap"
+    assert mc.stratum("event_id+date") == "event_id"
+    assert mc.stratum("path_guid;spatial_link") == "polygon"
+    assert mc.stratum("endpoint_gap;spatial_link") == "mixed"
+    pop = pd.DataFrame({"hazard_uid": [f"h{i}" for i in range(12)],
+                        "stratum": ["endpoint_gap"] * 8 + ["polygon"] * 4})
+    a = mc.draw(pop, np.random.default_rng(0), {"endpoint_gap": 2, "polygon": 10, "mixed": 3})
+    b = mc.draw(pop, np.random.default_rng(0), {"endpoint_gap": 2, "polygon": 10, "mixed": 3})
+    assert a.equals(b), "same seed, same sample"
+    assert a.stratum.value_counts().to_dict() == {"polygon": 4, "endpoint_gap": 2}
+    assert a.groupby("stratum").weight.first().to_dict() == {"endpoint_gap": 4.0, "polygon": 1.0}
+    assert list(a.case_id) == [f"M{k:03d}" for k in range(1, 7)]
+
+
 def official_texts_are_counted_per_hazard() -> None:
     """Texts per hazard and kind; census divisions are the Census Bureau's."""
     import tempfile
@@ -1094,6 +1159,8 @@ for name, fn in [
     ("same-source links need specific wording", same_source_links_need_specific_wording),
     ("sample page marks what was counted", sample_page_marks_what_was_counted),
     ("LSRs go to one hazard", lsrs_go_to_one_hazard),
+    ("each SPC track counts once", each_spc_track_counts_once),
+    ("merge check samples by rule", merge_check_samples_by_rule),
     ("official texts are counted per hazard", official_texts_are_counted_per_hazard),
     ("map coordinates match Leaflet", map_coordinates_match_leaflet),
     ("NWS text matches on repaired times", nws_text_matches_on_repaired_times),

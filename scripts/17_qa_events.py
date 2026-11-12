@@ -10,6 +10,13 @@ headline number is accompanied by its denominator, its confidence interval where
 it is an estimate, and the caveat that limits it.
 
     python scripts/17_qa_events.py
+    python scripts/17_qa_events.py merges        # hand check of stage 12's merges
+    python scripts/17_qa_events.py merges-check  # score it, once labelled
+
+``merges`` draws a stratified sample of the hazards stage 12 built from several
+DAT lines that SPC records as two or more tornadoes, and writes a worksheet, a
+map and a guide to ``outputs/annotation/`` (:mod:`tornado_dataset.dat.merge_check`);
+``merges-check`` reads the labels back and writes ``outputs/merge_hand_checks_report.md``.
 """
 
 from __future__ import annotations
@@ -200,23 +207,24 @@ This is the accuracy to expect of the {c.get('spc', {}).get('hazards', 0):,} SPC
 
 
 def record_agreement(tag: str, hazards: pd.DataFrame) -> str:
-    """Section 6: DAT's record against SPC's for the same tornado."""
+    """Section 6: DAT's record against SPC's for the same tornado (stage 15's values)."""
     member_path = episode_table.membership_path(tag)
     if not (member_path.exists() and refs.SPC_TRACKS.exists()):
         return ""
-    member = pd.read_csv(member_path)
-    dat = member[(member.hazard_source == "dat") & member.spc_id.notna()]
-    single = dat.spc_id.map(dat.spc_id.value_counts()) == 1
-    tracks = pd.read_csv(refs.SPC_TRACKS, usecols=["spc_id", "date", "st", "mag", "len", "wid",
-                                                   "fat", "inj"])
-    pairs = (dat[single][["hazard_uid", "spc_id", "spc_link_method"]]
-             .merge(hazards[["hazard_uid", "efscale", "path_length_mi", "path_width_yd",
-                             "fatalities", "injuries"]], on="hazard_uid")
+    member = pd.read_csv(member_path, low_memory=False)
+    if "values_compare" not in member.columns:
+        return ("### Same tornado, two records: DAT against SPC\n\nNot available: run "
+                "`scripts/15_build_episodes.py`, then this stage again.\n")
+    kind = member.values_compare.value_counts()
+    tracks = pd.read_csv(refs.SPC_TRACKS, usecols=["spc_id", "date", "st", "len", "wid"])
+    pairs = (member[member.values_compare == "one_to_one"]
+             .merge(hazards[["hazard_uid", "path_length_mi", "path_width_yd"]], on="hazard_uid")
              .merge(tracks, on="spc_id"))
-    ef = pairs.efscale.map(viz.ef_class)
-    dat_ef = pairs.efscale.astype(str).str.extract(r"EF\s*-?\s*([0-5])", expand=False)
-    both = dat_ef.notna() & (pairs.mag >= 0)
-    diff = (dat_ef[both].astype(int) - pairs.mag[both]).abs()
+    several = member[member.values_compare == "several_tracks"]
+    dat_ef = pairs.dat_rating.map(episode_table.ef_number)
+    spc_ef = pairs.spc_rating.map(episode_table.ef_number)
+    both = dat_ef.notna() & spc_ef.notna()
+    diff = (dat_ef[both] - spc_ef[both]).abs()
 
     def ratio_row(dat_col: str, spc_col: str, label: str) -> str:
         ok = (pairs[dat_col] > 0) & (pairs[spc_col] > 0)
@@ -225,53 +233,160 @@ def record_agreement(tag: str, hazards: pd.DataFrame) -> str:
                 f"median DAT ÷ SPC {r.median():.2f}; {(r < 0.5).mean():.1%} under half, "
                 f"{(r > 2).mean():.1%} over double |")
 
-    def count_row(dat_col: str, spc_col: str, label: str) -> str:
-        ok = pairs[dat_col].notna()
-        d, s = pairs[dat_col][ok], pairs[spc_col][ok]
+    def count_row(field: str, label: str) -> str:
+        ok = pairs[f"dat_{field}"].notna()
+        d, s = pairs[f"dat_{field}"][ok], pairs[f"spc_{field}"][ok]
         return (f"| {label} | {int(ok.sum()):,} | {(d == s).mean():.1%} identical | "
                 f"total DAT {int(d.sum()):,}, SPC {int(s.sum()):,}; DAT lower on "
                 f"{int((d < s).sum()):,}, higher on {int((d > s).sum()):,} |")
 
-    death_gap = pairs.assign(gap=pairs.fat - pairs.fatalities)
-    worst = death_gap[death_gap.gap.abs() > 0].reindex(
-        death_gap.gap.abs().sort_values(ascending=False).index).dropna(subset=["gap"]).head(8)
+    def flagged(frame: pd.DataFrame, flag: str) -> str:
+        return f"{int(frame[flag].fillna(False).astype(bool).sum()):,} of {int(frame[flag].notna().sum()):,}"
+
+    compared = member[member.values_compare.isin(episode_table.COMPARED)].copy()
+    compared["gap"] = compared.spc_deaths - compared.dat_deaths
+    worst = compared[compared.gap.abs() > 0].reindex(
+        compared.gap.abs().sort_values(ascending=False).index).dropna(subset=["gap"]).head(8)
+    first = tracks.set_index("spc_id")
     worst_md = "\n".join(
-        f"| {r.date} | {r.st} | {int(r.fat)} | {int(r.fatalities)} | `{r.spc_id}` | "
+        f"| {first.date.get(r.spc_id)} | {first.st.get(r.spc_id)} | {int(r.spc_deaths)} | "
+        f"{int(r.dat_deaths)} | {r.values_compare.replace('_', ' ')} | `{r.spc_id}` | "
         f"`{r.hazard_uid}` |" for r in worst.itertuples())
-    multi = int((~single).sum())
     return f"""### Same tornado, two records: DAT against SPC
 
 DAT and SPC's database record the same quantities for the same tornado,
-separately: DAT from the survey drawing, SPC from Storm Data. Compared on the
-{len(pairs):,} DAT hazards that are the only DAT hazard on their SPC track (the
-{multi:,} that share a track are pieces or duplicates and would double-count).
+separately: DAT from the survey drawing, SPC from Storm Data. Stage 15 counts
+each SPC track on one hazard and keeps both records (`dat_*`, `spc_*` in
+`hazard_episodes`). Compared one to one on the {kind.get("one_to_one", 0):,} DAT
+hazards that hold their SPC track alone:
 
 | quantity | compared | agreement | detail |
 |---|---:|---:|---|
 | rating, both rated | {int(both.sum()):,} | {(diff == 0).mean():.1%} identical | {(diff <= 1).mean():.1%} within one EF class |
 {ratio_row("path_length_mi", "len", "path length")}
 {ratio_row("path_width_yd", "wid", "path width")}
-{count_row("fatalities", "fat", "deaths")}
-{count_row("injuries", "inj", "injuries")}
+{count_row("deaths", "deaths")}
+{count_row("injuries", "injuries")}
+
+The {kind.get("several_tracks", 0):,} DAT hazards that hold several SPC tracks (lines
+stage 12 merged, or a tornado SPC records in pieces) are compared with the sum
+of their tracks: the rating differs on {flagged(several, "rating_differs")}, deaths on
+{flagged(several, "deaths_differ")}, injuries on {flagged(several, "injuries_differ")}. The
+{kind.get("shared_track", 0):,} that share a track with another DAT hazard are not compared.
 
 Path lengths and widths differ by design: DAT measures the drawn line and the
 widest polygon, SPC states the length and maximum width Storm Data received. Deaths
 and injuries should not differ; where they do, DAT's figure is a field the
-surveyor filled in (or left at zero) and SPC's is the reviewed count, so stage 18
-uses SPC's. Largest differences in deaths, for checking:
+surveyor filled in (or left at zero) and SPC's is the reviewed count. So the
+dataset's `rating`, `deaths` and `injuries` are SPC's wherever a hazard has an SPC
+track, and DAT's only where it has none (`values_source`); `rating_differs`,
+`deaths_differ` and `injuries_differ` flag the disagreements. Largest differences
+in deaths, for checking:
 
-| date | state | SPC deaths | DAT deaths | SPC track | DAT hazard |
-|---|---|---:|---:|---|---|
+| date | state | SPC deaths | DAT deaths | compared | SPC track | DAT hazard |
+|---|---|---:|---:|---|---|---|
 {worst_md}
 """
+
+
+def cmd_merges(tag: str, force: bool) -> None:
+    """Worksheet, key, map and guide for the hand check of stage 12's merges."""
+    import numpy as np
+    from tornado_dataset.dat import merge_check as mc
+    from tornado_dataset.ids import write_manifest
+
+    paths = mc.paths()
+    if paths["sheet"].exists() and mc.read_sheet(paths["sheet"]).label.notna().any() and not force:
+        raise SystemExit(f"labels already entered in {paths['sheet'].name} — not overwriting "
+                         "(use --force to regenerate)")
+    pop, shapes = mc.candidates(tag)
+    sample = mc.draw(pop, np.random.default_rng(mc.SHEET_SEED))
+    sheet, key = mc.sheet_and_key(sample)
+    paths["sheet"].parent.mkdir(parents=True, exist_ok=True)
+    sheet.to_csv(paths["sheet"], index=False)
+    key.to_csv(paths["key"], index=False)
+    paths["map"].write_text(mc.review_map(sample, sheet, shapes), encoding="utf-8")
+    paths["how_to"].write_text(mc.HOW_TO, encoding="utf-8")
+    write_manifest(paths["manifest"], "17_qa_events merges",
+                   counts={"population": len(pop),
+                           "population_by_stratum": pop.stratum.value_counts().to_dict(),
+                           "cases": len(sample),
+                           "cases_by_stratum": sample.stratum.value_counts().to_dict(),
+                           "seed": mc.SHEET_SEED},
+                   outputs=[paths[k] for k in ("sheet", "key", "map", "how_to")])
+    print(f"{len(pop):,} multi-line hazards on two or more SPC tracks; drew {len(sample)} "
+          "(" + ", ".join(f"{k} {v}" for k, v in sample.stratum.value_counts().items()) + ")")
+    for k in ("sheet", "key", "map", "how_to"):
+        print(f"wrote {paths[k]}")
+
+
+def cmd_merges_check(tag: str) -> None:
+    """Over-merge rate per stage 12 rule and in all, from the labelled worksheet."""
+    from tornado_dataset.dat import merge_check as mc
+
+    paths = mc.paths()
+    if not paths["sheet"].exists():
+        raise SystemExit("no merge_sheet.csv — run: python scripts/17_qa_events.py merges")
+    df = mc.read_sheet(paths["sheet"]).merge(pd.read_csv(paths["key"]), on="case_id")
+    bad = df.label.notna() & ~df.label.isin(mc.LABELS)
+    if bad.any():
+        raise SystemExit(f"labels not in {mc.LABELS}: {sorted(df.label[bad].unique())}")
+    population = json.loads(paths["manifest"].read_text())["counts"]["population"]
+    decided = df[df.label.isin(("one_tornado", "several_tornadoes"))]
+    over = decided.label == "several_tornadoes"
+
+    def row(name: str, frame: pd.DataFrame) -> str:
+        d = frame[frame.label.isin(("one_tornado", "several_tornadoes"))]
+        k, n = int((d.label == "several_tornadoes").sum()), len(d)
+        lo, hi = evaluate.wilson_interval(k, n)
+        share = f"{k / n:.0%} {ci((lo, hi))}" if n else "n/a"
+        return (f"| {name} | {int(frame.label.notna().sum())}/{len(frame)} | {k} of {n} | "
+                f"{share} | {int((frame.label == 'cannot_tell').sum())} |")
+
+    estimate = (over * decided.weight).sum() / decided.weight.sum() if len(decided) else float("nan")
+    lines = ["# Stage 12 merges — hand check", "",
+             "Multi-line DAT hazards that SPC records as two or more tornadoes, sampled by "
+             "the rules stage 12 joined them with (`python scripts/17_qa_events.py merges`). "
+             f"{population:,} such hazards; labelled `several_tornadoes` where the merge "
+             "joined tornadoes that should be separate hazards.", "",
+             "| stage 12 rules | labelled | over-merged | share [95% CI] | cannot tell |",
+             "|---|---:|---:|---:|---:|"]
+    lines += [row(name, df[df.stratum == name]) for name in mc.STRATA]
+    lines += [row("all (unweighted)", df), "",
+              f"Weighted to the population: **{estimate:.0%}** of the {population:,} are "
+              f"over-merged, about {estimate * population:,.0f} hazards." if len(decided) else
+              "No decided labels yet.", "",
+              "## What predicts an over-merge", "",
+              "| measure | over-merged | one tornado |", "|---|---:|---:|"]
+    for col, label in (("spc_simultaneous", "SPC tracks overlap in time"),
+                       ("n_spc_hazards_on_lines", "an undrawn SPC tornado on the lines")):
+        flag = decided[col].astype(float) > 0
+        lines.append(f"| {label} | {pct(int((flag & over).sum()), int(over.sum()))} | "
+                     f"{pct(int((flag & ~over).sum()), int((~over).sum()))} |")
+    for col, label in (("max_line_gap_m", "largest gap between lines, median (m)"),
+                       ("line_start_spread_h", "spread of line starts, median (h)")):
+        lines.append(f"| {label} | {decided[col][over].median():,.1f} | "
+                     f"{decided[col][~over].median():,.1f} |")
+    out = config.OUTPUT_DIR / "merge_hand_checks_report.md"
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("\n".join(lines))
+    print(f"\nwrote {out}")
 
 
 def main() -> None:
     default_tag = f"{config.WINDOW_START.isoformat()}_{config.WINDOW_END.isoformat()}"
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("command", nargs="?", default="report",
+                        choices=("report", "merges", "merges-check"))
     parser.add_argument("--tag", default=default_tag)
+    parser.add_argument("--force", action="store_true",
+                        help="merges: regenerate even if labels were entered")
     args = parser.parse_args()
     tag = args.tag
+    if args.command == "merges":
+        return cmd_merges(tag, args.force)
+    if args.command == "merges-check":
+        return cmd_merges_check(tag)
 
     figures_dir = config.OUTPUT_DIR / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)

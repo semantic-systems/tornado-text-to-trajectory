@@ -68,6 +68,28 @@ end with a mistyped date, its clock time kept; an end that cannot be repaired is
 empty). `time_begin_utc` and `time_end_utc` in `hazards_<tag>.csv` are DAT's as
 entered, kept for provenance.
 
+Its rating, deaths and injuries are there too, from SPC's record wherever the hazard
+has an SPC track and from DAT's survey where it has none; the other record is kept
+beside it, so reporting differences stay visible:
+
+- `rating`, `deaths`, `injuries` — the values to use, with `values_source`: `spc`,
+  `dat` (no SPC track), or `spc_piece` (a DAT hazard sharing its SPC track with
+  another DAT hazard, `values_held_by`, which holds the track's deaths and
+  injuries; the piece keeps the rating, its own deaths and injuries are empty).
+- `spc_ids_counted` — the SPC tracks counted on this hazard. Every SPC track is
+  counted on exactly one hazard: an SPC hazard holds its own, a DAT hazard its
+  closest, and a track that is no DAT hazard's closest goes to the DAT hazard
+  stage 14 ranks first for it. A sum over hazards therefore counts each SPC
+  tornado once. `spc_rating`, `spc_deaths`, `spc_injuries` are SPC's for them
+  (the rating also covers the closest track).
+- `dat_rating`, `dat_deaths`, `dat_injuries` — DAT's survey fields as written
+  (stage 12's `efscale`, `fatalities`, `injuries`).
+- `values_compare` — `one_to_one` (holds its closest SPC track and no other),
+  `several_tracks` (holds more: compared with SPC's sum), `shared_track` (not
+  compared), `dat_only`, `spc_only`; and where compared, `rating_differs`,
+  `deaths_differ`, `injuries_differ` (true, false, or empty where a side is
+  unrated or unknown).
+
 ### 3. Geometry
 One geospatial ground-truth object attached to a hazard. A hazard may have several
 (a line *and* a polygon *and* points).

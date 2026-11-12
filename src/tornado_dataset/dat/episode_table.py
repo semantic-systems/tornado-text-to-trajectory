@@ -26,6 +26,10 @@ a DAT hazard (``probable_duplicate``), 5–20 km away (``spc_far``), nothing wit
 20 km and 72 h (``no_spc_nearby``), or not searchable for lack of a time
 (``untimed_no_spc``). See stage 51 for the episode rule's evidence.
 
+Each hazard's rating, deaths and injuries (:func:`hazard_values`) are SPC's
+where it has an SPC track, DAT's where it has none; DAT's and SPC's own values
+stay beside them, with a flag where the two disagree.
+
 Readers: :func:`membership`, :func:`episode_of`, :func:`hazards_with_episodes`,
 :func:`spc_hazards` and :func:`geography`.
 """
@@ -213,6 +217,144 @@ def build(frame: pd.DataFrame, labels: pd.Series, tracks: pd.DataFrame,
     grouping = spc[["spc_id", "episode_uid", "role"]].assign(
         has_dat=lambda f: f.episode_uid.isin(has_dat))
     return episodes, member, grouping, spc_hazards
+
+
+# ── rating, deaths and injuries ─────────────────────────────────────────────
+VALUE_SOURCES = ("spc", "spc_piece", "dat")
+VALUE_COMPARISONS = ("one_to_one", "several_tracks", "shared_track", "dat_only", "spc_only")
+COMPARED = ("one_to_one", "several_tracks")
+
+
+def ef_number(value) -> float:
+    """A rating as a number: "EF3", "EF3+" -> 3; unrated or not a rating -> NaN."""
+    rank = ef_rank(value)
+    return float(rank) if rank >= 0 else float("nan")
+
+
+def track_holders(member: pd.DataFrame, links: pd.DataFrame) -> pd.Series:
+    """The one hazard each SPC track's deaths and injuries are counted on.
+
+    An SPC hazard holds its own track. A track that is some DAT hazard's closest
+    goes to that hazard, or, where several DAT hazards share it (pieces or
+    duplicates of one tornado), to the one stage 14 ranks first for the track
+    (``rank_for_event``, then distance, then uid). A track linked to DAT hazards
+    but no one's closest (a piece of a tornado DAT drew as one line, or a
+    tornado on a line stage 12 merged) goes to its first-ranked DAT hazard. So
+    every SPC track is counted exactly once. Index ``spc_id``, values
+    ``hazard_uid``.
+    """
+    ranked = links.sort_values(["rank_for_event", "distance_m", "hazard_uid"])
+    own = member[member.hazard_source == "spc"]
+    holder = dict(zip(own.spc_id, own.hazard_uid))
+    dat = member[(member.hazard_source == "dat") & member.spc_id.notna()]
+    closest = ranked.merge(dat[["hazard_uid", "spc_id"]], on=["hazard_uid", "spc_id"])
+    for frame in (closest, ranked):
+        for spc_id, hazard_uid in zip(frame.spc_id, frame.hazard_uid):
+            holder.setdefault(spc_id, hazard_uid)
+    return pd.Series(holder, name="hazard_uid").rename_axis("spc_id")
+
+
+def hazard_values(member: pd.DataFrame, hazards: pd.DataFrame, tracks: pd.DataFrame,
+                  links: pd.DataFrame) -> pd.DataFrame:
+    """Each hazard's rating, deaths and injuries, with where they come from.
+
+    ``member`` is the membership table of :func:`build`, ``hazards`` stage 12's
+    DAT hazards (``efscale``, ``fatalities``, ``injuries``), ``tracks`` SPC's
+    tornado list (``spc_id``, ``mag``, ``fat``, ``inj``), ``links`` stage 14's
+    SPC ↔ DAT links. SPC's record is the primary source; DAT's survey fields are
+    kept beside it, so the two can be compared.
+
+    * ``spc_ids_counted`` — the SPC tracks this hazard holds
+      (:func:`track_holders`); ``spc_deaths`` and ``spc_injuries`` are their sums,
+      so a total over hazards counts every SPC tornado once. ``spc_rating`` is the
+      highest rating of these tracks and the hazard's closest one (a maximum, so
+      a piece may repeat its tornado's rating).
+    * ``dat_rating``, ``dat_deaths``, ``dat_injuries`` — stage 12's values for a
+      DAT hazard as DAT wrote them (``efscale``, ``fatalities``, ``injuries``).
+    * ``rating``, ``deaths``, ``injuries`` with ``values_source``: ``spc`` (SPC's,
+      for every SPC hazard and every DAT hazard that holds a track), ``spc_piece``
+      (a DAT hazard whose track is held by another DAT hazard, ``values_held_by``:
+      SPC's rating, deaths and injuries empty as they are counted there), or
+      ``dat`` (a DAT hazard with no SPC track: DAT's own).
+    * ``values_compare`` says on what DAT and SPC were compared: ``one_to_one``
+      (the hazard holds its closest track and nothing else, and no other DAT
+      hazard shares it), ``several_tracks`` (it holds more, mostly a line stage 12
+      merged or SPC split: DAT against SPC's sum), ``shared_track`` (pieces of one
+      track; not compared), ``dat_only``, ``spc_only``. Where compared,
+      ``rating_differs``, ``deaths_differ`` and ``injuries_differ`` are true or
+      false (empty where either side is unrated or unknown).
+    """
+    holder = track_holders(member, links)
+    t = tracks.set_index("spc_id")[["mag", "fat", "inj"]]
+    held = holder.reset_index().groupby("hazard_uid").spc_id.agg(sorted)
+    h = hazards.set_index("hazard_uid")
+    out = member[["hazard_uid", "hazard_source", "spc_id"]].copy()
+    uids = out.hazard_uid
+    held_of = uids.map(held)
+    has_held = held_of.notna()
+
+    def tracks_of(row_held, closest) -> list[str]:
+        ids = list(row_held) if isinstance(row_held, list) else []
+        return ids + ([closest] if isinstance(closest, str) and closest not in ids else [])
+
+    def spc_sum(col: str) -> pd.Series:
+        return held_of.map(lambda ids: float(t.loc[ids, col].sum())
+                           if isinstance(ids, list) else float("nan"))
+
+    mags = [t.loc[tracks_of(a, b), "mag"] for a, b in zip(held_of, out.spc_id)]
+    spc_mag = pd.Series([m[m >= 0].max() if (m >= 0).any() else float("nan") for m in mags],
+                        index=out.index)
+    on_spc = out.spc_id.notna()
+    out["spc_ids_counted"] = held_of.map(lambda ids: ";".join(ids) if isinstance(ids, list)
+                                         else None)
+    out["spc_rating"] = [efscale_of(m) if on else None for m, on in zip(spc_mag, on_spc)]
+    out["spc_deaths"] = spc_sum("fat")
+    out["spc_injuries"] = spc_sum("inj")
+
+    dat = out.hazard_source == "dat"
+    out["dat_rating"] = uids.map(h.efscale).where(dat)
+    out["dat_deaths"] = uids.map(h.fatalities).where(dat)
+    out["dat_injuries"] = uids.map(h.injuries).where(dat)
+
+    source = pd.Series("spc", index=out.index)
+    source[dat & on_spc & ~has_held] = "spc_piece"
+    source[dat & ~on_spc] = "dat"
+    out["values_source"] = source
+    closest_holder = out.spc_id.map(holder)
+    out["values_held_by"] = closest_holder.where(dat & on_spc & (closest_holder != uids))
+    dat_mag = out.dat_rating.map(ef_number)
+    from_dat = source == "dat"
+    out["rating"] = out.spc_rating.where(~from_dat, [
+        efscale_of(m) if pd.notna(r) else None for m, r in zip(dat_mag, out.dat_rating)])
+    out["deaths"] = out.spc_deaths.where(~from_dat, out.dat_deaths)
+    out["injuries"] = out.spc_injuries.where(~from_dat, out.dat_injuries)
+
+    shared = out.spc_id.map(out.spc_id[dat].value_counts()).fillna(0) > 1
+    alone = has_held & held_of.map(lambda ids: isinstance(ids, list) and len(ids) == 1)
+    compare = pd.Series("spc_only", index=out.index)
+    compare[dat & ~on_spc] = "dat_only"
+    compare[dat & on_spc & shared] = "shared_track"
+    compare[dat & on_spc & ~shared & has_held] = "several_tracks"
+    compare[dat & on_spc & ~shared & alone] = "one_to_one"
+    out["values_compare"] = compare
+    compared = compare.isin(COMPARED)
+
+    def differs(a: pd.Series, b: pd.Series) -> pd.Series:
+        flag = pd.Series(pd.NA, index=out.index, dtype="boolean")
+        ok = compared & a.notna() & b.notna()
+        flag[ok] = (a[ok] != b[ok]).to_numpy()
+        return flag
+
+    out["rating_differs"] = differs(dat_mag, spc_mag)
+    out["deaths_differ"] = differs(out.dat_deaths, out.spc_deaths)
+    out["injuries_differ"] = differs(out.dat_injuries, out.spc_injuries)
+    for col in ("deaths", "injuries", "spc_deaths", "spc_injuries", "dat_deaths",
+                "dat_injuries"):
+        out[col] = out[col].astype("Int64")
+    return out[["hazard_uid", "rating", "deaths", "injuries", "values_source",
+                "values_held_by", "spc_ids_counted", "spc_rating", "spc_deaths",
+                "spc_injuries", "dat_rating", "dat_deaths", "dat_injuries", "values_compare",
+                "rating_differs", "deaths_differ", "injuries_differ"]]
 
 
 def spc_hazard_features(spc_hazards: pd.DataFrame, tracks: pd.DataFrame) -> list[dict]:

@@ -17,6 +17,13 @@ mistyped date, its clock time kept; an end that cannot be repaired, or that DAT
 lacks, is empty; :func:`episode_table.event_times`). Stage 12's ``time_begin_utc`` and
 ``time_end_utc`` stay as DAT entered them.
 
+Each hazard's ``rating``, ``deaths`` and ``injuries`` are written with it too:
+SPC's where the hazard has an SPC track (each track counted on one hazard), DAT's
+where it has none (``values_source``). DAT's and SPC's own values stay beside
+them (``dat_*``, ``spc_*``), with ``rating_differs``, ``deaths_differ`` and
+``injuries_differ`` where the two were compared (``values_compare``;
+:func:`episode_table.hazard_values`).
+
     python scripts/15_build_episodes.py
 
 Offline. Needs stage 12's hazards and stage 14's SPC tracks and links, and stops
@@ -76,6 +83,11 @@ def main() -> None:
     table = pd.concat([hazards[time_cols].assign(hazard_source="dat"),
                        spc_hazards[time_cols].assign(hazard_source="spc")], ignore_index=True)
     member = member.merge(et.event_times(table, member, tracks), on="hazard_uid", how="left")
+    member = member.merge(et.hazard_values(member, hazards, tracks, links), on="hazard_uid",
+                          how="left")
+    counted = member.spc_ids_counted.dropna().str.split(";").explode()
+    if counted.duplicated().any() or set(counted) != set(tracks.spc_id):
+        raise SystemExit("SPC tracks counted twice or not at all in the hazards' values")
 
     out = {"episodes": et.episodes_path(args.tag), "membership": et.membership_path(args.tag),
            "spc_hazards": et.spc_hazards_path(args.tag),
@@ -108,6 +120,15 @@ def main() -> None:
         "dat_end_repaired": int(member.end_repaired.sum()),
         "dat_end_unknown": int((dat.begin_utc.notna() & dat.end_utc.isna()).sum()),
         "dat_untimed": int((dat.begin_utc.isna()).sum()),
+        "values_source": member.values_source.value_counts().to_dict(),
+        "values_compare": member.values_compare.value_counts().to_dict(),
+        "values_differ": {
+            field: {"compared": int(member[flag].notna().sum()),
+                    "differ": int(member[flag].fillna(False).sum())}
+            for field, flag in (("rating", "rating_differs"), ("deaths", "deaths_differ"),
+                                ("injuries", "injuries_differ"))},
+        "deaths": {"hazards": int(member.deaths.sum()), "spc_tracks": int(tracks.fat.sum()),
+                   "dat_only": int(member.deaths[member.values_source == "dat"].sum())},
         "spc_hazard_geometry": dict(Counter(f["properties"]["geometry_source"] or "none"
                                             for f in features)),
     }
@@ -123,6 +144,11 @@ def main() -> None:
           f"{roles.get('spc_hazard', 0):,} hazards of their own")
     print(f"hazards: {len(dat):,} DAT ({counts['dat_hazards_in_episodes']:,} in an episode) "
           f"+ {len(spc_hazards):,} SPC")
+    d = counts["deaths"]
+    print(f"values: {d['hazards']:,} deaths over hazards = SPC's {d['spc_tracks']:,} "
+          f"+ {d['dat_only']:,} on DAT hazards with no SPC track; DAT and SPC differ on "
+          + ", ".join(f"{k} {v['differ']:,} of {v['compared']:,}"
+                      for k, v in counts["values_differ"].items()))
     print("DAT hazards without an SPC track: " + ", ".join(
         f"{k} {v:,}" for k, v in counts["dat_match_status"].items() if k != "linked"))
     for path in out.values():

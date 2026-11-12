@@ -486,34 +486,44 @@ A hazard both passes leave unlinked is linked to an SPC tornado that no DAT haza
 ### Same tornado, two records: DAT against SPC
 
 DAT and SPC's database record the same quantities for the same tornado,
-separately: DAT from the survey drawing, SPC from Storm Data. Compared on the
-10,671 DAT hazards that are the only DAT hazard on their SPC track (the
-288 that share a track are pieces or duplicates and would double-count).
+separately: DAT from the survey drawing, SPC from Storm Data. Stage 15 counts
+each SPC track on one hazard and keeps both records (`dat_*`, `spc_*` in
+`hazard_episodes`). Compared one to one on the 9,978 DAT
+hazards that hold their SPC track alone:
 
 | quantity | compared | agreement | detail |
 |---|---:|---:|---|
-| rating, both rated | 10,032 | 97.0% identical | 99.6% within one EF class |
-| path length | 9,523 | 82.0% within ±10% | median DAT ÷ SPC 1.00; 1.0% under half, 5.2% over double |
-| path width | 9,356 | 90.7% within ±10% | median DAT ÷ SPC 1.00; 1.0% under half, 2.3% over double |
-| deaths | 10,665 | 99.4% identical | total DAT 699, SPC 722; DAT lower on 35, higher on 31 |
-| injuries | 10,664 | 97.1% identical | total DAT 7,405, SPC 9,123; DAT lower on 199, higher on 109 |
+| rating, both rated | 9,390 | 98.3% identical | 99.8% within one EF class |
+| path length | 8,871 | 87.0% within ±10% | median DAT ÷ SPC 1.00; 1.0% under half, 2.3% over double |
+| path width | 8,729 | 92.9% within ±10% | median DAT ÷ SPC 1.00; 1.0% under half, 1.2% over double |
+| deaths | 9,973 | 99.5% identical | total DAT 605, SPC 655; DAT lower on 31, higher on 15 |
+| injuries | 9,972 | 97.4% identical | total DAT 6,836, SPC 8,532; DAT lower on 188, higher on 72 |
+
+The 693 DAT hazards that hold several SPC tracks (lines
+stage 12 merged, or a tornado SPC records in pieces) are compared with the sum
+of their tracks: the rating differs on 19 of 656, deaths on
+9 of 692, injuries on 41 of 692. The
+288 that share a track with another DAT hazard are not compared.
 
 Path lengths and widths differ by design: DAT measures the drawn line and the
 widest polygon, SPC states the length and maximum width Storm Data received. Deaths
 and injuries should not differ; where they do, DAT's figure is a field the
-surveyor filled in (or left at zero) and SPC's is the reviewed count, so stage 18
-uses SPC's. Largest differences in deaths, for checking:
+surveyor filled in (or left at zero) and SPC's is the reviewed count. So the
+dataset's `rating`, `deaths` and `injuries` are SPC's wherever a hazard has an SPC
+track, and DAT's only where it has none (`values_source`); `rating_differs`,
+`deaths_differ` and `injuries_differ` flag the disagreements. Largest differences
+in deaths, for checking:
 
-| date | state | SPC deaths | DAT deaths | SPC track | DAT hazard |
-|---|---|---:|---:|---|---|
-| 2013-05-20 | OK | 24 | 0 | `spc_2013_1305201356-01` | `hazard_646ce6bd1ef664f2` |
-| 2014-12-23 | MS | 3 | 20 | `spc_2014_1412231420-01` | `hazard_e12dc1374f1f5858` |
-| 2011-04-27 | MS | 23 | 7 | `spc_2011_1104271442-01` | `hazard_240b8c5ac5dfe053` |
-| 2011-04-27 | GA | 20 | 7 | `spc_2011_1104271815-02` | `hazard_bfa89fc679602c4f` |
-| 2011-04-27 | AL | 0 | 13 | `spc_2011_1104270418-01` | `hazard_0f0360bdfd338eaf` |
-| 2023-03-31 | TN | 0 | 9 | `spc_2023_2303312030-01` | `hazard_3925b87cb6ff2eb4` |
-| 2013-05-31 | OK | 8 | 0 | `spc_2013_1305311703-01` | `hazard_52989216c8c1e9b5` |
-| 2020-04-12 | GA | 8 | 0 | `spc_2020_2004121945-01` | `hazard_e6bca45ce19e0ddd` |
+| date | state | SPC deaths | DAT deaths | compared | SPC track | DAT hazard |
+|---|---|---:|---:|---|---|---|
+| 2013-05-20 | OK | 24 | 0 | one to one | `spc_2013_1305201356-01` | `hazard_646ce6bd1ef664f2` |
+| 2014-12-23 | MS | 3 | 20 | one to one | `spc_2014_1412231420-01` | `hazard_e12dc1374f1f5858` |
+| 2011-04-27 | MS | 23 | 7 | one to one | `spc_2011_1104271442-01` | `hazard_240b8c5ac5dfe053` |
+| 2011-04-27 | GA | 20 | 7 | one to one | `spc_2011_1104271815-02` | `hazard_bfa89fc679602c4f` |
+| 2011-04-27 | AL | 0 | 13 | one to one | `spc_2011_1104270418-01` | `hazard_0f0360bdfd338eaf` |
+| 2020-04-12 | GA | 8 | 0 | one to one | `spc_2020_2004121945-01` | `hazard_e6bca45ce19e0ddd` |
+| 2013-05-31 | OK | 8 | 0 | several tracks | `spc_2013_1305311703-01` | `hazard_52989216c8c1e9b5` |
+| 2019-04-30 | OK | 2 | 10 | one to one | `spc_2019_1904302007-01` | `hazard_cd499af568ac0a75` |
 
 ## 7. Limitations to carry into the dataset documentation
 
