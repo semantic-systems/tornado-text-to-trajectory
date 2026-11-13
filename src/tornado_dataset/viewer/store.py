@@ -27,6 +27,7 @@ import pandas as pd
 from shapely.geometry import mapping
 
 from .. import config, viz
+from ..dat import episode_table
 from ..dat.geometry import to_shapely
 from ..text.lexisnexis import textref_uid
 
@@ -112,7 +113,7 @@ class Store:
         self.status = status.drop_duplicates(subset="textref_uid").set_index("textref_uid")
 
         self.episodes = pd.read_csv(processed / f"episodes_{self.tag}.csv").set_index("episode_uid")
-        hazards = pd.read_csv(processed / f"hazards_{self.tag}.csv")
+        hazards = episode_table.hazards_with_episodes(self.tag)
         self.hazards = hazards.set_index("hazard_uid")
         self.hazards_by_episode: dict[str, list[str]] = defaultdict(list)
         for row in hazards.itertuples():

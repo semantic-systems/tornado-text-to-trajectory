@@ -17,7 +17,7 @@ Both are US-government works, so their full text may be stored and redistributed
 Retrieval is shaped by what scales. LSRs come as one bulk CSV per year (16
 requests for the whole window) and are matched to hazards locally. PNS products
 are listed nationally per date — one request covers every office — and only the
-products belonging to a hazard's WFO are then downloaded, which is why Stage 5's
+products belonging to a hazard's WFO are then downloaded, which is why Stage 16's
 WFO backfill runs first.
 """
 
@@ -31,10 +31,8 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
-import requests
-
 from .. import config
-from ..http import get_json, utcnow_iso
+from ..http import get_json, session_get, utcnow_iso
 
 LSR_REQUEST_URL = f"{config.IEM_BASE}/cgi-bin/request/gis/lsr.py"
 AFOS_LIST_URL = f"{config.IEM_BASE}/api/1/nws/afos/list.json"
@@ -42,16 +40,22 @@ NWSTEXT_URL = f"{config.IEM_BASE}/api/1/nwstext"
 
 
 # ── Local Storm Reports ──────────────────────────────────────────────────────
-def fetch_lsr_year(year: int, *, cache_dir: Path, refresh: bool = False,
-                   types: Iterable[str] = config.LSR_TORNADO_TYPES) -> list[dict[str, Any]]:
-    """All tornado-family LSRs for one calendar year (one bulk request)."""
+def fetch_lsr_year(year: int, *, cache_dir: Path, refresh: bool = False, offline: bool = False,
+                   types: Iterable[str] = config.LSR_TORNADO_TYPES) -> list[dict[str, Any]] | None:
+    """All tornado-family LSRs for one calendar year (one bulk request).
+
+    ``offline``: ``None`` when the year is not cached, instead of fetching it.
+    """
     cache_path = cache_dir / f"lsr_{year}.csv"
     if cache_path.exists() and not refresh:
         text = cache_path.read_text(encoding="utf-8")
+    elif offline:
+        return None
     else:
-        response = requests.get(LSR_REQUEST_URL, params={
+        response = session_get(LSR_REQUEST_URL, params={
             "sts": f"{year}-01-01T00:00Z", "ets": f"{year + 1}-01-01T00:00Z",
-            "fmt": "csv", "type": list(types)}, timeout=900)
+            "fmt": "csv", "type": list(types)}, timeout=900,
+            min_interval=config.IEM_MIN_REQUEST_INTERVAL)
         response.raise_for_status()
         text = response.text
         cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -88,32 +92,42 @@ def _parse_lsr_time(value: Any) -> dt.datetime | None:
 
 
 # ── Public Information Statements (storm surveys) ────────────────────────────
-def list_pns_products(date: dt.date, *, cache_dir: Path,
-                      refresh: bool = False) -> list[dict[str, Any]]:
-    """Every PNS product issued nationally on ``date`` (one request)."""
+def list_pns_products(date: dt.date, *, cache_dir: Path, refresh: bool = False,
+                      offline: bool = False) -> list[dict[str, Any]] | None:
+    """Every PNS product issued nationally on ``date`` (one request).
+
+    ``offline``: ``None`` when the list is not cached, instead of fetching it.
+    """
+    cache_path = cache_dir / f"pns_list_{date.isoformat()}.json"
+    if offline and (refresh or not cache_path.exists()):
+        return None
     payload = get_json(AFOS_LIST_URL, {"pil": "PNS", "date": date.isoformat()},
-                       cache_path=cache_dir / f"pns_list_{date.isoformat()}.json",
+                       cache_path=cache_path,
                        refresh=refresh, min_interval=config.IEM_MIN_REQUEST_INTERVAL)
     return payload.get("data", []) or []
 
 
 def fetch_product_text(product_id: str, *, cache_dir: Path, refresh: bool = False,
-                       retries: int = 4) -> str:
+                       retries: int = 4, offline: bool = False) -> str | None:
     """Raw text of one NWS product, cached by product id.
 
     Retries on transient failures and gives up quietly rather than raising: this
     is called tens of thousands of times in one sweep, and a single dropped
     connection must not end the run. An empty result is cached as empty, which
-    the caller counts.
+    the caller counts. ``offline``: ``None`` when not cached, instead of fetching.
+    Requests are spaced like the list requests (``config.IEM_MIN_REQUEST_INTERVAL``).
     """
     cache_path = cache_dir / f"{product_id}.txt"
     if cache_path.exists() and not refresh:
         return cache_path.read_text(encoding="utf-8", errors="replace")
+    if offline:
+        return None
 
     text = ""
     for attempt in range(1, retries + 1):
         try:
-            response = requests.get(f"{NWSTEXT_URL}/{product_id}", timeout=120)
+            response = session_get(f"{NWSTEXT_URL}/{product_id}", timeout=120,
+                                   min_interval=config.IEM_MIN_REQUEST_INTERVAL)
             if response.status_code == 200:
                 text = response.text
             break
@@ -125,6 +139,19 @@ def fetch_product_text(product_id: str, *, cache_dir: Path, refresh: bool = Fals
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(text, encoding="utf-8")
     return text
+
+
+def stated_point(lat: float | None, lon: float | None) -> tuple[float, float] | None:
+    """A coordinate a survey section states, as a point in the US, or ``None``.
+
+    A western longitude written without its minus sign ("42.79 / 92.78") is
+    restored; a coordinate still outside the US after that is a typo and unusable.
+    """
+    if lat is None or lon is None:
+        return None
+    if 60 <= lon <= 180:
+        lon = -lon
+    return (lat, lon) if 15 <= lat <= 72 and -180 <= lon <= -60 else None
 
 
 # A storm-survey PNS announces itself in the product header. PNS is also used for

@@ -151,7 +151,7 @@ class ToponymIndex:
                 self.hazard_episode[hazard] = episode
 
             names: dict[str, str] = {}
-            # The wide matching set where Stage 5 has produced one, falling back
+            # The wide matching set where Stage 16 has produced one, falling back
             # to the query set for older geography files. Every surface form of a
             # name is indexed ("Saint Louis" and "St. Louis"), because which one
             # an outlet uses is house style, not information.
@@ -471,7 +471,9 @@ def score_corroboration(article: ArticleText, event: dict[str, Any], *,
     if ratings and event_ef:
         signals["ef_match"] = bool(ratings & event_ef)
     deaths = stated_death_counts(text)
-    event_deaths = int(event.get("fatalities") or 0)
+    recorded = event.get("fatalities")
+    # Missing for a few polygon-only hazards; NaN is truthy, so ``or 0`` misses it.
+    event_deaths = 0 if recorded is None or recorded != recorded else int(recorded)
     if deaths and event_deaths:
         signals["fatalities_match"] = event_deaths in deaths
     event_day = event.get("day")

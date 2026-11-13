@@ -1,8 +1,8 @@
 # News articles cited by Wikipedia
 
-Generated 2026-10-30T13:51:54+00:00 by `scripts/26_wikipedia_cited_news.py`.
+Generated 2026-11-13T10:00:21+00:00 by `scripts/29_wikipedia_cited_news.py`.
 
-The tornado pages cite **4,832 distinct news articles**. **218** are already in LexisNexis (strong match, stage 24) and get no second copy: they are listed in `data/processed/wikipedia_cited_lexisnexis.csv` with the LexisNexis `textref_uid`. The other **4,614** are new text records (`collection = wikipedia_citations`), **3,978 with text** (2,622,547 words, median 456), and **3,697 with text that checks out as the cited article**.
+The tornado pages cite **4,832 distinct news articles**. **218** are already in LexisNexis (strong match, stage 27) and get no second copy: they are listed in `data/processed/wikipedia_cited_lexisnexis.csv` with the LexisNexis `textref_uid`. The other **4,614** are new text records (`collection = wikipedia_citations`), **3,978 with text** (2,622,547 words, median 456), and **3,697 with text that checks out as the cited article**.
 
 Text bodies stay in `data/processed/wikipedia_cited_news.jsonl` (gitignored): news is copyrighted. The CSV carries metadata and a 30-word snippet.
 
@@ -31,7 +31,7 @@ Text bodies stay in `data/processed/wikipedia_cited_news.jsonl` (gitignored): ne
 | wall_or_homepage                 |         49 |
 | title_unknown                    |         10 |
 
-398 texts never mention a tornado or storm. Wikipedia cites some articles for context (power outages, relief efforts, a building's history), so this is not a quality flag; a relevance label (as for Media Cloud and LexisNexis, stages 18/19) is the next step.
+398 texts never mention a tornado or storm. Wikipedia cites some articles for context (power outages, relief efforts, a building's history), so this is not a quality flag; a relevance label (as for Media Cloud and LexisNexis, stages 30/32) is the next step.
 
 ### By outlet type
 
@@ -77,7 +77,7 @@ The 3,765 usable texts form **3,701 stories**; 52 stories have more than one cop
 
 ## Citation context
 
-5,112 (article, citing passage) pairs in `data/processed/wikipedia_cited_news_citations.csv`. Every article is cited from at least one stage 25 passage.
+5,112 (article, citing passage) pairs in `data/processed/wikipedia_cited_news_citations.csv`. Every article is cited from at least one stage 28 passage.
 
 | event date taken from   |   articles |
 |:------------------------|-----------:|
@@ -104,7 +104,7 @@ For the 3,543 articles with a day-precise date and an event date:
 
 ## Independence axes
 
-Rule `tier_rules_v1_2026-07+event_date_from_citing_passage`: none of these outlets is the surveying organisation; the timing axis uses the event date of the citing passage and, with no survey time yet, never says post-survey (tiering's conservative default). The linker replaces both with the DAT hazard's begin time and survey date.
+Rule `tier_rules_v2_2026-11+event_date_from_citing_passage`: none of these outlets is the surveying organisation; the timing axis uses the event date of the citing passage and, with no survey time yet, never says post-survey (tiering's conservative default). The linker replaces both with the DAT hazard's begin time and survey date.
 
 | temporal_class        |   articles | share   |
 |:----------------------|-----------:|:--------|
@@ -115,6 +115,6 @@ Rule `tier_rules_v1_2026-07+event_date_from_citing_passage`: none of these outle
 ## Caveats
 
 1. **A curated sample, not a census.** Editors cite what they find online, for the tornadoes notable enough to have an article: national, wire and TV-station sites over small papers, recent years over early ones.
-2. **LexisNexis overlap is excluded at stage 24's precision.** The title tiers were 100% right in the hand-check and the content tier 95%, so about 10 of the 218 excluded articles may not be in LexisNexis after all.
-3. **The title check misses** an article quoted under a different headline and can pass a site front that happens to contain the headline in a list of links; see the examples in stage 24's hand-check.
+2. **LexisNexis overlap is excluded at stage 27's precision.** The title tiers were 100% right in the hand-check and the content tier 95%, so about 10 of the 218 excluded articles may not be in LexisNexis after all.
+3. **The title check misses** an article quoted under a different headline and can pass a site front that happens to contain the headline in a list of links; see the examples in stage 27's hand-check.
 

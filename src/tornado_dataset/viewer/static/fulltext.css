@@ -1,0 +1,49 @@
+/* Additions for the full-text inspection view; the palette is viewer.css's. */
+.pill.ok { border-color: var(--accent); color: var(--accent); }
+.pill.bad { border-color: var(--accent-2); color: var(--accent-2); }
+.pill.diff { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+.pill.done { border-style: dashed; }
+.chip.bad { border-color: var(--accent-2); color: var(--accent-2); }
+
+.labels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+.label-card {
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;
+  background: var(--surface);
+}
+.label-card .who { font-size: 12px; color: var(--muted); }
+.label-card .what { font-size: 17px; font-weight: 600; margin: 2px 0 6px; }
+.label-card.differs { border-color: var(--accent-2); }
+
+.verdict {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;
+  background: var(--surface); margin-top: 14px;
+}
+.verdict .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.verdict .sep { width: 1px; align-self: stretch; background: var(--grid); }
+.verdict button[aria-pressed="true"] { background: var(--mark); border-color: var(--accent); }
+.verdict input { flex: 1; min-width: 180px; }
+.verdict .saved { color: var(--muted); font-size: 12px; }
+
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0 12px; }
+.toolbar a { color: var(--accent); }
+.mode-note { color: var(--muted); font-size: 12.5px; margin-bottom: 10px; max-width: 76ch; }
+.body mark.current { outline: 2px solid var(--accent); }
+.flaglist { display: flex; gap: 6px; flex-wrap: wrap; }
+.muted { color: var(--muted); }
+code { font-size: 12.5px; }
+
+#keys {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+}
+#keys[hidden] { display: none; }
+.keys-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 8px 22px 14px; max-width: 560px;
+}
+@media (max-width: 760px) {
+  main { grid-template-columns: 1fr; height: auto; }
+  #list { max-height: 40vh; }
+  .labels { grid-template-columns: 1fr; }
+}

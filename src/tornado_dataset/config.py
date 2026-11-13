@@ -45,6 +45,8 @@ DATA_DIR = _dir_from_env("TORNADO_DATA_DIR", REPO_ROOT / "data")
 RAW_DIR = DATA_DIR / "raw"            # verbatim API responses, never edited
 INTERIM_DIR = DATA_DIR / "interim"    # intermediate tables (links, candidates)
 PROCESSED_DIR = DATA_DIR / "processed"  # dataset-grade outputs
+# LexisNexis Uni full-text exports (RTF), downloaded by hand; read by stage 23.
+LEXISNEXIS_EXPORT_DIR = DATA_DIR / "lexis_nexis_tornado_news"
 # Reports are small and tracked in git, so they default to the working tree even
 # when the data lives elsewhere; override only if you want them beside the data.
 OUTPUT_DIR = _dir_from_env("TORNADO_OUTPUT_DIR", REPO_ROOT / "outputs")
@@ -134,7 +136,7 @@ LINK_SEARCH_MAX_DATE_DELTA_DAYS = 2
 
 # Accepted link: gap threshold, which also sets the scale on which proximity
 # decays in link_confidence. 200 m is the operating point chosen in
-# outputs/dat_qa_report.md from the sweep against the path_guid gold set.
+# outputs/events_qa_report.md from the sweep against the path_guid gold set.
 LINK_GAP_THRESHOLD_M = 200.0
 # Buffer applied to the polygon when measuring how much of the line lies inside
 # it, absorbing digitising jitter between two independently drawn features.
@@ -152,13 +154,23 @@ LINK_MAX_DATE_DELTA_DAYS = 1
 HAZARD_ENDPOINT_GAP_M = 3000.0
 # Minimum geometric link confidence for a polygon to be merged into a hazard.
 HAZARD_MIN_LINK_CONFIDENCE = 0.5
+# DAT ratings that say a feature is *not* a tornado. Lines and polygons rated
+# so are left out of the hazards, on both sides alike: the 193 hazards rated
+# TSTM/Wind (2010-2025) matched an SPC tornado 7% of the time, against 95-99%
+# for every other rating, unrated ones included. Everything else stays in;
+# stage 14's SPC match is what confirms it. Compared upper-case.
+NON_TORNADO_RATINGS = frozenset({"TSTM/WIND"})
 # Convective day boundary (UTC hour). NWS convention runs 12Z-12Z so that a
 # night-time outbreak is not split across two calendar dates.
 CONVECTIVE_DAY_START_HOUR = 12
-# Hazards on the same convective day join one episode when their tracks are
-# within this distance — an outbreak is a spatially coherent cluster, not every
-# tornado in the country that day.
-EPISODE_LINK_DISTANCE_M = 200_000.0
+# Episodes (stage 15): SPC tornadoes join one episode by single linkage when
+# their straight tracks come within this distance and one starts within this
+# many hours of the previous one's end. No day boundary, so overnight outbreaks
+# are not cut at 12 UTC. Chosen in stage 51 against Storm Events episodes, SPC
+# watch sequences and hand checks of ten named outbreaks
+# (outputs/episode_comparison_spc_report.md, watch_hand_checks_report.md).
+EPISODE_MAX_DISTANCE_M = 400_000.0
+EPISODE_MAX_GAP_H = 6.0
 
 # ── geography ────────────────────────────────────────────────────────────────
 # Populated places within this distance of a track are treated as its toponyms.
@@ -184,6 +196,14 @@ PLACE_PROMINENT_MIN_POPULATION = 20_000
 # The largest place in each county the track crosses, as a county-seat proxy:
 # local reporting is organised by county and names its seat.
 INCLUDE_COUNTY_LARGEST_PLACE = True
+# A county counts for a hazard when it holds at least this share of the track
+# (of the damage area, for a hazard with no track line), or this much of it in
+# absolute terms; the county with the largest share always counts. The NWS county
+# outlines are simplified for web display, so a track along a county line grazes
+# the neighbour for a few hundred metres and picked up its office as well.
+COUNTY_MIN_SHARE = 0.05
+COUNTY_MIN_TRACK_M = 1_000.0
+COUNTY_MIN_AREA_M2 = 1_000_000.0
 
 # ── NWS / IEM text ───────────────────────────────────────────────────────────
 IEM_BASE = "https://mesonet.agron.iastate.edu"
@@ -212,6 +232,29 @@ PNS_MATCH_RADIUS_M = 5_000.0
 # week — so a link requires this many of the hazard's toponyms in the text.
 PNS_LEGACY_MIN_NAME_HITS = 2
 IEM_MIN_REQUEST_INTERVAL = 0.5  # be a good citizen on a free academic service
+
+# ── same-source edits among official texts (stage 25, text/same_source.py) ───
+# Two texts of one hazard are edits of one account when they share verbatim
+# wording specific to their tornado: runs of this many tokens found in the texts
+# of fewer than EDIT_COMMON_HAZARDS hazards. Shorter runs are mostly stock
+# phrases, longer ones break under every small edit; 4, 6 and 8 are rerun.
+EDIT_RUN_TOKENS = 5
+# A run in the texts of three or more tornadoes is a phrase of the language or a
+# formula of the office. Two are allowed because the hazard list holds a few
+# pieces and duplicates of one tornado (rerun with 2, 5, 10 and off).
+EDIT_COMMON_HAZARDS = 3
+# Shared specific tokens needed for a link: the smallest value from the floor
+# (two runs' worth, so one shared phrase never links) at which at most these
+# shares of comparison pairs would link: other episode (no copy, no shared
+# topic; lower bound) and same episode, other hazard (same day and office,
+# templates and some real copies; upper bound).
+EDIT_MIN_SHARED_FLOOR = 10
+EDIT_TARGET_OTHER_EPISODE = 0.001
+EDIT_TARGET_SAME_EPISODE = 0.01
+# A text covered this far by another member is recorded as contained in it.
+EDIT_CONTAINED_SHARE = 0.8
+EDIT_RECALL_TEXTS = 400         # texts per source type for the edited-copy recall
+EDIT_SEED = 25
 
 # ── GDELT ────────────────────────────────────────────────────────────────────
 GDELT_DOC_API = "https://api.gdeltproject.org/api/v2/doc/doc"
@@ -285,7 +328,7 @@ OVERLAP_DATE_TOLERANCE_DAYS = 3
 OVERLAP_TITLE_SIMILARITY = 0.72     # same story, different desk edit
 OVERLAP_TITLE_SIMILARITY_STRICT = 0.90   # accept without a source match
 
-# ── Wikipedia (stage 23) ─────────────────────────────────────────────────────
+# ── Wikipedia (stage 26) ─────────────────────────────────────────────────────
 WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 # Wikimedia asks for serial requests and no hard rate; 0.2 s keeps a full
@@ -342,7 +385,7 @@ WIKIPEDIA_TORNADO_SECTION_PARENTS = (
     "tornado summary", "significant tornadoes",
 )
 
-# ── Wikipedia reference coverage (stage 24) ─────────────────────────────────
+# ── Wikipedia reference coverage (stage 27) ─────────────────────────────────
 # The title tiers reuse OVERLAP_DATE_TOLERANCE_DAYS and the OVERLAP_TITLE_*
 # thresholds above, so "same story" means the same thing here as in the atlas.
 # The weak tier widens the window to a week — print editions run a day or two
@@ -366,7 +409,7 @@ WIKI_REF_MIN_SHINGLES = 8          # ≈ 70 words of text before a containment m
 WIKI_REF_CONTENT_CONTAINMENT = 0.5
 WIKI_REF_CONTENT_DATE_DAYS = 14
 
-# ── Stage 25: Wikipedia passages ─────────────────────────────────────────────
+# ── Stage 28: Wikipedia passages ─────────────────────────────────────────────
 # A passage counts as post-survey when its pinned revision is at least this many
 # days after the event: NWS surveys finish within days and Storm Data is final
 # about two months after the month ends, so 90 days is past both.

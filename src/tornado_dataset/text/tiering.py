@@ -29,10 +29,20 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
-TIER_RULE_VERSION = "tier_rules_v1_2026-07"
+TIER_RULE_VERSION = "tier_rules_v2_2026-11"
+# v2: source types written from the survey by construction are post-survey
+# without a publication time (POST_SURVEY_SOURCE_TYPES); v1 rows are unchanged
+# for every other type.
 
 # Source types produced by the same organisation that surveys the damage.
-NWS_SOURCE_TYPES = {"lsr", "pns", "nws_warning", "survey_report"}
+NWS_SOURCE_TYPES = {"lsr", "pns", "nws_warning", "survey_report",
+                    "storm_events_narrative", "storm_events_episode_narrative", "dat_comment"}
+# Written from the survey by construction, and carrying no publication time:
+# the Storm Data narratives (compiled by the office after the event month) and
+# the comments surveyors enter on DAT features. Without this rule a missing time
+# falls back to "pre-survey", and the survey's own words would count as timely.
+POST_SURVEY_SOURCE_TYPES = {"storm_events_narrative", "storm_events_episode_narrative",
+                            "dat_comment"}
 # Author-organisation markers for NWS/NOAA, matched case-insensitively.
 NWS_ORG_MARKERS = ("nws", "national weather service", "noaa", "weather.gov",
                    "storm prediction center", "spc")
@@ -92,7 +102,10 @@ def derive(author_org: str | None, source_type: str | None, published_at: Any,
            event_begin: Any, survey_at: Any = None) -> dict[str, Any]:
     """Full independence classification for one text reference."""
     same_org = is_same_org(author_org, source_type)
-    tclass = temporal_class(published_at, event_begin, survey_at)
+    if str(source_type or "").lower() in POST_SURVEY_SOURCE_TYPES:
+        tclass = "post_survey"
+    else:
+        tclass = temporal_class(published_at, event_begin, survey_at)
     role = TEXT_ROLES[(same_org, tclass == "post_survey")]
     published = _as_datetime(published_at)
     begin = _as_datetime(event_begin)
@@ -106,3 +119,39 @@ def derive(author_org: str | None, source_type: str | None, published_at: Any,
         "time_offset_hours": offset_hours,
         "tier_rule_version": TIER_RULE_VERSION,
     }
+
+
+def first_surveys(links: Any, refs: Any, membership: Any) -> dict[str, dt.datetime]:
+    """First primary-survey publication per episode: the oracle boundary.
+
+    ``links`` and ``refs`` are stage 20's tables, ``membership`` stage 15's
+    hazard → episode table (DAT and SPC hazards). Text published after this
+    moment is downstream of the survey.
+    """
+    surveys = (links[links.link_relation == "primary_survey_of"]
+               [["textref_uid", "target_uid"]]
+               .merge(refs[["textref_uid", "published_at"]], on="textref_uid")
+               .merge(membership[["hazard_uid", "episode_uid"]].dropna(),
+                      left_on="target_uid", right_on="hazard_uid"))
+    out: dict[str, dt.datetime] = {}
+    for episode, published in zip(surveys.episode_uid, surveys.published_at):
+        moment = _as_datetime(published)
+        if moment and (episode not in out or moment < out[episode]):
+            out[episode] = moment
+    return out
+
+
+def survey_times(tag: str) -> dict[str, dt.datetime]:
+    """:func:`first_surveys` from the tables on disk; empty before stage 20 has run."""
+    import pandas as pd
+
+    from .. import config
+    from ..dat import episode_table
+    refs_path = config.PROCESSED_DIR / f"textrefs_nws_{tag}.csv"
+    links_path = config.PROCESSED_DIR / f"textlinks_nws_{tag}.csv"
+    if not (refs_path.exists() and links_path.exists()):
+        return {}
+    return first_surveys(
+        pd.read_csv(links_path, usecols=["textref_uid", "target_uid", "link_relation"]),
+        pd.read_csv(refs_path, usecols=["textref_uid", "published_at"]),
+        episode_table.membership(tag))

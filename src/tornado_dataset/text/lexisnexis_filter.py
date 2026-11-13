@@ -1,6 +1,6 @@
 """Relevance labelling for the LexisNexis full-text corpus.
 
-Same method as the Media Cloud filter (stage 18) and the same label vocabulary,
+Same method as the Media Cloud filter (stage 30) and the same label vocabulary,
 so the two corpora stay comparable for the overlap study — everything shared
 lives in :mod:`tornado_dataset.text.labelling`. What differs is what a row looks
 like, and it differs enough to change three design decisions.
@@ -18,7 +18,7 @@ Press-release and financial wire                    20.6%
 ========================================== ==========
 
 1. **Full body text is available**, so the headline under-determination that made
-   ``UNCLEAR`` load-bearing in stage 18 largely disappears here. If ``UNCLEAR``
+   ``UNCLEAR`` load-bearing in stage 30 largely disappears here. If ``UNCLEAR``
    stays common in this corpus, that is a signal something is wrong with the
    evidence window or the prompt — not a fact about the corpus.
 
@@ -113,7 +113,7 @@ WS_RE = re.compile(r"\s+")
 # a prefix can miss the only evidence that matters. `windows` shows the model the
 # *context of each mention* instead, which is exactly what the aboutness question
 # needs. Which mode is actually best is measured by the `window` subcommand of
-# scripts/19_filter_lexisnexis.py rather than assumed here.
+# scripts/32_filter_lexisnexis.py rather than assumed here.
 EVIDENCE_MODES = ("windows", "lede150", "prefix400", "full2000")
 
 WINDOW_RADIUS = 40      # words either side of a mention

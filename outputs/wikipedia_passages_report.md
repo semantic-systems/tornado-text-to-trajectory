@@ -1,6 +1,6 @@
 # Wikipedia passages
 
-Generated 2026-10-30T12:20:24+00:00 by `scripts/25_wikipedia_passages.py`.
+Generated 2026-11-13T10:00:16+00:00 by `scripts/28_wikipedia_passages.py`.
 
 **855 passages, 641,715 words** from 249 pinned revisions, each a text record in `data/processed/wikipedia_textrefs.csv` (text in `data/processed/wikipedia_passages.jsonl`). Wikipedia is CC BY-SA 4.0; every record carries its revision permalink and licence.
 
@@ -14,7 +14,7 @@ Generated 2026-10-30T12:20:24+00:00 by `scripts/25_wikipedia_passages.py`.
 - **Path-like** is a heuristic: at least three of touchdown, direction of motion, a length or width, and lifting appear in the passage. It describes the units, it filters nothing.
 - **NCEI event ids** are read from the passage's own references (NCEI Storm Events links). They are the exact bridge to a DAT hazard for the linker; a passage without one has to be linked by date, place and rating.
 - **derived_from_oracle** (rule `nws_citation_share_0.5`) flags passages where at least 50% of the references cited are NWS/NOAA products. Provisional: the real test is text overlap with the NCEI narrative, which needs the hazard tables from the server.
-- **Post-survey** (rule `tier_rules_v1_2026-07+wikipedia_revision_90d`): the pinned revision is at least 90 days after the event. Wikipedia is never the surveying organisation, so post-survey passages are `independent_retrospective`; the rest, revisions of very recent events, fall to tiering's conservative pre-survey default.
+- **Post-survey** (rule `tier_rules_v2_2026-11+wikipedia_revision_90d`): the pinned revision is at least 90 days after the event. Wikipedia is never the surveying organisation, so post-survey passages are `independent_retrospective`; the rest, revisions of very recent events, fall to tiering's conservative pre-survey default.
 
 ## Overlap between units
 
@@ -56,5 +56,5 @@ Of the 506 EF3+ tornadoes in the list census, 399 carry an NCEI event id there, 
 
 1. **Event dates** come from the infobox, the heading, the section's first date, or the title, in that order; 0 passages have none. A tornado section's first date is usually its own, but can be a date it compares with.
 2. **A tornado section** may describe a family of tornadoes from one storm; it links to a hazard only when the linker finds exactly one.
-3. **Revisions are pinned** at discovery (stage 23). Re-running discovery pins newer ones and changes the `textref_uid`s, by design.
+3. **Revisions are pinned** at discovery (stage 26). Re-running discovery pins newer ones and changes the `textref_uid`s, by design.
 

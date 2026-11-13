@@ -19,7 +19,7 @@ stage and no trained classifier, and both were removed on evidence rather than
 taste:
 
 *The rules* were measured against LLM labels on a stratified sample of 385
-headlines (:mod:`scripts/18_filter_media_cloud.py` history, 2026-08). Collapsed
+headlines (:mod:`scripts/30_filter_media_cloud.py` history, 2026-08). Collapsed
 to the decision that matters — tornado event or not — the two agreed 93.4% after
 post-stratifying to corpus frequency, but the disagreement was almost entirely
 one-directional: the rules called ~1,615 headlines an event that the LLM did not,

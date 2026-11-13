@@ -105,3 +105,47 @@ def get_json(url: str, params: dict[str, Any], *, cache_path: Path | None = None
         return payload
 
     raise RuntimeError(f"GET failed after {retries} attempts: {url}\n  {last_error}")
+
+
+def session_get(url: str, *, params: dict[str, Any] | None = None, min_interval: float = 0.0,
+                timeout: int = config.HTTP_TIMEOUT) -> requests.Response:
+    """One GET on the shared session (project User-Agent), after the host's throttle."""
+    _throttle(url, min_interval)
+    return _SESSION.get(url, params=params, timeout=timeout)
+
+
+def get_text(url: str, params: dict[str, Any], *, cache_path: Path | None = None,
+             refresh: bool = False, min_interval: float = 0.0,
+             retries: int = config.HTTP_RETRIES,
+             timeout: int = config.HTTP_TIMEOUT) -> str:
+    """:func:`get_json` for CSV and plain-text services; same cache and sidecar."""
+    if cache_path is not None and cache_path.exists() and not refresh:
+        return cache_path.read_text(encoding="utf-8")
+
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        _throttle(url, min_interval)
+        try:
+            response = _SESSION.get(url, params=params, timeout=timeout)
+            if response.status_code == 429:
+                last_error = RuntimeError("rate limited (HTTP 429)")
+                time.sleep(config.HTTP_RATE_LIMIT_BACKOFF * attempt
+                           + random.uniform(0, 5))
+                continue
+            response.raise_for_status()
+            body = response.text
+        except Exception as exc:  # network error or non-2xx
+            last_error = exc
+            time.sleep(config.HTTP_BACKOFF * attempt)
+            continue
+
+        if cache_path is not None:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(body, encoding="utf-8")
+            cache_path.with_name(cache_path.name + ".meta.json").write_text(
+                json.dumps({"url": response.url, "retrieved_at": utcnow_iso(),
+                            "status": response.status_code}, indent=2),
+                encoding="utf-8")
+        return body
+
+    raise RuntimeError(f"GET failed after {retries} attempts: {url}\n  {last_error}")

@@ -24,7 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
 OUTPUT_DIR = REPO_ROOT / "outputs"
 FIGURE_DIR = OUTPUT_DIR / "figures"
-REPORT_PATH = OUTPUT_DIR / "tornado_analysis_report.md"
+REPORT_PATH = Path(__file__).resolve().parent / "tornado_analysis_report.md"  # kept with the code
 GEOREF_PATH = OUTPUT_DIR / "georeferenceable_events.geojson"
 FIGURE_DIR.mkdir(parents=True, exist_ok=True)
 

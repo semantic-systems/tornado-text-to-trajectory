@@ -4,7 +4,7 @@ Local, single-user, read-mostly. The store holds everything in memory, so the
 routes are thin: filter the index, hand back one article with its links, or hand
 back one episode as GeoJSON for the interactive map.
 
-    python scripts/16_viewer.py            # http://127.0.0.1:8799
+    python scripts/viewer.py            # http://127.0.0.1:8799
 
 The annotation screen (phase 2) will POST labels here and they will be written
 straight to `outputs/annotation/`, which is the reason this is a server rather

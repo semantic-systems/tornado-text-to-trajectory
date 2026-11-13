@@ -1,7 +1,7 @@
 """Retrieve article full text for the Media Cloud corpus.
 
 The Media Cloud export carries headline, URL and date but no body, which bounds
-what stage 18 can decide and makes those articles unlinkable — stage 11's
+what stage 30 can decide and makes those articles unlinkable — stage 31's
 toponym matching needs text. This module retrieves the missing bodies.
 
 **The Media Cloud API cannot supply it.** ``mediacloud.types.Story`` declares a
@@ -102,6 +102,9 @@ class Retrieval:
     error: str = ""
     elapsed_s: float = 0.0
     retrieved_at: str = ""
+    # Why this record exists when it is not a first attempt — e.g. an archive
+    # re-fetch replacing a direct body that failed the quality checks.
+    note: str = ""
 
     def row(self) -> dict[str, Any]:
         """Everything except the text itself, for the coverage table."""
@@ -508,3 +511,270 @@ def pending(items: Sequence[dict[str, Any]], store: dict[str, dict[str, Any]],
                     or "archive:archive_http_5" in error):
                 todo.append(item)
     return todo
+
+
+# ── archive re-fetch for direct bodies that fail the quality checks ─────────
+# A direct fetch can succeed technically and still return the wrong page: a
+# soft 404 to the front page, or a cookie-consent wall served to EU traffic in
+# place of the article (1,070 retrievals across a group of US TV-station sites
+# land on one YouTube consent page). The quality checks catch these, but the
+# crawl never tried the archive for them, because extraction had "succeeded".
+# Archive copies pass the same checks at 98.5%, and the snapshot is taken nearest
+# the publication date — before the article died or the wall went up.
+#
+# Store semantics: an archive copy that extracts cleanly *and mentions a
+# tornado* is appended to the store and supersedes the direct record (the old
+# line stays in the file). An
+# archive failure never touches the store — the direct body remains the record,
+# still flagged — and is written to a separate log instead, so a rerun skips it.
+
+def _refetch_settled(outcome: str) -> bool:
+    """Outcomes not worth another attempt: done, or no usable copy exists."""
+    return outcome == "ok" or outcome == "no_snapshot" or outcome.startswith("extract:")
+
+
+def load_refetch_log(path) -> dict[str, dict[str, Any]]:
+    """Prior re-fetch attempts keyed by URL; later wins. Missing file -> empty."""
+    from pathlib import Path
+    import json
+
+    path = Path(path)
+    out: dict[str, dict[str, Any]] = {}
+    if not path.exists():
+        return out
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                record = json.loads(line)
+                out[record["url"]] = record
+            except (ValueError, KeyError):
+                continue
+    return out
+
+
+def refetch_pending(items: Sequence[dict[str, Any]],
+                    log: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Items not yet re-fetched, plus those whose last attempt was transient."""
+    return [i for i in items
+            if i["url"] not in log or not _refetch_settled(str(log[i["url"]].get("outcome", "")))]
+
+
+def refetch_one(session: requests.Session, url: str, published: str | None = None,
+                timeout: int = DEFAULT_TIMEOUT) -> tuple[Retrieval | None, str]:
+    """Archive copy of ``url`` as a Retrieval, or ``(None, reason)``.
+
+    No robots check: these URLs were already fetched directly under the
+    publisher's robots.txt, and the request goes to archive.org, not to them.
+    """
+    started = time.monotonic()
+    archived, why = fetch_wayback(session, url, published, timeout)
+    if not archived:
+        return None, why or "archive_unknown"
+    text, title, reason = extract_text(archived, url)
+    if reason:
+        return None, f"extract:{reason}"
+    # Media Cloud's `tornado*` query matched this page, so a copy that never
+    # mentions one is no better than the direct body it would replace — often
+    # the archive captured the same redirect (e.g. to the outlet's YouTube page).
+    from .lexisnexis_filter import mention_positions
+    if not mention_positions(text.split()):
+        return None, "extract:archive_copy_no_tornado_mention"
+    return Retrieval(url=url, status="ok", via="wayback", http_status=200,
+                     final_url=wayback_url(url, published), n_words=len(text.split()),
+                     text=text, title=title, elapsed_s=round(time.monotonic() - started, 2),
+                     retrieved_at=datetime.now(timezone.utc).isoformat(timespec="seconds")
+                     ), ""
+
+
+def refetch_many(items: Sequence[dict[str, Any]], *, store_path, log_path,
+                 timeout: int = DEFAULT_TIMEOUT,
+                 progress: Callable[[int], None] | None = None) -> dict[str, int]:
+    """Re-fetch each item from the archive; returns outcome counts.
+
+    Sequential on purpose: every request goes to archive.org, which is throttled
+    globally, so parallel workers would only queue behind the same lock.
+    Each ``item`` carries ``url``, ``publish_date`` and the ``flags`` that failed.
+    """
+    from collections import Counter
+    from pathlib import Path
+    import json
+
+    log_path = Path(log_path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    counts: Counter = Counter()
+    session = _session()
+    try:
+        for item in items:
+            flags = ",".join(item.get("flags") or [])
+            result, why = refetch_one(session, item["url"], item.get("publish_date"), timeout)
+            if result is not None:
+                result.note = f"archive_refetch: direct body failed {flags}"
+                append_store(store_path, result)
+            outcome = "ok" if result is not None else why
+            counts[outcome] += 1
+            with _STORE_LOCK, log_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({
+                    "url": item["url"], "outcome": outcome, "failed_flags": flags,
+                    "n_words": result.n_words if result else 0,
+                    "attempted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                }) + "\n")
+            if progress:
+                progress(1)
+    finally:
+        session.close()
+    return dict(counts)
+
+
+# ── text quality ────────────────────────────────────────────────────────────
+# A retrieval counted `ok` has passed extraction: a body of at least
+# MIN_ARTICLE_WORDS that is not an obvious paywall or bot wall. That is a low bar.
+# The checks below ask whether the body is *the article the headline names*,
+# which extraction cannot tell. They are flags for inspection with stated
+# thresholds, not silent filters: each one is reported with its rate, and
+# `quality_ok` is defined from the hard flags only, so the definition can be
+# changed without re-reading 38,000 bodies.
+#
+# The strongest check is free. Media Cloud collected this corpus with a
+# full-text query for `tornado*` against *its own* extraction of each page, so a
+# correct body should mention a tornado. One that does not is most likely a
+# different page — a redirect to a section front, a template, a truncated
+# extraction — though it can also be an article whose only mention sat in a
+# caption or related-links box that trafilatura drops. Hence a flag, not proof.
+
+TITLE_MISMATCH_CONTAINMENT = 0.30   # below this, retrieved title != headline
+TEMPLATE_MIN_HEADLINES = 3          # one body under this many distinct headlines…
+TEMPLATE_MAX_TITLE_SIM = 0.30       # …that also disagree with it = a template page
+BOILERPLATE_DOMAIN_MIN_DOCS = 10    # need this many docs to call a line boilerplate
+BOILERPLATE_LINE_SHARE = 0.50       # line in >= half a domain's docs is boilerplate
+HIGH_BOILERPLATE_SHARE = 0.30       # flag a body whose words are this much boilerplate
+VERY_LONG_WORDS = 8_000             # live blogs and whole-page dumps
+MIN_ENGLISH_STOPWORD_SHARE = 0.15   # English prose runs ~0.35-0.45
+
+# Hard flags make `quality_ok` False; soft flags are reported only.
+#
+# `title_mismatch` was hard in the first version and is soft on evidence: of
+# the 1,278 articles it rejected on its own, the median body mentioned a tornado
+# 9 times — *more* than passing articles (6) — and 92% mentioned one at least 3
+# times. They were the right articles, retitled after Media Cloud indexed them
+# (live-update pages, AP stories re-headlined as they develop). A changed title
+# is not a wrong page.
+HARD_FLAGS = ("no_tornado_mention", "redirected_home", "template_body",
+              "not_english")
+SOFT_FLAGS = ("title_mismatch", "high_boilerplate", "very_long")
+
+_EN_STOPWORDS = frozenset(
+    "the a an and or of to in on at for with by from is are was were be been has "
+    "have had it its this that as but not they he she we you his her their our".split())
+_HOME_PATH_RE = re.compile(r"^/?(index\.(?:html?|php|aspx?))?$", re.I)
+
+
+def _stopword_share(text: str) -> float:
+    words = re.findall(r"[a-z']+", text.lower())
+    return sum(w in _EN_STOPWORDS for w in words) / len(words) if words else 0.0
+
+
+def _redirected_home(url: str, final_url: str, via: str) -> bool:
+    """A direct fetch that ended on a site's front page rather than the article.
+
+    Only meaningful for direct fetches; an archive fetch's final URL is the
+    archive's, not the publisher's.
+    """
+    if via != "direct" or not final_url:
+        return False
+    start, end = urlparse(url), urlparse(final_url)
+    return bool(_HOME_PATH_RE.match(end.path or "/")
+                and not _HOME_PATH_RE.match(start.path or "/"))
+
+
+def _boilerplate_lines(docs: "pd.DataFrame") -> dict[str, set[str]]:
+    """Per domain, the paragraphs that recur across most of its documents."""
+    from collections import Counter
+
+    out: dict[str, set[str]] = {}
+    for domain, group in docs.groupby("domain"):
+        if len(group) < BOILERPLATE_DOMAIN_MIN_DOCS:
+            continue
+        counts: Counter[str] = Counter()
+        for text in group.text:
+            counts.update({line.strip() for line in str(text).split("\n")
+                           if len(line.split()) >= 4})
+        cutoff = BOILERPLATE_LINE_SHARE * len(group)
+        common = {line for line, n in counts.items() if n >= cutoff}
+        if common:
+            out[domain] = common
+    return out
+
+
+def quality_table(store: dict[str, dict[str, Any]], events: "pd.DataFrame") -> "pd.DataFrame":
+    """One row per retrieved article, with every quality measure and flag.
+
+    ``events`` supplies the Media Cloud headline and its ``dup_group``, which the
+    title-agreement and template checks compare against. The table carries no
+    article text, so it can be shared and inspected freely.
+    """
+    import pandas as pd
+    from . import matching
+    from .lexisnexis_filter import body_key, mention_positions
+
+    ok = [{"url": u, **{k: r.get(k) for k in ("via", "final_url", "title", "text",
+                                               "n_words")}}
+          for u, r in store.items() if r.get("status") == "ok"]
+    docs = pd.DataFrame(ok)
+    if docs.empty:
+        return docs
+    meta = events[["url", "title", "dup_group", "media_name", "year_band",
+                   "domain_size"]].rename(columns={"title": "headline"})
+    docs = docs.merge(meta, on="url", how="inner")
+    docs["domain"] = docs.media_name.astype(str)
+    docs["text"] = docs.text.fillna("").astype(str)
+
+    docs["n_mentions"] = docs.text.map(lambda t: len(mention_positions(t.split())))
+    docs["title_containment"] = [
+        matching.title_similarity(h, t)["containment"] if t else float("nan")
+        for h, t in zip(docs.headline, docs.title.fillna(""))]
+    docs["redirected_home_"] = [_redirected_home(u, f or "", v or "")
+                                for u, f, v in zip(docs.url, docs.final_url, docs.via)]
+    docs["stopword_share"] = docs.text.map(_stopword_share)
+
+    # Syndication versus templates. One body under several headlines is normal
+    # wire copy *if the headlines agree with it*; one body under several
+    # headlines that all disagree with it is the same error page served for
+    # many URLs.
+    docs["body_key"] = body_key(docs.text)
+    per_body = docs.groupby("body_key").agg(
+        body_headlines=("dup_group", "nunique"),
+        body_title_sim=("title_containment", "median"))
+    docs = docs.join(per_body, on="body_key")
+
+    common = _boilerplate_lines(docs)
+
+    def boiler_share(row) -> float:
+        lines = common.get(row.domain)
+        if not lines or not row.n_words:
+            return 0.0
+        hit = sum(len(l.split()) for l in row.text.split("\n") if l.strip() in lines)
+        return hit / max(row.n_words, 1)
+
+    docs["boilerplate_share"] = docs.apply(boiler_share, axis=1)
+
+    docs["no_tornado_mention"] = docs.n_mentions == 0
+    docs["title_mismatch"] = docs.title_containment < TITLE_MISMATCH_CONTAINMENT
+    docs["redirected_home"] = docs.redirected_home_
+    # A template is a page served for many URLs that is about none of them. The
+    # first version required only shared-and-disagreeing headlines, which is
+    # also what *retitled wire copy* looks like: its 20 single-flag rejections
+    # had a median of 12 tornado mentions. Requiring the body to be off-topic
+    # as well separates the two.
+    docs["template_body"] = ((docs.body_headlines >= TEMPLATE_MIN_HEADLINES)
+                             & (docs.body_title_sim < TEMPLATE_MAX_TITLE_SIM)
+                             & (docs.n_mentions == 0))
+    docs["not_english"] = docs.stopword_share < MIN_ENGLISH_STOPWORD_SHARE
+    docs["high_boilerplate"] = docs.boilerplate_share >= HIGH_BOILERPLATE_SHARE
+    docs["very_long"] = docs.n_words >= VERY_LONG_WORDS
+    docs["quality_ok"] = ~docs[list(HARD_FLAGS)].any(axis=1)
+
+    keep = ["url", "dup_group", "headline", "domain", "via", "year_band",
+            "domain_size", "n_words", "n_mentions", "title_containment",
+            "stopword_share", "boilerplate_share", "body_key", "body_headlines",
+            *HARD_FLAGS, *SOFT_FLAGS, "quality_ok"]
+    return docs[keep]

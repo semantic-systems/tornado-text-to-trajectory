@@ -1,6 +1,6 @@
 # Corpus atlas — the three news corpora as a set
 
-Generated 2026-08-12T15:14:53+00:00.
+Generated 2026-10-07T07:54:34+00:00.
 
 > **Scope: stories labelled `EVENT` only.** These are the articles that report a tornado actually occurring — the usable corpus. For what was *collected* regardless of label, see `corpus_atlas_report.md`.
 

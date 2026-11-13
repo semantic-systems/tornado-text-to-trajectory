@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Browse the Wikipedia tables (stages 23–26) in the browser, with Datasette.
+"""Browse the Wikipedia tables (stages 26–29) in the browser, with Datasette.
 
 Loads the passages, the cited news, the citations between them, the
 LexisNexis cross-reference, and the discovery tables into one SQLite file,
@@ -38,43 +38,43 @@ TABLES = {
     "passages": (
         config.PROCESSED_DIR / "wikipedia_passages.jsonl", "textref_uid", ["title", "text"],
         ["unit_kind", "temporal_class", "derived_from_oracle"],
-        "Stage 25: Wikipedia passages as text records (tornado articles, tornado "
+        "Stage 28: Wikipedia passages as text records (tornado articles, tornado "
         "sections of outbreak articles, outbreak overviews, US events on yearly pages)."),
     "cited_news": (
         config.PROCESSED_DIR / "wikipedia_cited_news.jsonl", "textref_uid", ["title", "text"],
         ["text_quality", "outlet_type", "retrieval_via"],
-        "Stage 26: news articles cited by those pages and not in LexisNexis, with "
+        "Stage 29: news articles cited by those pages and not in LexisNexis, with "
         "text_quality (is the fetched text the cited article?) and story groups."),
     "cited_news_citations": (
         config.PROCESSED_DIR / "wikipedia_cited_news_citations.csv", None, [],
         ["unit_kind", "link_level"],
-        "Stage 26: which passage cites which news article (one row per pair), with "
+        "Stage 29: which passage cites which news article (one row per pair), with "
         "the passage's event date and NCEI event ids."),
     "cited_in_lexisnexis": (
         config.PROCESSED_DIR / "wikipedia_cited_lexisnexis.csv", "article_key", ["title"],
         ["match_tiers", "outlet_type", "lexis_source"],
-        "Stage 24/26: cited articles LexisNexis already holds, with the matching "
+        "Stage 27/29: cited articles LexisNexis already holds, with the matching "
         "LexisNexis record."),
     "pages": (
         config.INTERIM_DIR / "wikipedia_pages.csv", "pageid", ["title"],
         ["kind", "scope", "year"],
-        "Stage 23: every candidate page found, its kind and whether it is in scope."),
+        "Stage 26: every candidate page found, its kind and whether it is in scope."),
     "sections": (
         config.INTERIM_DIR / "wikipedia_sections.csv", None, ["heading"],
         ["section_type", "year", "us_basis"],
-        "Stage 23: sections of outbreak and yearly pages and how they were classified."),
+        "Stage 26: sections of outbreak and yearly pages and how they were classified."),
     "refs": (
         config.INTERIM_DIR / "wikipedia_refs.csv", None, ["title", "work"],
         ["ref_class", "page_kind", "domain"],
-        "Stage 24: every reference on the in-scope pages."),
+        "Stage 27: every reference on the in-scope pages."),
     "ref_matches": (
         config.INTERIM_DIR / "wikipedia_ref_matches.csv", None, ["lexis_headline"],
         ["tier", "outlet_match", "lexis_source"],
-        "Stage 24: candidate LexisNexis matches per cited article, by tier."),
+        "Stage 27: candidate LexisNexis matches per cited article, by tier."),
     "census": (
         config.INTERIM_DIR / "wikipedia_census.csv", None, ["location", "summary"],
         ["state", "rating", "year"],
-        "Stage 23: rows of the 'List of … tornadoes' pages with NCEI ids. Lookup only, "
+        "Stage 26: rows of the 'List of … tornadoes' pages with NCEI ids. Lookup only, "
         "never text: the summaries paraphrase the NCEI narrative."),
 }
 # Shown as the link text for a row, and moved to the end of the table view.
@@ -119,7 +119,7 @@ def build() -> None:
 
     metadata = {
         "title": "Tornado text-to-trajectory: Wikipedia tables",
-        "description": "Stages 23–26. Local only: the cited news texts are copyrighted.",
+        "description": "Stages 26–29. Local only: the cited news texts are copyrighted.",
         "license": "Wikipedia text: CC BY-SA 4.0; news text: copyright of the publishers",
         "databases": {DB.stem: {"tables": {
             name: {"description": description, "facets": facets,

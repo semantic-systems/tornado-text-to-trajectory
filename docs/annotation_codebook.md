@@ -103,7 +103,7 @@ article, which is exactly what the pipeline has to work from.
 ## After annotating
 
 ```bash
-python scripts/14_qa_links.py
+python scripts/41_qa_links.py
 ```
 
 It joins your labels to the withheld keys and reports precision per score band with
