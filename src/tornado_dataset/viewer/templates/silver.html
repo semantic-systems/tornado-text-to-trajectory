@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silver links viewer</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='silver.css', v=v) }}">
+</head>
+<body class="blind">
+<header>
+  <h1>Silver links</h1>
+  <span class="count" id="count">{{ facets.total }} tornadoes · {{ '{:,}'.format(facets.n_texts) }} texts</span>
+  <div class="filters">
+    <input type="search" id="q" placeholder="name, county, state, title, sheet row (s012)…" autocomplete="off">
+    <select id="year">
+      <option value="">any year</option>
+      {% for y in facets.years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+    </select>
+    <select id="geometry" title="the tornado's best geometry">
+      <option value="">any geometry</option>
+      <option value="dat_polygon">DAT polygon</option>
+      <option value="dat_line">DAT line only</option>
+      <option value="spc_track">SPC track only</option>
+    </select>
+    <select id="strength" class="strength-only" title="a linked text of this strength">
+      <option value="">any strength</option>
+      {% for s in facets.strengths %}<option value="{{ s }}">has {{ s }}</option>{% endfor %}
+    </select>
+    <select id="has">
+      <option value="">all tornadoes</option>
+      <option value="news">with cited news</option>
+      <option value="lexis">with LexisNexis</option>
+      {% if facets.has_sheet %}<option value="sheet">in the hand-check sheet</option>{% endif %}
+    </select>
+    <select id="sort">
+      <option value="date">by date</option>
+      <option value="news">most news</option>
+      <option value="deaths">most deaths</option>
+    </select>
+    <button id="blind" aria-pressed="true"
+            title="hide or show the automatic strengths and checks (b)">strengths hidden</button>
+  </div>
+  <span class="hint"><kbd>j</kbd>/<kbd>k</kbd> tornado · <kbd>/</kbd> search · <kbd>b</kbd> strengths</span>
+</header>
+
+<main>
+  <div id="list"><div class="spinner">loading…</div></div>
+  <div id="detail">
+    <div class="empty">
+      <p>Pick a tornado on the left. Each one shows its path — DAT's damage polygon and
+        track, SPC's straight track, Storm Events' county segments — and every Wikipedia
+        passage and news article stage 44 linked to it, with its full text.</p>
+      <p>Strengths and checks are hidden so browsing does not bias the hand check; press
+        <kbd>b</kbd> to show them. A sheet row id such as <code>s012</code> in the search
+        finds that row's tornado.</p>
+    </div>
+  </div>
+</main>
+
+<script src="{{ url_for('static', filename='vendor/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='silver.js', v=v) }}"></script>
+</body>
+</html>

@@ -117,6 +117,7 @@ python scripts/50_watch_systems.py sheets     # hand checks, then: review, check
 # tool
 python scripts/viewer.py               # browse the corpus at localhost:8799
 python scripts/viewer.py --corpus mediacloud  # inspect retrieved full texts
+python scripts/viewer.py --corpus silver      # silver links: tornado path + linked Wikipedia and news
 python scripts/browse_wikipedia.py    # browse the Wikipedia tables at localhost:8001 (Datasette)
 ```
 

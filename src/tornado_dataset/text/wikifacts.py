@@ -52,9 +52,14 @@ MIN_SHARE = 0.5          # share of the heading's place names the row must name
 
 
 def fold(text: str) -> str:
-    """Lower case, no accents, hyphens and dashes as spaces."""
+    """Lower case, no accents, anything but letters and digits as one space.
+
+    Names and the texts they are looked for in are folded alike, so a name is
+    found as whole words whatever punctuation follows it ("Greenfield, Iowa",
+    "Perryton." and "St. Louis" ↔ "st louis").
+    """
     text = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode()
-    return re.sub(r"[\s\-–—/]+", " ", text.lower()).strip()
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
 def states_in(text: str) -> set[str]:

@@ -695,6 +695,12 @@ the news corpora. US tornadoes only, inside the dataset window.
   publisher or archive.org). A blind hand-check measures each match tier;
   `outputs/wikipedia_reference_coverage_report.md` has the figures, and the
   labels are kept in `outputs/annotation/wikipedia_ref_handcheck_labels.csv`.
+  The same `match` checks Media Cloud when `data/processed/mediacloud_filtered.csv.gz`
+  is present — by normalised URL first, since Media Cloud keeps URLs, then by
+  the title tiers with outlets as domains (no content tier: the export has no
+  text) — and reports each held article's stage 30 label and both corpora side
+  by side in `outputs/wikipedia_reference_coverage_mediacloud_report.md`. GDELT
+  is left out: its sweep covers a fraction of the window.
 - **Stage 28 (passages).** Cuts the pinned revisions into text records:
   `tornado_article` and `tornado_section` (one tornado → hazard level),
   `outbreak_overview` and `yearly_event` (→ episode level). Each record keeps the
@@ -757,18 +763,34 @@ tornado, and through stage 14's links to DAT hazards and their polygons. The
 news a passage cites inherits its tornado when every tornado-level passage
 citing it agrees.
 
+Each link carries its tornado's best **geometry**: a DAT damage polygon, else
+DAT's track line, else SPC's straight start–end track (stage 15's SPC hazard,
+for a tornado DAT has no survey of), else none; DAT hazards are also found
+through the SPC track the Storm Events chain matches (`dat_via`), and the
+stage 15 episode is given (`episode_uids`).
+
 Each link is checked against the Storm Events record: the passage's date (±1
 day, or within the outbreak for a section dated by its start), state, places
 (heading towns among the counties or in the narrative) and rating. The result
 is a **strength** — strong, medium, weak, rejected (`text.silver`); a news
 article takes its weakest citing passage's, lowered if it was published before
-the event or more than 60 days after, or names none of the tornado's places.
+the event or more than 60 days after. A news article whose intact text names
+none of the tornado's places — heading towns, counties, Storm Data's begin and
+end towns anywhere; stage 16's GNIS towns within 25 km of the path only as
+capitalised proper names, since many are also words ("Power", North Dakota) —
+is **rejected**: Wikipedia cites it for something else (the Enderlin article
+cites a retrospective on the 1978 Elgin tornado for "deadliest since"). So is a
+passage whose cited record disagrees on date or state (the 2025 Marion,
+Illinois article cites Enderlin's record). Rejected links stay in the file with
+a `reject_reason`, out of the evaluation set.
 Outbreak overviews and yearly events link at episode level, to the set of
 tornadoes they cite.
 
 ```bash
 python scripts/13_fetch_references.py          # Storm Events (SPC by hand)
 python scripts/14_match_references.py          # needs stage 12's hazards
+python scripts/15_build_episodes.py            # SPC hazards and episodes
+python scripts/16_enrich_geography.py          # towns near each path (optional)
 python scripts/44_wikipedia_silver_links.py    # offline
 ```
 
@@ -778,6 +800,22 @@ key in `data/interim/`). Label it `same_tornado` · `other_tornado` ·
 `outbreak_only` · `not_about_a_tornado` · `unsure` and save it as
 `wikipedia_silver_handcheck_labels.csv`; until then the strengths rank links,
 they do not measure them.
+
+The same links, as **Media Cloud stories**: stage 27 finds a cited article in
+Media Cloud (URL, same-outlet headline, or wire copy), stage 29 carries the
+story ids (`mc_ids`, `mc_tier`, `mc_label`), and stage 44 writes
+`data/processed/wikipedia_silver_mediacloud.csv` — one row per Media Cloud
+story with its tornado, strength and stage 30 label. A story several links
+name takes its tornado only when they agree, and the weakest strength.
+Count by `mc_dup_group`: one wire story is often dozens of rows.
+
+`python scripts/viewer.py --corpus silver` shows the set one tornado at a time:
+its path on a map (DAT polygon and line, SPC track, Storm Events' county
+segments), the Storm Events narrative, and every linked passage and news
+article with its URL and full text, the tornado's counties and the heading's
+places highlighted. Strengths and checks start hidden (`b` shows them), so
+browsing does not bias the hand check; a sheet row id (`s012`) in the search
+finds its tornado.
 
 
 ### Full-text quality — `33_fetch_fulltext.py quality`

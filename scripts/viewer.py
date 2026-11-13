@@ -11,6 +11,12 @@ stage 33 retrieved, their quality flags, the headline label beside the full-text
 label from stage 34, and one-key verdicts saved for stage 34's ``compare``.
 
     python scripts/viewer.py --corpus mediacloud
+
+``--corpus silver`` shows stage 44's silver links: per tornado, its path on a map
+(DAT polygon and line, SPC track, Storm Events segments) and the Wikipedia
+passages and news linked to it, with URLs and full texts.
+
+    python scripts/viewer.py --corpus silver
 """
 
 from __future__ import annotations
@@ -24,10 +30,11 @@ from tornado_dataset import config
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--corpus", choices=("lexisnexis", "mediacloud"),
+    parser.add_argument("--corpus", choices=("lexisnexis", "mediacloud", "silver"),
                         default="lexisnexis",
                         help="lexisnexis: articles and their event links (default); "
-                             "mediacloud: retrieved full texts and their labels")
+                             "mediacloud: retrieved full texts and their labels; "
+                             "silver: stage 44's tornadoes with their paths and linked texts")
     parser.add_argument("--tag", default=None,
                         help="lexisnexis: dataset tag (default: the config window); "
                              "mediacloud: stage 34 --tag whose labels to show")
@@ -37,7 +44,10 @@ def main() -> None:
     args = parser.parse_args()
 
     # Imported here so each view only needs what it reads.
-    if args.corpus == "mediacloud":
+    if args.corpus == "silver":
+        from tornado_dataset.viewer.silver import create_silver_app
+        app = create_silver_app(args.tag)
+    elif args.corpus == "mediacloud":
         from tornado_dataset.viewer.fulltext import create_fulltext_app
         app = create_fulltext_app(args.tag)
     else:

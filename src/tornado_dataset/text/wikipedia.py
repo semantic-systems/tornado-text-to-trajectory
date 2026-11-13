@@ -91,6 +91,12 @@ _YEAR_CATEGORY = re.compile(r"^Category:Tornadoes of (\d{4})$")
 _OUTBREAK_WORDS = re.compile(
     r"outbreak|derecho|storm complex|severe weather sequence|tornadoes of \w+ \d", re.I)
 _TORNADO_TITLE = re.compile(r"tornado(es)?$", re.I)
+# Another kind of event: its article may carry a tornado infobox for one tornado
+# it spawned ("February 13–17, 2021 North American winter storm"), but its text
+# is about the storm, not that tornado.
+_OTHER_EVENT = re.compile(r"winter storm|blizzard|ice storm|hail ?storm|snowstorm|hurricane|"
+                          r"tropical (?:storm|depression)|typhoon|cyclone|flood|nor'?easter|"
+                          r"heat wave|cold wave|wildfire|dust storm", re.I)
 # "April 13 event", "June 16": older outbreak articles group the confirmed-
 # tornado tables by day, as siblings of the per-tornado subsections.
 _DAY_HEADING = re.compile(
@@ -321,7 +327,8 @@ def classify(page: dict) -> str:
 
     By title first — Wikipedia's naming conventions for these pages are strict —
     then by infobox. A hurricane or a town article that mentions a tornado is
-    ``other``: its tornado text is a paragraph inside something else.
+    ``other``: its tornado text is a paragraph inside something else — also
+    when a winter storm's or hailstorm's article carries a tornado infobox.
     """
     title = page["title"]
     if "Category:Disambiguation pages" in page.get("categories", ()):
@@ -338,7 +345,8 @@ def classify(page: dict) -> str:
         return "outbreak"
     if _TORNADO_TITLE.search(title):
         return "tornado"
-    if "Template:Infobox weather event/Tornado" in page["templates"]:
+    if "Template:Infobox weather event/Tornado" in page["templates"] \
+            and not _OTHER_EVENT.search(title):
         return "tornado"
     return "other"
 

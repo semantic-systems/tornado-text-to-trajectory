@@ -376,3 +376,77 @@ def outlet_type(domain: str, agency: str = "") -> str:
     if _CALLSIGN.match(domain or "") or re.search(r"(news|tv)\d+\.com$", domain or ""):
         return "local_broadcast"
     return "local_other"
+
+
+# ── Media Cloud ──────────────────────────────────────────────────────────────
+# Media Cloud carries each story's URL and names its outlet by domain, so the
+# strongest evidence is the URL itself; the title tiers then catch the same
+# article under another URL (http/https, a moved slug, an AMP page) and, as
+# with LexisNexis, wire copy in another outlet. There is no content tier: the
+# export holds headlines and URLs, not text.
+MC_TIERS = ("url", "title_outlet", "title_syndicated", "title_fuzzy")
+MC_STRONG_TIERS = ("url", "title_outlet", "title_syndicated")
+
+
+def bare_domain(domain: str) -> str:
+    return str(domain or "").strip().lower().removeprefix("www.")
+
+
+class DomainOutlets:
+    """:class:`OutletIndex` for a corpus that names outlets by domain: a
+    citation's outlet is the corpus outlet with its domain, if there is one."""
+
+    def __init__(self, domains: Iterable[str]):
+        self.domains = {bare_domain(d) for d in domains} - {""}
+
+    def sources_for(self, domain: str, names: Iterable[str] = ()) -> frozenset[str]:
+        d = bare_domain(domain)
+        return frozenset([d]) if d in self.domains else frozenset()
+
+
+def mediacloud_frame(mc: pd.DataFrame) -> pd.DataFrame:
+    """Stage 30's Media Cloud table in the shape :func:`title_matches` reads."""
+    from .corpora import normalise_url
+    return pd.DataFrame({
+        "textref_uid": mc.id.astype(str), "headline": mc.title.fillna(""),
+        "source": mc.media_name.map(bare_domain), "pub_date": mc.publish_date.astype(str).str[:10],
+        "url_key": normalise_url(mc.url), "primary": mc.get("primary", pd.Series("", index=mc.index)),
+    })
+
+
+def mediacloud_matches(articles: pd.DataFrame, mc: pd.DataFrame) -> pd.DataFrame:
+    """Every Media Cloud story that passes a tier for a cited article, one row
+    per pair; ``mc`` from :func:`mediacloud_frame`."""
+    from .corpora import normalise_url
+    cols = ["article_key", "tier", "mc_id", "mc_headline", "mc_source", "mc_date", "mc_primary",
+            "day_gap", "outlet_match", "jaccard", "containment", "min_tokens"]
+    keyed = articles[articles.url != ""].assign(url_key=lambda a: normalise_url(a.url))
+    by_url = keyed[["article_key", "url_key"]].merge(mc, on="url_key")
+    url = pd.DataFrame({"article_key": by_url.article_key, "tier": "url",
+                        "mc_id": by_url.textref_uid, "mc_headline": by_url.headline,
+                        "mc_source": by_url.source, "mc_date": by_url.pub_date,
+                        "mc_primary": by_url.primary, "outlet_match": True})
+    titled = title_matches(articles, mc, DomainOutlets(mc.source))
+    primary = dict(zip(mc.textref_uid, mc.primary))
+    titled = titled.rename(columns={"textref_uid": "mc_id", "lexis_headline": "mc_headline",
+                                    "lexis_source": "mc_source", "lexis_date": "mc_date"})
+    titled["mc_primary"] = titled.mc_id.map(primary)
+    return pd.concat([url, titled], ignore_index=True).reindex(columns=cols)
+
+
+def mediacloud_xref(matches: pd.DataFrame) -> pd.DataFrame:
+    """Per cited article, the Media Cloud stories a strong tier found:
+    ``mc_ids`` (best tier first, then closest headline), ``mc_tier`` and
+    ``mc_label`` (stage 30's label) of the best. ``title_fuzzy`` is left out."""
+    cols = ["article_key", "mc_ids", "mc_tier", "mc_label"]
+    strong = matches[matches.tier.isin(MC_STRONG_TIERS)]
+    if strong.empty:
+        return pd.DataFrame(columns=cols)
+    order = {t: i for i, t in enumerate(MC_STRONG_TIERS)}
+    jac = pd.to_numeric(strong.jaccard, errors="coerce").fillna(1.0)
+    strong = (strong.assign(_o=strong.tier.map(order), _j=-jac)
+              .sort_values(["article_key", "_o", "_j"]).drop_duplicates(["article_key", "mc_id"]))
+    out = strong.groupby("article_key", sort=False).agg(
+        mc_ids=("mc_id", lambda s: "|".join(s.astype(str))),
+        mc_tier=("tier", "first"), mc_label=("mc_primary", "first")).reset_index()
+    return out[cols]

@@ -1,17 +1,17 @@
 # Wikipedia discovery — US tornado text sources and list census
 
-Generated 2026-11-13T13:27:44+00:00. Window 2010–2025, English Wikipedia, US only. Produced by `scripts/26_discover_wikipedia.py`.
+Generated 2026-11-13T18:12:13+00:00. Window 2010–2025, English Wikipedia, US only. Produced by `scripts/26_discover_wikipedia.py`.
 
 > **Scope.** Text sources are dedicated tornado articles, the per-tornado sections of outbreak articles, and the US event sections of the yearly `Tornadoes of <year>` pages. `List of …` pages are not text — their rows paraphrase the NCEI narrative they cite — but they are parsed into a census of every listed tornado, which is what the text sources are measured against.
 
 ## What was found
 
-1,030 distinct pages were returned by at least one channel; **249 are in scope**.
+1,030 distinct pages were returned by at least one channel; **247 are in scope**.
 
 | kind     |   pages |   median_words |
 |:---------|--------:|---------------:|
 | outbreak |     120 |           1832 |
-| tornado  |     113 |           2063 |
+| tornado  |     111 |           2063 |
 | yearly   |      16 |           5024 |
 
 The 120 outbreak articles hold **236 per-tornado sections** with a median of 515 words, 0 of them empty apart from a `{{Main}}` pointer or a table. 86 point to a dedicated article with `{{Main}}`, so a tornado can appear both as a section and as its own article. Linking will treat those as two texts about one hazard, not as two hazards.
@@ -26,7 +26,7 @@ The 16 yearly pages hold **386 US event sections** (87,599 words, median 183). E
 |-------:|-----------:|----------:|---------:|-------------------:|------------------------:|
 |   2010 |         10 |         7 |        1 |                 13 |                      36 |
 |   2011 |          8 |        21 |        1 |                 43 |                      24 |
-|   2012 |          8 |         9 |        1 |                 16 |                      17 |
+|   2012 |          8 |         8 |        1 |                 16 |                      17 |
 |   2013 |          8 |         7 |        1 |                 12 |                      15 |
 |   2014 |          5 |         3 |        1 |                 11 |                      18 |
 |   2015 |          6 |         3 |        1 |                  9 |                      18 |
@@ -35,7 +35,7 @@ The 16 yearly pages hold **386 US event sections** (87,599 words, median 183). E
 |   2018 |          4 |         1 |        1 |                  3 |                      24 |
 |   2019 |          8 |         6 |        1 |                 13 |                      23 |
 |   2020 |          8 |         7 |        1 |                 14 |                      26 |
-|   2021 |          7 |         7 |        1 |                 12 |                      31 |
+|   2021 |          7 |         6 |        1 |                 12 |                      31 |
 |   2022 |          8 |         4 |        1 |                 10 |                      24 |
 |   2023 |          9 |        14 |        1 |                 19 |                      24 |
 |   2024 |         13 |         9 |        1 |                 24 |                      29 |
@@ -98,41 +98,40 @@ A page found by one channel only is the kind of page a different run would miss,
 
 | channel    |   raw hits |   in-scope pages | share of in-scope   |   only this channel |
 |:-----------|-----------:|-----------------:|:--------------------|--------------------:|
-| category   |        423 |              247 | 99%                 |                   0 |
-| navbox     |        298 |              240 | 96%                 |                   0 |
-| yearly     |        287 |              204 | 82%                 |                   0 |
-| search     |        712 |              233 | 94%                 |                   1 |
+| category   |        423 |              246 | 100%                |                   0 |
+| navbox     |        298 |              239 | 97%                 |                   0 |
+| yearly     |        287 |              203 | 82%                 |                   0 |
+| search     |        712 |              231 | 94%                 |                   0 |
 | wikidata   |        598 |              198 | 80%                 |                   0 |
 | list_links |        945 |              233 | 94%                 |                   1 |
-| main_link  |        262 |              215 | 86%                 |                   0 |
+| main_link  |        262 |              214 | 87%                 |                   0 |
 
-Pages by number of the 6 search channels that found them: 1 → 2, 2 → 3, 3 → 9, 4 → 16, 5 → 58, 6 → 161.
+Pages by number of the 6 search channels that found them: 1 → 1, 2 → 3, 3 → 9, 4 → 15, 5 → 58, 6 → 161.
 
 ### Pairwise agreement
 
 | pair                  |   both |   jaccard |
 |:----------------------|-------:|----------:|
-| category × navbox     |    240 |      0.97 |
-| category × yearly     |    204 |      0.83 |
-| category × search     |    232 |      0.94 |
+| category × navbox     |    239 |      0.97 |
+| category × yearly     |    203 |      0.83 |
+| category × search     |    231 |      0.94 |
 | category × wikidata   |    198 |      0.8  |
 | category × list_links |    232 |      0.94 |
-| navbox × yearly       |    198 |      0.8  |
-| navbox × search       |    226 |      0.91 |
+| navbox × yearly       |    197 |      0.8  |
+| navbox × search       |    225 |      0.92 |
 | navbox × wikidata     |    193 |      0.79 |
 | navbox × list_links   |    229 |      0.94 |
-| yearly × search       |    195 |      0.81 |
+| yearly × search       |    194 |      0.81 |
 | yearly × wikidata     |    169 |      0.73 |
 | yearly × list_links   |    194 |      0.8  |
-| search × wikidata     |    198 |      0.85 |
-| search × list_links   |    221 |      0.9  |
+| search × wikidata     |    198 |      0.86 |
+| search × list_links   |    221 |      0.91 |
 | wikidata × list_links |    192 |      0.8  |
 
 ### Found by at most one search channel — worth a look
 
 | title                            | kind     |   year | channels   |
 |:---------------------------------|:---------|-------:|:-----------|
-| 2012 Hawaii hailstorm            | tornado  |   2012 | search     |
 | June 2012 North American derecho | outbreak |   2012 | list_links |
 
 ## What was excluded, and why
@@ -141,13 +140,13 @@ Pages by number of the 6 search channels that found them: 1 → 2, 2 → 3, 3 �
 |:--------------------|--------:|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | out_of_window       |     385 | 1893 Pomeroy tornado; 1896 Sherman tornado; 1896 St. Louis–East St. Louis tornado; Tornado outbreaks of mid-to-late May, 1896                                                                    |
 | kind:list           |     187 | List of F4 tornadoes (1950–1959); List of tornadoes in the outbreak sequence of April 2–5, 1957; List of F4 tornadoes (1960–1969); List of tornadoes in the outbreak sequence of May 14–31, 1962 |
-| kind:other          |     126 | 1904 Waconia Cyclone; Great Blue Norther of November 11, 1911; Hurricane Carla; Hurricane Isbell                                                                                                 |
-| no_year             |      43 | 1680 Lexington, Massachusetts tornado; 1764 Woldegk tornado; 1835 Middlesex County tornado; 1845 Montville tornado                                                                               |
-| not_us              |      19 | 2011 Goderich tornado; 2012 Buenos Aires tornadoes; 2013 Brahmanbaria tornado; 2016 Funing tornado                                                                                               |
+| kind:other          |     131 | 1904 Waconia Cyclone; Great Blue Norther of November 11, 1911; Hurricane Carla; Hurricane Isbell                                                                                                 |
+| no_year             |      41 | 1680 Lexington, Massachusetts tornado; 1764 Woldegk tornado; 1835 Middlesex County tornado; 1845 Montville tornado                                                                               |
+| not_us              |      18 | 2011 Goderich tornado; 2012 Buenos Aires tornadoes; 2013 Brahmanbaria tornado; 2016 Funing tornado                                                                                               |
 | kind:disambiguation |      13 | May 2008 tornado outbreak; June 2010 tornado outbreak; May 2010 tornado outbreak; 2011 outbreak                                                                                                  |
 | kind:index          |       8 | 1945 tornado outbreak; Tornado outbreak sequence of May 2019; Tornado outbreak sequence of May 19–27, 2024; Tornadoes in Bermuda                                                                 |
 
-**19 tornado/outbreak pages in the window were excluded as not US**, because none of their categories names a state or the United States. Most should be Canadian or European; check the list for US pages with missing categories:
+**18 tornado/outbreak pages in the window were excluded as not US**, because none of their categories names a state or the United States. Most should be Canadian or European; check the list for US pages with missing categories:
 
 - 2011 Goderich tornado (2011)
 - 2012 Buenos Aires tornadoes (2012)
@@ -156,7 +155,6 @@ Pages by number of the 6 search channels that found them: 1 → 2, 2 → 3, 3 �
 - 2018 South America tornado outbreak (2018)
 - 2019 Bara–Parsa tornado (2019)
 - 2019 Havana tornado (2019)
-- 2019–20 United Kingdom floods (2019)
 - 2021 South Moravia tornado (2021)
 - 2022 Russia–Ukraine tornado outbreak (2022)
 - May 2022 Canadian derecho (2022)

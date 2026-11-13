@@ -66,6 +66,10 @@ NEWS_JSONL = config.PROCESSED_DIR / "wikipedia_cited_news.jsonl"
 TEXTREFS_CSV = config.PROCESSED_DIR / "wikipedia_cited_news_textrefs.csv"
 CITATIONS_CSV = config.PROCESSED_DIR / "wikipedia_cited_news_citations.csv"
 LEXIS_XREF_CSV = config.PROCESSED_DIR / "wikipedia_cited_lexisnexis.csv"
+# Stage 27's Media Cloud matches (optional): which Media Cloud stories a cited
+# article is, so the silver links can be evaluated on that corpus too.
+MC_MATCHES_CSV = config.INTERIM_DIR / "wikipedia_ref_matches_mediacloud.csv"
+MC_COLUMNS = ("mc_ids", "mc_tier", "mc_label")
 REPORT = config.OUTPUT_DIR / "wikipedia_cited_news_report.md"
 
 COLLECTION = "wikipedia_citations"
@@ -252,6 +256,13 @@ def build() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     cites_new = cites_new.assign(
         textref_uid=cites_new.article_key.map(dict(zip(frame.article_key, frame.textref_uid))))
+    mcx = (rc.mediacloud_xref(pd.read_csv(MC_MATCHES_CSV, keep_default_na=False))
+           .set_index("article_key") if MC_MATCHES_CSV.exists() else None)
+    if mcx is None:
+        print(f"no {MC_MATCHES_CSV.name} — no Media Cloud ids (run stage 27 match)")
+    for table in (frame, xref):
+        for col in MC_COLUMNS:
+            table[col] = table.article_key.map(mcx[col]).fillna("") if mcx is not None else ""
     return frame, cites_new, xref
 
 
@@ -402,6 +413,21 @@ def write_report(frame: pd.DataFrame, cites: pd.DataFrame, xref: pd.DataFrame) -
         "see the examples in stage 27's hand-check.",
         "",
     ]
+    held = frame[frame.mc_ids != ""]
+    if len(held) or (xref.mc_ids != "").any():
+        lines += [
+            "## Also in Media Cloud",
+            "",
+            f"{len(held):,} of these records and {(xref.mc_ids != '').sum()} of the "
+            "LexisNexis cross-references are also stories in our Media Cloud export "
+            "(stage 27's strong tiers: `mc_ids`, best first; `mc_tier`; `mc_label` is stage "
+            "30's label). They stay records here — Media Cloud holds no text — and carry "
+            "the ids so the silver links (stage 44) can be evaluated on Media Cloud.",
+            "",
+            held.mc_tier.value_counts().rename_axis("tier").reset_index(name="records")
+            .to_markdown(index=False),
+            "",
+        ]
     REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

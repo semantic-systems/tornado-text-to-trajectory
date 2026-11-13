@@ -23,6 +23,14 @@ published (see the legal note in :mod:`tornado_dataset.text.fulltext`).
 
 LexisNexis input is ``outputs/lexisnexis_articles.jsonl``, written by stage 23
 (``scripts/23_import_lexisnexis.py``) from the RTF exports.
+
+``match`` also checks **Media Cloud** when ``data/processed/mediacloud_filtered.csv.gz``
+(stage 30: every story of the stage 22 export, with its label) is present: by
+URL, then by the same title tiers (``refcoverage.MC_TIERS``). It writes
+``data/interim/wikipedia_ref_matches_mediacloud.csv``, ``mc_*`` columns on the
+cited-article table and ``outputs/wikipedia_reference_coverage_mediacloud_report.md``,
+which also sets the two corpora side by side. GDELT is left out: its sweep
+covers a fraction of the window.
 """
 
 from __future__ import annotations
@@ -58,6 +66,9 @@ HANDCHECK_LABELS = config.OUTPUT_DIR / "annotation" / "wikipedia_ref_handcheck_l
 STORE = config.RAW_DIR / "wikipedia" / "ref_fulltext.jsonl"
 LEXIS_JSONL = config.OUTPUT_DIR / "lexisnexis_articles.jsonl"
 REPORT = config.OUTPUT_DIR / "wikipedia_reference_coverage_report.md"
+MC_CSV = config.PROCESSED_DIR / "mediacloud_filtered.csv.gz"
+MC_MATCHES_CSV = config.INTERIM_DIR / "wikipedia_ref_matches_mediacloud.csv"
+MC_REPORT = config.OUTPUT_DIR / "wikipedia_reference_coverage_mediacloud_report.md"
 
 
 # ── extract ──────────────────────────────────────────────────────────────────
@@ -182,6 +193,7 @@ def match(args) -> None:
     else:
         articles["content_containment"] = pd.NA
         articles["content_textref"] = pd.NA
+    mc = match_mediacloud(articles)
     articles.to_csv(ARTICLES_CSV, index=False)
 
     write_handcheck(articles, matches, lexis, texts)
@@ -199,6 +211,158 @@ def match(args) -> None:
           f"({articles.matched_strong.mean():.1%}); in universe "
           f"{articles[articles.in_universe].matched_strong.mean():.1%}")
     print(f"wrote {MATCHES_CSV.name}, {HANDCHECK_CSV.name}, {REPORT.name}")
+    if mc is not None:
+        print(f"Media Cloud strong match: {articles.mc_matched_strong.sum():,}/{len(articles):,} "
+              f"({articles.mc_matched_strong.mean():.1%}); either corpus "
+              f"{(articles.mc_matched_strong | articles.matched_strong).mean():.1%}")
+        print(f"wrote {MC_MATCHES_CSV.name}, {MC_REPORT.name}")
+
+
+# ── Media Cloud ──────────────────────────────────────────────────────────────
+def match_mediacloud(articles: pd.DataFrame) -> pd.DataFrame | None:
+    """Media Cloud tiers on ``articles`` (``mc_*`` columns, in place); the
+    match table and report. ``None`` when stage 30's table is absent."""
+    if not MC_CSV.exists():
+        print(f"no {MC_CSV.name} — Media Cloud skipped")
+        return None
+    print("loading Media Cloud …")
+    mc = rc.mediacloud_frame(pd.read_csv(MC_CSV, keep_default_na=False, low_memory=False))
+    print("Media Cloud tiers …")
+    matches = rc.mediacloud_matches(articles, mc)
+    matches.to_csv(MC_MATCHES_CSV, index=False)
+    for tier in rc.MC_TIERS:
+        articles[f"mc_{tier}"] = articles.article_key.isin(
+            set(matches.article_key[matches.tier == tier]))
+    articles["mc_in_universe"] = articles.domain.map(rc.bare_domain).isin(set(mc.source))
+    articles["mc_matched_strong"] = articles[[f"mc_{t}" for t in rc.MC_STRONG_TIERS]].any(axis=1)
+    articles["mc_same_article"] = articles.mc_url | articles.mc_title_outlet
+    order = {t: i for i, t in enumerate(rc.MC_TIERS)}
+    best = (matches.assign(_o=matches.tier.map(order), _j=-matches.jaccard.fillna(1))
+            .sort_values(["article_key", "_o", "_j"]).drop_duplicates("article_key")
+            .set_index("article_key"))
+    articles["mc_tier"] = articles.article_key.map(best.tier).fillna("")
+    articles["mc_id"] = articles.article_key.map(best.mc_id).fillna("")
+    articles["mc_primary"] = articles.article_key.map(best.mc_primary).fillna("")
+    write_mc_report(articles, matches, mc)
+    return mc
+
+
+def _year(a) -> str:
+    if a.pub_date[:4].isdigit():
+        return a.pub_date[:4]
+    years = [y for y in str(a.page_years).split("|") if y]
+    return years[0] if years else ""
+
+
+def write_mc_report(articles: pd.DataFrame, matches: pd.DataFrame, mc: pd.DataFrame) -> None:
+    n = len(articles)
+    uni = articles[articles.mc_in_universe]
+    lines = [
+        "# Wikipedia reference coverage — Media Cloud",
+        "",
+        f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')} by "
+        "`scripts/27_wikipedia_reference_coverage.py match`.",
+        "",
+        "> **Question.** Of the news articles English Wikipedia cites about US tornadoes "
+        f"({config.WINDOW_START.year}–{config.WINDOW_END.year}), how many are in our Media "
+        f"Cloud export ({len(mc):,} stories from the US national and state & local "
+        "collections matching `tornado* AND (wind? OR storm? OR rain? OR damage? OR "
+        "emergency)`, stage 22)? And would our filter keep them? The same question as "
+        "the LexisNexis report, so the two can be set side by side.",
+        "",
+        "## Coverage",
+        "",
+        f"**{n:,} distinct cited articles** (stage 27 `extract`). **In universe:** "
+        f"{len(uni):,} ({len(uni) / n:.0%}) come from an outlet (domain) with at least one "
+        "story in our export — a proxy, as for LexisNexis, so in-universe recall is "
+        "optimistic and overall recall the conservative figure.",
+        "",
+    ]
+    rows, cumulative = [], pd.Series(False, index=articles.index)
+    for tier in rc.MC_TIERS:
+        hit = articles[f"mc_{tier}"]
+        cumulative = cumulative | hit if tier in rc.MC_STRONG_TIERS else cumulative
+        rows.append({"tier": tier, "articles": int(hit.sum()), "overall": _share(int(hit.sum()), n),
+                     "in universe": _share(int(hit[articles.mc_in_universe].sum()), len(uni))})
+    strong, same = articles.mc_matched_strong, articles.mc_same_article
+    rows.append({"tier": "**same article** (url or title_outlet)", "articles": int(same.sum()),
+                 "overall": _share(int(same.sum()), n),
+                 "in universe": _share(int(same[articles.mc_in_universe].sum()), len(uni))})
+    rows.append({"tier": "**strong** (+ title_syndicated)", "articles": int(strong.sum()),
+                 "overall": _share(int(strong.sum()), n),
+                 "in universe": _share(int(strong[articles.mc_in_universe].sum()), len(uni))})
+    lines += [_table(pd.DataFrame(rows)), "",
+              "`url`: the citation's URL, normalised (scheme, `www`, tracking parameters and "
+              "fragment removed), is a story's URL. `title_outlet`: same outlet (domain), "
+              "±3 days, headlines agree — the same article under another URL. "
+              "`title_syndicated`: another outlet, ±3 days, near-identical headline — the same "
+              "wire story, not the cited copy. `title_fuzzy`: same outlet, ±7 days, headlines "
+              "partly agree — weak, reported apart. Tiers overlap; each row counts articles "
+              "with at least one match in that tier. Undated citations are matched within "
+              "their outlet and the event year only.", ""]
+    held = articles[strong]
+    labels = held.mc_primary.replace("", "unlabelled").value_counts()
+    lines += ["## Would our filter keep them?", "",
+              f"Stage 30's label on the best-matching story of the {len(held):,} held articles. "
+              "Only `EVENT` stories go on to linking; the others are what the filter drops.", "",
+              _table(labels.rename_axis("label").reset_index(name="articles")
+                     .assign(share=lambda t: (t.articles / max(len(held), 1)).map("{:.0%}".format))), ""]
+    lex, mcs = articles.matched_strong, strong
+    either = lex | mcs
+    lines += ["## LexisNexis and Media Cloud together", "",
+              _table(pd.DataFrame([
+                  {"held by": "LexisNexis (strong)", "articles": int(lex.sum()), "share": _share(int(lex.sum()), n)},
+                  {"held by": "Media Cloud (strong)", "articles": int(mcs.sum()), "share": _share(int(mcs.sum()), n)},
+                  {"held by": "both", "articles": int((lex & mcs).sum()), "share": _share(int((lex & mcs).sum()), n)},
+                  {"held by": "**either**", "articles": int(either.sum()), "share": _share(int(either.sum()), n)},
+                  {"held by": "Media Cloud and labelled EVENT", "articles": int((mcs & (articles.mc_primary == "EVENT")).sum()),
+                   "share": _share(int((mcs & (articles.mc_primary == "EVENT")).sum()), n)},
+              ])), "",
+              "LexisNexis *strong* is its own report's: `title_outlet`, `title_syndicated` "
+              "or `content`. A cited article held by neither is missing from both corpora.", ""]
+    by = articles.assign(year=[_year(a) for a in articles.itertuples()], either=either)
+    by = by[by.year.str.fullmatch(r"\d{4}")]
+    per_year = by.groupby("year").agg(cited=("article_key", "size"), lexisnexis=("matched_strong", "mean"),
+                                      mediacloud=("mc_matched_strong", "mean"), either=("either", "mean"))
+    lines += ["### By year of the article", "",
+              "Media Cloud's collections are thin before 2017 (stage 22 holds 3,050 stories "
+              "for 2010, 79,619 for 2019).", "",
+              per_year.reset_index().to_markdown(index=False, floatfmt=".0%"), ""]
+    per_type = articles.assign(either=either).groupby("outlet_type").agg(
+        cited=("article_key", "size"), lexisnexis=("matched_strong", "mean"),
+        mediacloud=("mc_matched_strong", "mean"), either=("either", "mean"))
+    lines += ["### By kind of outlet", "",
+              per_type.sort_values("cited", ascending=False).reset_index()
+              .to_markdown(index=False, floatfmt=".0%"), ""]
+    miss = (uni.assign(outlet=uni.domain.map(rc.bare_domain))
+            .groupby("outlet").agg(cited=("article_key", "size"),
+                                   held=("mc_matched_strong", "sum"))
+            .query("cited >= 5").assign(missed=lambda t: t.cited - t.held)
+            .sort_values("missed", ascending=False).head(20).reset_index())
+    lines += ["### In-universe outlets with the most misses", "",
+              "Cited articles from outlets our export does carry, but that no strong tier "
+              "found: either the story never matched the query (it has to say \"tornado\" "
+              "and a storm word) or Media Cloud's feed of that outlet is partial.", "",
+              _table(miss), ""]
+    out = articles[~articles.mc_in_universe]
+    lines += ["### Most-cited outlets not in our export", "",
+              _table(out.assign(outlet=out.domain.map(rc.bare_domain)).groupby("outlet").size()
+                     .rename("cited").sort_values(ascending=False).head(20).reset_index()), ""]
+    lines += [
+        "## Limitations",
+        "",
+        "1. **Recall on what Wikipedia cites**, which leans to national, wire and online "
+        "sources — Media Cloud's own strength, so this figure flatters it more than the "
+        "LexisNexis one flatters LexisNexis.",
+        "2. **The universe is a proxy** (domains present in our export).",
+        "3. **No content tier**: Media Cloud's export has no text, so a story re-headlined "
+        "under a new URL is missed; `url` and `title_outlet` are a lower bound on the same article.",
+        "4. **Not hand-checked.** `url` needs none; the title tiers use the LexisNexis "
+        "report's thresholds, whose hand check is in that report.",
+        "5. **The query** reaches only stories that say \"tornado\" and a storm word; a "
+        "cited aftermath story that says neither is out of scope by construction.",
+    ]
+    MC_REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _lede(text: str, words: int = 80) -> str:

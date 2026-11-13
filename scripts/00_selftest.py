@@ -284,6 +284,41 @@ def wikipedia_pages_are_classified_and_scoped() -> None:
                                "templates": set()}) == "list"
     assert wikipedia.classify({"title": "December 2021 tornado outbreak", "templates": set(),
                                "categories": {"Category:Disambiguation pages"}}) == "disambiguation"
+    box = {"Template:Infobox weather event/Tornado"}
+    assert wikipedia.classify({"title": "2013 Moore tornado", "templates": box}) == "tornado"
+    assert wikipedia.classify({"title": "February 13–17, 2021 North American winter storm",
+                               "templates": box}) == "other", \
+        "a winter storm's tornado infobox does not make the storm a tornado article"
+
+
+def cited_news_is_found_in_media_cloud() -> None:
+    """A citation is in Media Cloud by its URL, or by headline in its own outlet;
+    another outlet's copy is only the syndicated story."""
+    import pandas as pd
+    from tornado_dataset.text import refcoverage as rc
+    mc = rc.mediacloud_frame(pd.DataFrame({
+        "id": ["m1", "m2", "m3"], "publish_date": ["2013-05-20", "2013-05-21", "2013-05-21"],
+        "title": ["Tornado hits Moore", "Moore tornado death toll rises to 24 after search",
+                  "Moore tornado death toll rises to 24 after search"],
+        "url": ["https://www.koco.com/a/1?utm_source=x", "https://koco.com/b-new",
+                "https://wral.com/c"],
+        "media_name": ["koco.com", "www.koco.com", "wral.com"],
+        "primary": ["EVENT", "EVENT", "EVENT"]}))
+    base = {"work": "", "publisher": "", "agency": "", "via": "", "date_precision": "day",
+            "page_years": "2013"}
+    articles = pd.DataFrame([
+        {**base, "article_key": "a", "url": "http://koco.com/a/1", "domain": "koco.com",
+         "title": "Something else entirely here", "pub_date": "2013-05-20"},
+        {**base, "article_key": "b", "url": "https://koco.com/b-old", "domain": "koco.com",
+         "title": "Moore tornado death toll rises to 24 after search", "pub_date": "2013-05-21"},
+        {**base, "article_key": "c", "url": "https://kfor.com/c", "domain": "kfor.com",
+         "title": "Moore tornado death toll rises to 24 after search", "pub_date": "2013-05-21"}])
+    m = rc.mediacloud_matches(articles, mc)
+    tiers = m.groupby("article_key").tier.agg(set).to_dict()
+    assert tiers["a"] == {"url"}, "scheme, www and tracking parameters do not hide a URL"
+    assert "title_outlet" in tiers["b"], "a moved URL is still the outlet's article"
+    assert tiers["c"] == {"title_syndicated"}, "another outlet's copy is the story, not the article"
+    assert rc.DomainOutlets(["www.koco.com"]).sources_for("koco.com") == {"koco.com"}
 
 
 def wikipedia_references_keep_their_section() -> None:
@@ -533,7 +568,9 @@ def silver_links_check_against_storm_events() -> None:
         "begin_utc": ["2011-04-27 21:43", "2011-04-27 21:59", "2025-06-21 01:00"],
         "STATE": ["ALABAMA", "ALABAMA", "NORTH DAKOTA"], "CZ_NAME": ["TUSCALOOSA", "JEFFERSON", "CASS"],
         "TOR_F_SCALE": ["EF3", "EF4", "EF5"], "TOR_LENGTH": [20, 60, 12], "DEATHS_DIRECT": [10, 54, 3],
-        "EVENT_NARRATIVE": ["The tornado entered Tuscaloosa.", "", "Near Enderlin."]})
+        "EVENT_NARRATIVE": ["The tornado entered Tuscaloosa.", "", "Near Enderlin."],
+        "BEGIN_LOCATION": ["TUSCALOOSA", "BIRMINGHAM", "ENDERLIN"],
+        "END_LOCATION": ["COKER", "PINSON", "ENDERLIN"]})
     assert silver.local_date("27-APR-11 15:43:00") == "2011-04-27"
     tors = silver.tornadoes(se)
     assert tors["setor_1"]["rating"] == "EF4" and tors["setor_1"]["event_ids"] == ["1", "2"]
@@ -549,10 +586,46 @@ def silver_links_check_against_storm_events() -> None:
     cands = {"setor_1": {**good, "evidence": {"prose", "infobox"}},
              "setor_3": {**far, "evidence": {"prose"}}}
     assert silver.choose(cands) == ("setor_1", "chosen")
+    twin = {**good, "rating_ok": False}
+    assert silver.choose({"a": {**twin, "evidence": {"prose"}},
+                          "b": {**good, "evidence": {"prose"}}}) == ("b", "chosen"), \
+        "between two consistent tornadoes, the one more checks agree with"
     late = silver.news_checks(published="2021-12-09", event_date="2011-04-27",
                               text="Ten years after Tuscaloosa", places=["tuscaloosa"], counties=[])
     assert late["date_ok"] is False and late["mentions_place"] is True
     assert silver.news_strength(["strong", "medium"], late) == "weak"
+    assert "pinson" in tors["setor_1"]["places"], "Storm Data's end towns are places"
+    town = silver.news_checks(published="2011-04-28", event_date="2011-04-27",
+                              text="Damage in Pinson was severe", places=[], counties=[],
+                              towns=tors["setor_1"]["places"])
+    assert town["mentions_place"] is True
+    off = silver.news_checks(published="2025-07-04", event_date="2025-06-20",
+                             text="Grant County remembers the 1978 Elgin tornado",
+                             places=["enderlin"], counties=tors["setor_3"]["counties"],
+                             towns=tors["setor_3"]["places"])
+    assert silver.news_strength(["strong"], off) == "rejected", \
+        "an intact article naming none of the tornado's places is cited for something else"
+    unread = silver.news_checks(published="2025-06-21", event_date="2025-06-20", text="",
+                                places=["enderlin"], counties=[])
+    assert unread["mentions_place"] is None and silver.news_strength(["strong"], unread) == "strong"
+    headline = silver.news_checks(published="2025-06-21", event_date="2025-06-20", text="",
+                                  title="Enderlin tornado kills three", places=["enderlin"],
+                                  counties=[])
+    assert headline["mentions_place"] is True, "a headline naming the place counts"
+    comma = silver.news_checks(published="2024-05-22", event_date="2024-05-21",
+                               text="Greenfield, Iowa was hit.", places=["greenfield"], counties=[])
+    assert comma["mentions_place"] is True, "punctuation after a name does not hide it"
+    assert silver.names_in_prose(["Brimfield"], "The campground in Brimfield was hit.")
+    assert not silver.names_in_prose(["Power"], "Power lines fell. The power was out."), \
+        "a gazetteer town that is also a word counts only as a proper name"
+    links = pd.DataFrame({
+        "link_level": ["hazard"] * 4, "text_uid": ["n1", "n2", "n3", "n4"],
+        "tornado_key": ["t1", "t1", "t2", "t3"], "strength": ["strong", "medium", "strong", "rejected"],
+        "mediacloud_ids": ["m1|m2", "m2", "m3|m1", "m9"]})
+    items, conflicts = silver.corpus_items(links, "mediacloud_ids")
+    got = dict(zip(items.item_id, zip(items.tornado_key, items.strength)))
+    assert got == {"m2": ("t1", "medium"), "m3": ("t2", "strong")} and conflicts == 1, \
+        "a story two links tie to different tornadoes is dropped; rejected links name nothing"
 
 
 def kappa_corrects_for_rare_flags() -> None:
@@ -1358,6 +1431,7 @@ for name, fn in [
     ("wikipedia sections are per tornado", wikipedia_sections_are_per_tornado),
     ("wikipedia pages are classified and scoped", wikipedia_pages_are_classified_and_scoped),
     ("wikipedia references keep their section", wikipedia_references_keep_their_section),
+    ("cited news is found in Media Cloud", cited_news_is_found_in_media_cloud),
     ("yearly sections keep US events only", yearly_sections_keep_us_events_only),
     ("census reads all three list layouts", census_reads_all_three_list_layouts),
     ("wikipedia prose keeps path numbers", wikipedia_prose_keeps_path_numbers),
