@@ -199,6 +199,47 @@ A pair table gives shared tokens and coverages. Each sample takes a verdict and
 a note, kept in the browser and exported as CSV, so a hand check of any stratum
 yields a precision or miss rate.
 
+### Names in the records — `scripts/26_collect_names.py`
+
+    python scripts/26_collect_names.py
+
+Offline; needs stages 12, 15, 16 and 20. No official database has a name field
+(SPC's list has none), but two sources label tornadoes as free text
+(`text/names.py`):
+
+- `pns_section` — the heading of the storm-survey section that is the hazard's
+  primary survey (stage 20), structured statements only: "Gum Springs Tornado",
+  "Tornado #3: Burlington Tornado (Elmore County)". The older free-text
+  statements' titles are ours, built from place names, and are left out.
+- `dat_event_id` — DAT's `event_id`, filled in as each office likes: "Toomsuba
+  Tornado", "GlenEllyn-Lombard", but also "19Jul2018_Tor15".
+
+Storm Events narratives are not used: "the X tornado" occurs in 448 of 23,189,
+mostly not as a name ("the Enhanced Fujita", "the Red River. The").
+
+Each label is kept as written (`name_raw`) and cleaned (`name`: rating, counter,
+date, ordinal and the word "tornado" dropped, glued forms like "HufTor"
+included; places, counties and states kept; ALL-CAPS title-cased, state codes
+and directions kept). `name_kind` is `code` where no word of three letters or
+more is left that says where ("TORNADO 1", "Reference", "NWS Damage Survey for
+… Event"). `place_match` checks the label against every GNIS populated place
+within 50 km of the track and the counties it crosses (stage 16), in each
+spelling (Saint/St., CamelCase "NorthOaks", "LaGrange"). One label per hazard is
+`is_preferred`: a name that matches a place, or that the other source agrees
+with; among those the one most labels agree with, then a survey heading before
+DAT's label, then the shorter. Agreement compares lower-case words without
+generic words and states, one set inside the other.
+
+Result (2010–2025): 14,253 labels on 9,856 hazards (survey headings 6,257, DAT
+7,996); a preferred name for 8,492 of 19,662 hazards (7,947 DAT, 545 SPC).
+Where both sources name a hazard (3,063) they agree on 2,507 (82%). The labels
+are local — Moore 2013 is "Newcastle-OKC-Moore", Rolling Fork 2023 "Rolling
+Fork-Silver City" — and absent before DAT was common (Joplin 2011 has none).
+`data/processed/hazard_names_<tag>.csv` (one row per label: `hazard_uid`,
+`source`, `textref_uid`, `name`, `name_raw`, `name_kind`, `place_match`,
+`is_preferred`) and a manifest; stage 35 reports it in section 6, with a fixed
+list of well-known tornadoes. Media names are out of scope (HANDOVER).
+
 ### Hand check of the text links — `scripts/35_qa_text.py links`
 
     python scripts/35_qa_text.py links

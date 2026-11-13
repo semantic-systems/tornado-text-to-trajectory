@@ -41,7 +41,7 @@ MODULES = [
     "tornado_dataset.dat.episode_table", "tornado_dataset.dat.references",
     "tornado_dataset.dat.spc_watches", "tornado_dataset.dat.merge_check",
     "tornado_dataset.dat.unmatched_check", "tornado_dataset.handcheck",
-    "tornado_dataset.text.link_check",
+    "tornado_dataset.text.link_check", "tornado_dataset.text.names",
     "tornado_dataset.geo.gazetteer", "tornado_dataset.geo.pixels",
     "tornado_dataset.text.tiering", "tornado_dataset.text.iem",
     "tornado_dataset.text.gdelt", "tornado_dataset.text.lexisnexis",
@@ -901,6 +901,43 @@ def hand_checks_weigh_and_validate() -> None:
     assert {"h1", "h9", "none", "cannot_tell"} <= set(link_check.LABELS)
 
 
+def record_labels_become_names() -> None:
+    """Labels cleaned and classed; checked against places; one preferred per hazard."""
+    import pandas as pd
+    from tornado_dataset.text import names as n
+    cases = {"Gladeville EF-1 Tornado": "Gladeville", "Fultondale Tornado": "Fultondale",
+             "Tornado #3: Burlington Tornado (Elmore County)": "Burlington (Elmore County)",
+             "LANIER COUNTY TORNADO": "Lanier County", "HawthorneTornado": "Hawthorne",
+             "TORNADO #1...THE MAYFLOWER/VILONIA/EL PASO TORNADO": "Mayflower/Vilonia/El Paso",
+             "Biloxi, MS Tornado - Harrison County": "Biloxi, MS - Harrison County",
+             "Garza5": "Garza", "240506 SW OKC": "SW Okc", "ADA TORNADO": "Ada"}
+    for raw, want in cases.items():
+        assert n.clean_name(raw) == want, (raw, n.clean_name(raw))
+    for code in ("19Jul2018_Tor15", "04152011", "TORNADO 1", "Tornado #2", "EF0",
+                 "NWS Damage Survey for the March 17th, 2021 Tornado Event", "Reference"):
+        assert n.name_kind(n.clean_name(code)) == "code", code
+    assert n.name_key("Bayou La Croix, MS") == "bayou la croix", "La is no state here"
+    assert n.name_key("WestBrooklyn") == n.name_key("West Brooklyn")
+    assert n.place_match("LaGrange (W Troup county)", {"lagrange"})
+    assert n.place_match("NorthOaks", {"north oaks"}) and not n.place_match("Hill", {"hillsboro"})
+    cands = n.candidates(
+        pd.DataFrame({"hazard_uid": ["a", "b"], "dat_event_ids": ["Vilonia Tornado", "Tor2;Tor3"]}),
+        pd.DataFrame({"hazard_uid": ["a"], "textref_uid": ["t1"],
+                      "title": ["MAYFLOWER/VILONIA TORNADO"]}))
+    out = n.annotate(cands, {"a": {"vilonia", "mayflower"}, "b": {"pilger"}})
+    assert len(out) == 4 and out.is_preferred.sum() == 1
+    pref = out[out.is_preferred].iloc[0]
+    assert pref.hazard_uid == "a" and pref.source == "pns_section", \
+        "both agree: the survey heading wins"
+    assert not out[out.hazard_uid == "b"].is_preferred.any(), "codes are never preferred"
+    # A name that matches no place is preferred only when another source agrees.
+    out = n.annotate(n.candidates(pd.DataFrame({"hazard_uid": ["c"],
+                                                "dat_event_ids": ["Hopper Road Tornado"]}),
+                                  pd.DataFrame(columns=["hazard_uid", "textref_uid", "title"])),
+                     {"c": {"elsewhere"}})
+    assert not out.is_preferred.any()
+
+
 def official_texts_are_counted_per_hazard() -> None:
     """Texts per hazard and kind; census divisions are the Census Bureau's."""
     import tempfile
@@ -1187,6 +1224,7 @@ for name, fn in [
     ("each SPC track counts once", each_spc_track_counts_once),
     ("merge check samples by rule", merge_check_samples_by_rule),
     ("hand checks weigh and validate", hand_checks_weigh_and_validate),
+    ("record labels become names", record_labels_become_names),
     ("official texts are counted per hazard", official_texts_are_counted_per_hazard),
     ("map coordinates match Leaflet", map_coordinates_match_leaflet),
     ("NWS text matches on repaired times", nws_text_matches_on_repaired_times),

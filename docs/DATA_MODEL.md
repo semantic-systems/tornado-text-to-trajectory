@@ -90,6 +90,12 @@ beside it, so reporting differences stay visible:
   `deaths_differ`, `injuries_differ` (true, false, or empty where a side is
   unrated or unknown).
 
+Names: stage 26's `hazard_names_<tag>.csv` holds the labels the official
+records give a hazard, one row per label (`source` `pns_section` or
+`dat_event_id`, `name_raw` as written, `name` cleaned, `name_kind` `name` or
+`code`, `place_match`), with one `is_preferred` per hazard where any qualifies.
+They are local labels, not media names.
+
 ### 3. Geometry
 One geospatial ground-truth object attached to a hazard. A hazard may have several
 (a line *and* a polygon *and* points).

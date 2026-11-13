@@ -31,6 +31,7 @@ Nothing under `data/` or `outputs/figures/` is in git. The reports
 | 23 LexisNexis import | **complete.** 24,917 articles parsed from the hand-made RTF exports (1,487 sources, 2010-01-16 to 2025-12-29), 4,779 verbatim duplicates flagged. Reproduces the August `outputs/lexisnexis_articles.*` |
 | 24 record text | **run, 2010–2025.** Storm Events narratives (23,189 event, 8,517 episode) and DAT comments (9,412) as `oracle` TextRefs; narratives for 10,696 DAT and 8,270 SPC hazards. Overlap with the survey statements: stage 25 |
 | 25 same-source edits | **run, 2010–2025, on stage 20's rerun.** Per hazard, groups the official texts (PNS section, narratives, DAT comments, LSRs) that share tornado-specific wording; calibrated on comparison pairs without hand labels (0.1–2.8% of the 27,660 links expected false), recall 95.7% on SPC's real copies of LSRs. An LSR counts for its best match only. 17,294 hazards with two or more texts: 63,016 texts, 44,855 accounts. `samples` writes a page of stratified samples with verdict buttons; **no hand check made yet** |
+| 26 names | **built 13 Nov, tested in a scratch copy.** The labels the official records give a tornado: survey-section headings (structured statements, the hazard's primary survey) and DAT's `event_id`, kept as written, cleaned, classed name or code, checked against places within 50 km and the counties crossed; one preferred per hazard. 14,253 labels; a preferred name for 8,492 of 19,662 hazards; the two sources agree on 82% where both name one. Local labels, not media names (Joplin has none). `hazard_names_<tag>.csv`; section 6 of `text_qa_report.md` |
 | 30 Media Cloud labels | **complete.** 110,438 EVENT rows / 48,741 distinct stories. Self-consistency: 88.9% unanimous over 3 draws at T=1 |
 | 31 article linking | ran **ungated**; 18,306 of 22,896 articles linked (80%). The `--labels` gate is wired but has never been used |
 | 32 LexisNexis labels | **complete.** 15,324 EVENT articles / 12,077 distinct bodies — but see traps |
@@ -57,7 +58,8 @@ and notes use the old numbers:
 | 07 | 21_fetch_gdelt | | 16 | viewer (a tool) | | 25 | 51_compare_episodes |
 | 08 | 35_qa_text | | 17 | 22_fetch_media_cloud | | 26 | 50_watch_systems |
 
-Old 13 and 20 (pairwise overlap) are `legacy/overlap_report.py` and
+Number 26 is now the names stage; the old 26 (and "Stage 26" in older watch
+reports) is `50_watch_systems`. Old 13 and 20 (pairwise overlap) are `legacy/overlap_report.py` and
 `legacy/corpus_overlap.py`. 15 builds the episodes, which stage 12 built before; 23 imports the
 LexisNexis exports (was `python -m tornado_dataset.text.lexisnexis`). Old 24 is now split: 13 downloads,
 14 matches, and its report is part of 17's `events_qa_report.md`, which replaces
@@ -283,6 +285,16 @@ them linkable.
 Finish the GDELT crawl, then analyze the coverage in terms of events and unique headlines. If there are any gains
 (which is likely), try to crawl the full text of the articles in GDELT that contain event descriptions. Assess the
 overlap between LexisNexis, Media Cloud, and GDELT full-texts.
+
+### 2b. Media names for tornadoes
+
+Stage 26 gives the labels in the official records, which are local (a town, a
+county, a road) and absent before DAT was in common use: Joplin 2011 has none,
+Moore 2013 is "Newcastle-OKC-Moore". The names headlines use ("the Joplin
+tornado", "Quad-State") would need a source outside the official record, such as
+Wikipedia's tornado lists — CC BY-SA, with its own fetching rules, and only for
+notable tornadoes. Left out on purpose; decide with article linking (stage 31
+could match headlines on `hazard_names` and, if added, media names).
 
 ### 3. Schema design for the assembled corpus
 

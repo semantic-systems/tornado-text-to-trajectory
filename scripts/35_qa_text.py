@@ -102,6 +102,55 @@ def cmd_links_check() -> None:
     print(f"\nwrote {out}")
 
 
+def names_section(tag: str) -> str:
+    """Section 6: the labels stage 26 collected, and what well-known tornadoes get."""
+    from tornado_dataset.text import names
+
+    path = config.PROCESSED_DIR / f"hazard_names_{tag}.csv"
+    manifest = config.PROCESSED_DIR / f"manifest_names_{tag}.json"
+    if not (path.exists() and manifest.exists()):
+        return "Not run yet: `scripts/26_collect_names.py`."
+    c = json.loads(manifest.read_text())["counts"]
+    table = pd.read_csv(path)
+    known = names.well_known(table, episode_table.membership(tag),
+                             episode_table.geography(tag, ("dat", "spc")))
+    rows = "\n".join(f"| {s.replace('_', ' ')} | {v['labels']:,} | {v['hazards']:,} | "
+                     f"{v['names']:,} | {v['place_match']:,} | {v['preferred']:,} |"
+                     for s, v in c["by_source"].items())
+
+    def cell(v) -> str:
+        return "—" if v is None or v != v else str(v).replace("|", "/")
+
+    known_rows = "\n".join(
+        f"| {r.tornado} | {r.day} | {cell(getattr(r, 'hazard_source', None))} | "
+        f"{cell(None if pd.isna(getattr(r, 'deaths', None)) else int(r.deaths))} | "
+        f"{cell(getattr(r, 'preferred', None))} | {cell(getattr(r, 'labels', None)) or '—'} |"
+        for r in known.itertuples())
+    return f"""No official database has a name field. Two sources label tornadoes as free
+text: the heading of a storm-survey section (structured statements) and DAT's
+`event_id`. Stage 26 keeps each label as written, cleans it, classes it as a name
+or a code, and checks it against the places within
+{c['place_radius_m'] / 1000:g} km of the track and the counties it crosses.
+{c['hazards_with_preferred_name']:,} of {c['hazards']:,} hazards get a preferred name
+({c['preferred_by_hazard_source'].get('dat', 0):,} DAT, {c['preferred_by_hazard_source'].get('spc', 0):,} SPC hazards).
+
+| source | labels | hazards | names | match a place | preferred |
+|---|---:|---:|---:|---:|---:|
+{rows}
+
+Where both sources name a hazard ({c['hazards_named_by_both_sources']:,}), they agree on
+{c['both_sources_agree']:,} ({c['both_sources_agree'] / max(c['hazards_named_by_both_sources'], 1):.0%}).
+The names are local labels — a town, a county, a road — not the names the media
+use. Well-known tornadoes (the deadliest hazard of the day in the state):
+
+| tornado | day | hazard | deaths | preferred name | labels in the records |
+|---|---|---|---:|---|---|
+{known_rows}
+
+Before DAT was in common use (2011) there is no label at all; media names would
+need a source outside the official record."""
+
+
 def main() -> None:
     default_tag = f"{config.WINDOW_START.isoformat()}_{config.WINDOW_END.isoformat()}"
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -231,6 +280,8 @@ def main() -> None:
             "texts).")
     else:
         edits_text = "Not run yet: `scripts/25_find_same_source_edits.py`."
+
+    names_text = names_section(tag)
 
     # ── report ──
     # Stage 16 reports per hazard source; an older manifest has the DAT counts at the top.
@@ -389,7 +440,11 @@ row so the corpus can be re-tiered reproducibly. Timing is in
 
 {edits_text}
 
-## 6. Limitations
+## 6. Names in the records
+
+{names_text}
+
+## 7. Limitations
 
 1. **News coverage stops at {config.GDELT_COVERAGE_START}.** {len(episodes) - eligible_episodes} of {len(episodes)} episodes predate the GDELT
    DOC API's earliest queryable date and carry no independent-news links. They

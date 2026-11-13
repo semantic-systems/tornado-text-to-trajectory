@@ -141,7 +141,43 @@ Stage 25 compares each hazard's official texts (survey statement, Storm Events n
 - 27,660 of 92,951 within-hazard pairs are linked (at least 10 shared tokens); expected false links 0.1% to 2.8% of them, by the two comparison sets.
 - 10,452 groups of two or more texts. The 17,294 hazards with two or more texts hold 63,016 texts in 44,855 accounts (29% fewer accounts than texts).
 
-## 6. Limitations
+## 6. Names in the records
+
+No official database has a name field. Two sources label tornadoes as free
+text: the heading of a storm-survey section (structured statements) and DAT's
+`event_id`. Stage 26 keeps each label as written, cleans it, classes it as a name
+or a code, and checks it against the places within
+50 km of the track and the counties it crosses.
+8,492 of 19,662 hazards get a preferred name
+(7,947 DAT, 545 SPC hazards).
+
+| source | labels | hazards | names | match a place | preferred |
+|---|---:|---:|---:|---:|---:|
+| pns section | 6,257 | 6,257 | 5,840 | 5,480 | 5,620 |
+| dat event id | 7,996 | 7,013 | 7,135 | 6,100 | 2,872 |
+
+Where both sources name a hazard (3,063), they agree on
+2,507 (82%).
+The names are local labels — a town, a county, a road — not the names the media
+use. Well-known tornadoes (the deadliest hazard of the day in the state):
+
+| tornado | day | hazard | deaths | preferred name | labels in the records |
+|---|---|---|---:|---|---|
+| Joplin | 2011-05-22 | spc | 158 | — | — |
+| Hackleburg–Phil Campbell | 2011-04-27 | dat | 72 | — | — |
+| Moore | 2013-05-20 | dat | 24 | Newcastle-OKC-Moore | Newcastle-OKC-Moore |
+| El Reno | 2013-05-31 | dat | 8 | ElReno Poly | ElReno_Poly |
+| Mayflower–Vilonia | 2014-04-27 | dat | 16 | Mayflower/Vilonia/El Paso | Vilonia Tornado; TORNADO #1...THE MAYFLOWER/VILONIA/EL PASO TORNADO |
+| Pilger | 2014-06-16 | dat | 2 | — | Tor2; Tor3 |
+| Cookeville | 2020-03-02 | dat | 19 | Putnam County | Cookeville; Tornado #5 - Putnam County EF-4 Tornado |
+| Mayfield | 2021-12-10 | dat | 57 | Ohio County | Ohio County |
+| Rolling Fork | 2023-03-24 | dat | 17 | Rolling Fork-Silver City | Rolling Fork Tornado; Rolling Fork-Silver City Tornado |
+| Greenfield | 2024-05-21 | dat | 5 | Greenfield | Greenfield; Greenfield Tornado |
+
+Before DAT was in common use (2011) there is no label at all; media names would
+need a source outside the official record.
+
+## 7. Limitations
 
 1. **News coverage stops at 2017-01-01.** 1825 of 4325 episodes predate the GDELT
    DOC API's earliest queryable date and carry no independent-news links. They
