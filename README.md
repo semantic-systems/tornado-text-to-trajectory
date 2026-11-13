@@ -107,6 +107,7 @@ python scripts/40_sample_annotation.py # blind validation sheets
 python scripts/41_qa_links.py          # score annotations -> outputs/link_qa_report.md
 python scripts/42_analyze_news_time.py # the corpus in time -> news_time_report.md
 python scripts/43_corpus_atlas.py --events-only  # all three corpora as a set
+python scripts/44_wikipedia_silver_links.py  # silver links: Wikipedia text + cited news -> tornadoes, via NCEI ids
 
 # 5x  method studies
 python scripts/50_watch_systems.py run        # SPC watch systems (fetch + link)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Browse the Wikipedia tables (stages 26–29) in the browser, with Datasette.
+"""Browse the Wikipedia tables (stages 26–29, 44) in the browser, with Datasette.
 
 Loads the passages, the cited news, the citations between them, the
 LexisNexis cross-reference, and the discovery tables into one SQLite file,
@@ -76,13 +76,32 @@ TABLES = {
         ["state", "rating", "year"],
         "Stage 26: rows of the 'List of … tornadoes' pages with NCEI ids. Lookup only, "
         "never text: the summaries paraphrase the NCEI narrative."),
+    "facts": (
+        config.PROCESSED_DIR / "wikipedia_facts.csv", "fact_uid", ["location", "source_title"],
+        ["fact_kind", "rating", "state"],
+        "Stage 28: infoboxes and table rows as fact records, apart from the prose. Copied "
+        "from NWS surveys and NCEI: oracle data, never linker input."),
+    "fact_links": (
+        config.PROCESSED_DIR / "wikipedia_fact_links.csv", None, [],
+        ["relation", "match"],
+        "Stage 28: which fact describes which passage (infobox_of, same_tornado, "
+        "listed_in_outbreak), and how a table row was matched."),
+    "silver_links": (
+        config.PROCESSED_DIR / "wikipedia_silver_links.csv", None, ["title"],
+        ["text_kind", "link_level", "strength"],
+        "Stage 44: Wikipedia passages and the news they cite, linked to a Storm Events "
+        "tornado and its DAT hazards through NCEI ids, with checks and a strength."),
 }
+# Tables of later stages, shown when they exist.
+OPTIONAL = {"silver_links"}
 # Shown as the link text for a row, and moved to the end of the table view.
 LABELS = {"passages": "title", "cited_news": "title", "pages": "title"}
 LONG = ("text", "summary")
 FOREIGN_KEYS = [
     ("cited_news_citations", "textref_uid", "cited_news", "textref_uid"),
     ("cited_news_citations", "passage_uid", "passages", "textref_uid"),
+    ("fact_links", "fact_uid", "facts", "fact_uid"),
+    ("fact_links", "passage_uid", "passages", "textref_uid"),
 ]
 
 
@@ -102,11 +121,12 @@ def _frame(path) -> pd.DataFrame:
 def build() -> None:
     import sqlite_utils
 
-    for path, *_ in TABLES.values():
+    tables = {n: t for n, t in TABLES.items() if n not in OPTIONAL or t[0].exists()}
+    for path, *_ in tables.values():
         config.require_data(path)
     DB.unlink(missing_ok=True)
     db = sqlite_utils.Database(DB)
-    for name, (path, pk, search, _, _) in TABLES.items():
+    for name, (path, pk, search, _, _) in tables.items():
         frame = _frame(path).drop(columns=["section_spans"], errors="ignore")
         records = frame.astype(object).where(frame.notna(), None).to_dict("records")
         db[name].insert_all(records, pk=pk, batch_size=500)
@@ -119,12 +139,12 @@ def build() -> None:
 
     metadata = {
         "title": "Tornado text-to-trajectory: Wikipedia tables",
-        "description": "Stages 26–29. Local only: the cited news texts are copyrighted.",
+        "description": "Stages 26–29 and 44. Local only: the cited news texts are copyrighted.",
         "license": "Wikipedia text: CC BY-SA 4.0; news text: copyright of the publishers",
         "databases": {DB.stem: {"tables": {
             name: {"description": description, "facets": facets,
                    **({"label_column": LABELS[name]} if name in LABELS else {})}
-            for name, (_, _, _, facets, description) in TABLES.items()}}},
+            for name, (_, _, _, facets, description) in tables.items()}}},
     }
     METADATA.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(f"wrote {DB} ({DB.stat().st_size / 1e6:.0f} MB)")

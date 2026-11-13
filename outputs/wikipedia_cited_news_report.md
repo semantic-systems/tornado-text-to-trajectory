@@ -1,6 +1,6 @@
 # News articles cited by Wikipedia
 
-Generated 2026-11-13T10:00:21+00:00 by `scripts/29_wikipedia_cited_news.py`.
+Generated 2026-11-13T13:39:06+00:00 by `scripts/29_wikipedia_cited_news.py`.
 
 The tornado pages cite **4,832 distinct news articles**. **218** are already in LexisNexis (strong match, stage 27) and get no second copy: they are listed in `data/processed/wikipedia_cited_lexisnexis.csv` with the LexisNexis `textref_uid`. The other **4,614** are new text records (`collection = wikipedia_citations`), **3,978 with text** (2,622,547 words, median 456), and **3,697 with text that checks out as the cited article**.
 
@@ -77,28 +77,29 @@ The 3,765 usable texts form **3,701 stories**; 52 stories have more than one cop
 
 ## Citation context
 
-5,112 (article, citing passage) pairs in `data/processed/wikipedia_cited_news_citations.csv`. Every article is cited from at least one stage 28 passage.
+5,009 (article, citing passage) pairs in `data/processed/wikipedia_cited_news_citations.csv`. 4,530 articles are cited from at least one stage 28 passage; the rest are cited only from tables or sections that are not passages (confirmed-tornado tables, references to other events).
 
 | event date taken from   |   articles |
 |:------------------------|-----------:|
-| hazard                  |       2595 |
-| episode                 |       2019 |
+| hazard                  |       2550 |
+| episode                 |       1980 |
+| none                    |         84 |
 
-3,418 articles are cited by a passage that also cites NCEI event ids: a candidate hazard for the linker, to be confirmed by date and place since a passage can cite several.
+2,111 articles are cited by a passage that also cites NCEI event ids: a candidate hazard for the linker, to be confirmed by date and place since a passage can cite several.
 
 ### Publication relative to the event
 
-For the 3,543 articles with a day-precise date and an event date:
+For the 3,473 articles with a day-precise date and an event date:
 
 | published        |   articles |
 |:-----------------|-----------:|
 | before the event |         76 |
-| same day         |        319 |
-| next day         |        716 |
-| 2–7 days         |       1281 |
-| 8–30 days        |        387 |
-| 31–365 days      |        375 |
-| over a year      |        389 |
+| same day         |        327 |
+| next day         |        712 |
+| 2–7 days         |       1233 |
+| 8–30 days        |        369 |
+| 31–365 days      |        372 |
+| over a year      |        384 |
 
 "Before the event" is mostly forecasts and outlooks, and some passage dates that are the start of a multi-day outbreak.
 
@@ -108,8 +109,8 @@ Rule `tier_rules_v2_2026-11+event_date_from_citing_passage`: none of these outle
 
 | temporal_class        |   articles | share   |
 |:----------------------|-----------:|:--------|
-| post_event_pre_survey |       3503 | 76%     |
-| nowcast               |       1035 | 22%     |
+| post_event_pre_survey |       3499 | 76%     |
+| nowcast               |       1039 | 23%     |
 | forecast              |         76 | 2%      |
 
 ## Caveats

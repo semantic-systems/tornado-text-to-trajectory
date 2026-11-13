@@ -1,14 +1,14 @@
 # Wikipedia passages
 
-Generated 2026-11-13T10:00:16+00:00 by `scripts/28_wikipedia_passages.py`.
+Generated 2026-11-13T13:35:28+00:00 by `scripts/28_wikipedia_passages.py`.
 
 **855 passages, 641,715 words** from 249 pinned revisions, each a text record in `data/processed/wikipedia_textrefs.csv` (text in `data/processed/wikipedia_passages.jsonl`). Wikipedia is CC BY-SA 4.0; every record carries its revision permalink and licence.
 
 | unit              | links to   |   passages |   dropped (< 30 words) |   median words | path-like   | cite an NCEI event id   | flagged derived_from_oracle   | post-survey   |
 |:------------------|:-----------|-----------:|-----------------------:|---------------:|:------------|:------------------------|:------------------------------|:--------------|
-| tornado_article   | hazard     |        113 |                      0 |           2003 | 98%         | 83%                     | 27%                           | 100%          |
-| tornado_section   | hazard     |        236 |                      0 |            515 | 89%         | 68%                     | 78%                           | 100%          |
-| outbreak_overview | episode    |        120 |                      0 |            999 | 50%         | 75%                     | 72%                           | 100%          |
+| tornado_article   | hazard     |        113 |                      0 |           2003 | 98%         | 74%                     | 19%                           | 100%          |
+| tornado_section   | hazard     |        236 |                      0 |            515 | 89%         | 58%                     | 76%                           | 100%          |
+| outbreak_overview | episode    |        120 |                      0 |            999 | 50%         | 20%                     | 51%                           | 100%          |
 | yearly_event      | episode    |        386 |                      0 |            183 | 13%         | 11%                     | 76%                           | 100%          |
 
 - **Path-like** is a heuristic: at least three of touchdown, direction of motion, a length or width, and lifting appear in the passage. It describes the units, it filters nothing.
@@ -21,15 +21,36 @@ Generated 2026-11-13T10:00:16+00:00 by `scripts/28_wikipedia_passages.py`.
 - 82 of 236 tornado sections point (`{{Main}}`) to a dedicated article that is also a passage; the section is then a summary of that article. Both are kept; `summarises` names the article's `textref_uid` so an experiment can keep one.
 - 142 yearly event sections point to an outbreak article; they are the year page's summary of it.
 
+## Facts: infoboxes and table rows
+
+Tables and infoboxes are kept out of the passage text. They are **20,888 fact records** of their own in `data/processed/wikipedia_facts.csv` (20,419 table rows, 469 infoboxes), linked to passages in `data/processed/wikipedia_fact_links.csv`. They are copied from NWS surveys and NCEI, so they are **oracle** data: for labelling and checking links, never as the linker's input.
+
+| relation           |   links |
+|:-------------------|--------:|
+| listed_in_outbreak |    4277 |
+| infobox_of         |     469 |
+| same_tornado       |     282 |
+
+- `infobox_of`: the infobox of an article, or of a tornado section (outbreak articles give significant tornadoes their own). `listed_in_outbreak`: a row of the outbreak article's own tables, one of its tornadoes. `same_tornado`: the table row about the tornado a section or article describes, in a state it names, within its dates; `match` says how: `by_id` (the row cites an NCEI id the passage cites), `by_places` (half or more of the heading's places, at least two), `by_one_place` (the only tornado in the window naming one of them, or the only one with the passage's rating). `ambiguous` passages get no row.
+
+How each hazard-level passage matched a table row:
+
+| unit_kind       |   ambiguous |   by_id |   by_one_place |   by_places |   no_match |   no_places |
+|:----------------|------------:|--------:|---------------:|------------:|-----------:|------------:|
+| tornado_article |          17 |      48 |              7 |          23 |         17 |           1 |
+| tornado_section |          16 |     107 |             34 |          55 |         23 |           1 |
+
+**NCEI ids.** A passage's `ncei_event_ids` are those its own prose cites (222 of 349 hazard-level passages); ids cited in the passage's tables are in `ncei_event_ids_tables`, and the ids of its matched facts in `ncei_event_ids_facts` (231 passages; 79 of them have none in their prose). Sections whose prose gave no date of their own take the matched row's date (`event_date_basis = table_row`: 197).
+
 ## Against the census
 
-Of the 506 EF3+ tornadoes in the list census, 399 carry an NCEI event id there, and **135** of those are cited by a tornado article or tornado section. That is the floor of what the linker can join exactly; passages that cite no id still describe tornadoes and are linked by date and place.
+Of the 506 EF3+ tornadoes in the list census, 399 carry an NCEI event id there, and **119** of those are cited by a tornado article or tornado section. That is the floor of what the linker can join exactly; passages that cite no id still describe tornadoes and are linked by date and place.
 
 | rating   |   in census |   cited by a hazard-level passage |
 |:---------|------------:|----------------------------------:|
-| EF3      |         415 |                                86 |
-| EF4      |          82 |                                45 |
-| EF5      |           9 |                                 4 |
+| EF3      |         415 |                                76 |
+| EF4      |          82 |                                40 |
+| EF5      |           9 |                                 3 |
 
 ## By year
 

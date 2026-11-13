@@ -77,7 +77,9 @@ def extract(args) -> None:
                 cited_in = set(ref["sections"].split(" | ")) & us_sections
                 if not cited_in:
                     continue
-                ref = {**ref, "sections": " | ".join(sorted(cited_in))}
+                ref = {**ref, **{field: " | ".join(sorted(set(ref[field].split(" | ")) & us_sections))
+                                 for field in ("sections", "prose_sections", "table_sections",
+                                               "infobox_sections")}}
             rows.append({"pageid": page.pageid, "revid": page.revid,
                          "page_title": page.title, "page_kind": page.kind,
                          "page_year": page.year, **ref,

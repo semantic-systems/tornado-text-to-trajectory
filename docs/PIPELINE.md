@@ -699,12 +699,26 @@ the news corpora. US tornadoes only, inside the dataset window.
   `tornado_article` and `tornado_section` (one tornado → hazard level),
   `outbreak_overview` and `yearly_event` (→ episode level). Each record keeps the
   text, revision permalink and licence (CC BY-SA 4.0, so the text may be stored),
-  the event date, infobox facts, the NCEI event ids its own references cite, and
-  the independence axes. Wikipedia is never the surveying organisation; a
+  the event date, the NCEI event ids **its own prose** cites, and the
+  independence axes. Wikipedia is never the surveying organisation; a
   revision at least 90 days after the event is `post_survey`, so these are
   `independent_retrospective`. `derived_from_oracle` flags passages whose
   citations are mostly NWS products — a provisional rule until the text can be
   compared with the NCEI narratives.
+
+  Tables and infoboxes are kept out of the text and become **fact records**
+  (`wikipedia_facts.csv`): every infobox (the page's own, and the one an
+  outbreak article gives each significant tornado) and every row of the
+  confirmed-tornado tables, with date, UTC time, rating, location, counties,
+  path length and width, NCEI ids and the page's Wikidata id. Every citation
+  has a context (prose, table, infobox), so an id cited in a day table is the
+  row's evidence, not the section's. `wikipedia_fact_links.csv` links facts to
+  passages: `infobox_of`; `listed_in_outbreak` (a row of the outbreak's own
+  tables); `same_tornado`, the table row about the tornado a section or article
+  describes, graded by how it was found (`by_id`, `by_places`, `by_one_place`;
+  ambiguous ones get no row). A section whose prose has no date of its own takes
+  its row's. Facts are copied from the surveys and NCEI: oracle data, for
+  labelling and checking links, never the linker's input.
 - **Stage 29 (cited news).** The cited news articles LexisNexis does not hold
   become text records of their own (`collection = wikipedia_citations`), with
   or without text; the ones it holds go to a cross-reference table with the
@@ -727,14 +741,43 @@ python scripts/browse_wikipedia.py                           # browse it all at 
 ```
 
 `browse_wikipedia.py` loads the Wikipedia tables (passages, cited news, the
-citations between them, pages, refs, census) into one SQLite file,
+citations between them, pages, refs, census, facts and their links, and the
+silver links of stage 44) into one SQLite file,
 `data/processed/wikipedia_browse.db`, with full-text search on the texts, and
 serves it with [Datasette](https://datasette.io): click a value to filter,
 facet counts above each table, one page per record with its full text. It binds
 to 127.0.0.1 only, since the cited news texts are copyrighted.
 
-Linking the passages and cited articles to DAT hazards is not done yet; it needs
-the hazard tables.
+### Silver links for the linker — `scripts/44_wikipedia_silver_links.py`
+
+An evaluation set for the news → tornado linker, from links Wikipedia's editors
+drew: a passage's NCEI ids (from its prose, its infobox, or its matched table
+row) resolve through Storm Events' county-segment chains (stage 14) to one
+tornado, and through stage 14's links to DAT hazards and their polygons. The
+news a passage cites inherits its tornado when every tornado-level passage
+citing it agrees.
+
+Each link is checked against the Storm Events record: the passage's date (±1
+day, or within the outbreak for a section dated by its start), state, places
+(heading towns among the counties or in the narrative) and rating. The result
+is a **strength** — strong, medium, weak, rejected (`text.silver`); a news
+article takes its weakest citing passage's, lowered if it was published before
+the event or more than 60 days after, or names none of the tornado's places.
+Outbreak overviews and yearly events link at episode level, to the set of
+tornadoes they cite.
+
+```bash
+python scripts/13_fetch_references.py          # Storm Events (SPC by hand)
+python scripts/14_match_references.py          # needs stage 12's hazards
+python scripts/44_wikipedia_silver_links.py    # offline
+```
+
+Writes `data/processed/wikipedia_silver_links.csv`, the report, and a blind,
+stratified hand-check sheet (`outputs/annotation/wikipedia_silver_handcheck.csv`,
+key in `data/interim/`). Label it `same_tornado` · `other_tornado` ·
+`outbreak_only` · `not_about_a_tornado` · `unsure` and save it as
+`wikipedia_silver_handcheck_labels.csv`; until then the strengths rank links,
+they do not measure them.
 
 
 ### Full-text quality — `33_fetch_fulltext.py quality`

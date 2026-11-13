@@ -445,7 +445,8 @@ def tornado_sections(text: str, *, with_text: bool = False) -> list[dict[str, An
                 "section_type": "day" if _DAY_HEADING.match(title) else "tornado",
                 "main_article": "|".join(sorted(main_targets(body))),
                 "prose_words": len(plain_text(body).split()),
-                **({"text": plain_text(body)} if with_text else {}),
+                **({"text": plain_text(body), "infobox": infobox(body, prefer="/tornado")}
+                   if with_text else {}),
             })
     return out
 
@@ -857,7 +858,11 @@ def list_census(text: str, list_year: int | None = None) -> list[dict[str, Any]]
     """
     rows: list[dict[str, Any]] = []
     headings = [(m.start(), m.group(2)) for m in _HEADING_RE.finditer(text)]
-    for match in re.finditer(r"^\{\|.*?^\s*\|\}", text, re.S | re.M):
+    levels = [(m.start(), len(m.group(1)), mwparserfromhell.parse(m.group(2)).strip_code().strip())
+              for m in _HEADING_RE.finditer(text)]
+    for table_no, match in enumerate(re.finditer(r"^\{\|.*?^\s*\|\}", text, re.S | re.M)):
+        l2, l3 = _section_at(levels, match.start())
+        section = f"{l2} > {l3}" if l3 else l2
         # MediaWiki tolerates leading spaces on table lines; so must we.
         table = "\n".join(l.lstrip() for l in match.group(0).split("\n"))
         lines = table.split("\n")
@@ -903,7 +908,8 @@ def list_census(text: str, list_year: int | None = None) -> list[dict[str, Any]]
             if len(values) == 1 and "colspan" in body:     # a state separator row
                 section_state = _clean(values[0])
                 continue
-            record: dict[str, Any] = {"date": date, "ncei_event_ids": set(_NCEI_ID.findall(body))}
+            record: dict[str, Any] = {"date": date, "section": section, "table_no": table_no,
+                                      "ncei_event_ids": set(_NCEI_ID.findall(body))}
             for name, raw in zip(header, values):
                 field = CENSUS_FIELDS.get(name)
                 if field == "start_coord":
@@ -1018,15 +1024,54 @@ def _section_at(headings: list[tuple[int, int, str]], pos: int) -> tuple[str, st
     return l2 or "(lead)", l3
 
 
+_TABLE_SPAN = re.compile(r"^[ \t]*\{\|.*?^[ \t]*\|\}", re.S | re.M)
+
+
+def markup_spans(text: str) -> list[tuple[int, int, str]]:
+    """``(start, end, kind)`` of the tables and infoboxes in a page's wikitext.
+
+    A citation inside one of these is evidence for a *fact* (a table row, an
+    infobox field), not for the prose around it: the day tables of an outbreak
+    article cite the NCEI record of every tornado they list, which the prose
+    of that section never mentions.
+    """
+    spans = [(m.start(), m.end(), "table") for m in _TABLE_SPAN.finditer(text)]
+    pos = 0
+    for node in mwparserfromhell.parse(text).nodes:       # top level; round-trips exactly
+        length = len(str(node))
+        if isinstance(node, mwparserfromhell.nodes.Template) and \
+                str(node.name).strip().lower().startswith("infobox"):
+            spans.append((pos, pos + length, "infobox"))
+        pos += length
+    return sorted(spans)
+
+
+def context_at(spans: list[tuple[int, int, str]], pos: int) -> str:
+    """``prose`` · ``table`` · ``infobox`` for a character position."""
+    for start, end, kind in spans:
+        if start <= pos < end:
+            return kind
+        if start > pos:
+            break
+    return "prose"
+
+
 def extract_references(text: str) -> list[dict[str, Any]]:
     """Every distinct reference on a page, with the sections it is cited from.
 
     A named reference is defined once and reused (``<ref name=x />``); all of
     its uses count, and its sections are the union over them. Footnote groups
     (``group=note``) hold editorial prose, not sources, and are skipped.
+
+    Each use also has a context (:func:`context_at`): ``prose_sections`` are
+    the sections where it is cited in running text, ``table_sections`` where
+    it is cited inside a table, and ``infobox_sections`` where an infobox cites
+    it — the page's own in the lead, or a tornado section's (outbreak articles
+    give each significant tornado an infobox of its own).
     """
     headings = [(m.start(), len(m.group(1)), mwparserfromhell.parse(m.group(2)).strip_code().strip())
                 for m in _HEADING_RE.finditer(text)]
+    spans = markup_spans(text)
     refs: dict[str, dict[str, Any]] = {}
     for m in _REF_RE.finditer(text):
         attrs, body = m.group("attrs") or "", m.group("body")
@@ -1035,6 +1080,7 @@ def extract_references(text: str) -> list[dict[str, Any]]:
         name = _attr(_REF_NAME, attrs)
         key = f"name:{name}" if name else f"anon:{m.start()}"
         ref = refs.setdefault(key, {"ref_key": key, "body": None, "sections": [],
+                                    "prose": [], "table": [], "infobox": [],
                                     "n_citations": 0})
         if body and body.strip() and ref["body"] is None:
             ref["body"] = body.strip()
@@ -1043,13 +1089,20 @@ def extract_references(text: str) -> list[dict[str, Any]]:
         section = f"{l2} > {l3}" if l3 else l2
         if section not in ref["sections"]:
             ref["sections"].append(section)
+        context = context_at(spans, m.start())
+        if section not in ref[context]:
+            ref[context].append(section)
 
     out = []
     for ref in refs.values():
         if not ref["body"]:
             continue                      # a reuse whose definition we never saw
         out.append({"ref_key": ref["ref_key"], "n_citations": ref["n_citations"],
-                    "sections": " | ".join(ref["sections"]), **parse_reference(ref["body"])})
+                    "sections": " | ".join(ref["sections"]),
+                    "prose_sections": " | ".join(ref["prose"]),
+                    "table_sections": " | ".join(ref["table"]),
+                    "infobox_sections": " | ".join(ref["infobox"]),
+                    **parse_reference(ref["body"])})
     return out
 
 

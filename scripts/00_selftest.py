@@ -50,7 +50,8 @@ MODULES = [
     "tornado_dataset.text.corpora",
     "tornado_dataset.text.overlap", "tornado_dataset.text.wikipedia",
     "tornado_dataset.text.refcoverage", "tornado_dataset.text.citednews",
-    "tornado_dataset.text.overlap", "tornado_dataset.text.records",
+    "tornado_dataset.text.wikifacts", "tornado_dataset.text.silver",
+    "tornado_dataset.text.records",
     "tornado_dataset.text.same_source", "tornado_dataset.text.same_source_view",
     "tornado_dataset.text.official",
 ]
@@ -118,6 +119,7 @@ from tornado_dataset.text import corpora                                 # noqa:
 from tornado_dataset.text import wikipedia                               # noqa: E402
 from tornado_dataset.text import refcoverage                             # noqa: E402
 from tornado_dataset.text import fulltext_corpus                         # noqa: E402
+from tornado_dataset.text import wikifacts, silver                         # noqa: E402
 
 
 def evidence_windows_reach_late_mentions() -> None:
@@ -471,6 +473,86 @@ def cited_news_story_groups() -> None:
     assert groups["d"][0] != groups["a"][0], "a year apart is another story"
     walls = cn.story_groups(list(texts), {k: "" for k in texts}, dates, pairs, exclude={"b"})
     assert walls["a"][0] != walls["b"][0]
+
+
+def citations_know_prose_from_tables() -> None:
+    """An NCEI id cited in a day table or an infobox is a fact's, not the prose's."""
+    text = ("{{Infobox weather event|fatalities=3<ref name=box>{{cite web|url=https://www.ncei."
+            "noaa.gov/access/storm-events-database/event-details/111|title=A}}</ref>}}\n"
+            "Lead prose.<ref>{{cite news|url=https://x.com/a|title=News A}}</ref>\n"
+            "== Confirmed tornadoes ==\n=== March 2 event ===\n{| class=wikitable\n|-\n! EF#\n"
+            "|-\n| EF1 <ref>{{cite web|url=https://www.ncei.noaa.gov/access/storm-events-"
+            "database/event-details/222|title=B}}</ref>\n|}\n"
+            "=== Townville, Alabama ===\n{{Infobox weather event/Tornado|fujita-scale=EF3"
+            "<ref>{{cite web|url=https://www.ncei.noaa.gov/access/storm-events-database/event-"
+            "details/333|title=C}}</ref>}}\nThe tornado struck Townville.<ref name=box/>\n")
+    refs = {r["title"]: r for r in wikipedia.extract_references(text)}
+    assert refs["A"]["infobox_sections"] == "(lead)", refs["A"]
+    assert refs["A"]["prose_sections"] == "Confirmed tornadoes > Townville, Alabama", \
+        "a named reuse in prose counts where it is reused"
+    assert refs["News A"]["prose_sections"] == "(lead)"
+    assert refs["B"]["table_sections"] == "Confirmed tornadoes > March 2 event"
+    assert refs["B"]["prose_sections"] == ""
+    assert refs["C"]["infobox_sections"] == "Confirmed tornadoes > Townville, Alabama"
+
+
+def table_rows_match_their_section() -> None:
+    assert wikifacts.place_names("Rolling Fork–Midnight–Silver City, Mississippi") == \
+        ["rolling fork", "midnight", "silver city"]
+    assert wikifacts.place_names("2021 Western Kentucky tornado") == []
+    assert wikifacts.place_names("2011 Joplin tornado") == ["joplin"]
+    assert wikifacts.place_share(["north west point"], "NW of West Point to Pine Mountain")[1] == 1
+    row = lambda d, loc, st="MS", r="EF3", ids="", lat=None: {
+        "date": d, "location": loc, "county": "", "state": st, "rating": r,
+        "ncei_event_ids": ids, "lat": lat, "lon": lat}
+    window = ("2023-03-24", "2023-04-07")
+    rows = [row("2023-03-24", "SW of Rolling Fork to Midnight to NE of Silver City", r="EF4", lat=32.9),
+            row("2023-03-24", "Amory", ids="555", lat=33.9),
+            row("2023-03-26", "NW of West Point to NE of Pine Mountain", st="GA", lat=32.8),
+            row("2023-03-24", "Winona", lat=33.4), row("2023-03-25", "Winona", r="EF1", lat=33.5)]
+    best, how = wikifacts.match_rows("Rolling Fork–Midnight–Silver City, Mississippi",
+                                     {"Mississippi"}, window, rows)
+    assert how == "by_places" and best[0]["rating"] == "EF4", (how, best)
+    assert wikifacts.match_rows("Egypt–Amory, Mississippi", {"Mississippi"}, window, rows,
+                                ids={"555"})[1] == "by_id"
+    assert wikifacts.match_rows("North West Point–Smiths Mill, Georgia", {"Georgia"}, window,
+                                rows)[1] == "by_one_place"
+    assert wikifacts.match_rows("Rolling Fork, Georgia", {"Georgia"}, window, rows)[1] == \
+        "no_match", "a row in another state is not the heading's"
+    assert wikifacts.match_rows("Black Hawk–Winona, Mississippi", {"Mississippi"}, window,
+                                rows)[1] == "ambiguous", "two Winona tornadoes, no rating to choose"
+    assert wikifacts.match_rows("Black Hawk–Winona, Mississippi", {"Mississippi"}, window,
+                                rows, rating="EF3")[1] == "by_one_place"
+
+
+def silver_links_check_against_storm_events() -> None:
+    import pandas as pd
+    se = pd.DataFrame({
+        "EVENT_ID": [1, 2, 3], "TORNADO_KEY": ["setor_1", "setor_1", "setor_3"],
+        "BEGIN_DATE_TIME": ["27-APR-11 15:43:00", "27-APR-11 15:59:00", "20-JUN-25 19:00:00"],
+        "begin_utc": ["2011-04-27 21:43", "2011-04-27 21:59", "2025-06-21 01:00"],
+        "STATE": ["ALABAMA", "ALABAMA", "NORTH DAKOTA"], "CZ_NAME": ["TUSCALOOSA", "JEFFERSON", "CASS"],
+        "TOR_F_SCALE": ["EF3", "EF4", "EF5"], "TOR_LENGTH": [20, 60, 12], "DEATHS_DIRECT": [10, 54, 3],
+        "EVENT_NARRATIVE": ["The tornado entered Tuscaloosa.", "", "Near Enderlin."]})
+    assert silver.local_date("27-APR-11 15:43:00") == "2011-04-27"
+    tors = silver.tornadoes(se)
+    assert tors["setor_1"]["rating"] == "EF4" and tors["setor_1"]["event_ids"] == ["1", "2"]
+    good = silver.checks(date="2011-04-27", states={"Alabama"}, places=["tuscaloosa"],
+                         rating="EF4", tornado=tors["setor_1"])
+    assert good["consistency"] == "consistent" and silver.strength("single", good) == "strong"
+    far = silver.checks(date="2025-05-16", states={"Illinois"}, places=["marion"], rating="EF4",
+                        tornado=tors["setor_3"])
+    assert silver.strength("single", far) == "rejected", "a comparison tornado is caught"
+    start = silver.checks(date="2011-04-25", states={"Alabama"}, places=["tuscaloosa"],
+                          rating="", tornado=tors["setor_1"], within_days=14)
+    assert start["date_ok"], "a section dated by its outbreak's start may be any day of it"
+    cands = {"setor_1": {**good, "evidence": {"prose", "infobox"}},
+             "setor_3": {**far, "evidence": {"prose"}}}
+    assert silver.choose(cands) == ("setor_1", "chosen")
+    late = silver.news_checks(published="2021-12-09", event_date="2011-04-27",
+                              text="Ten years after Tuscaloosa", places=["tuscaloosa"], counties=[])
+    assert late["date_ok"] is False and late["mentions_place"] is True
+    assert silver.news_strength(["strong", "medium"], late) == "weak"
 
 
 def kappa_corrects_for_rare_flags() -> None:
@@ -1285,6 +1367,9 @@ for name, fn in [
     ("wikipedia dates and infobox groups", wikipedia_dates_and_infobox_groups),
     ("cited news quality flags", cited_news_quality_flags),
     ("cited news story groups", cited_news_story_groups),
+    ("citations know prose from tables", citations_know_prose_from_tables),
+    ("table rows match their section", table_rows_match_their_section),
+    ("silver links check against Storm Events", silver_links_check_against_storm_events),
     ("kappa corrects for rare flags", kappa_corrects_for_rare_flags),
     ("full-text bodies keep both labels apart", fulltext_bodies_keep_both_labels_apart),
     ("cross-corpus reads either edge direction", cross_corpus_reads_either_edge_direction),

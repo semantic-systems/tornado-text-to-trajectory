@@ -1,6 +1,6 @@
 # Wikipedia discovery — US tornado text sources and list census
 
-Generated 2026-10-29T23:20:37+00:00. Window 2010–2025, English Wikipedia, US only. Produced by `scripts/23_discover_wikipedia.py`.
+Generated 2026-11-13T13:27:44+00:00. Window 2010–2025, English Wikipedia, US only. Produced by `scripts/26_discover_wikipedia.py`.
 
 > **Scope.** Text sources are dedicated tornado articles, the per-tornado sections of outbreak articles, and the US event sections of the yearly `Tornadoes of <year>` pages. `List of …` pages are not text — their rows paraphrase the NCEI narrative they cite — but they are parsed into a census of every listed tornado, which is what the text sources are measured against.
 
