@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+/.env
+
+# IDE / editor / OS
+.idea/
+.vscode/
+.DS_Store
+# Claude Code workspace settings — local tooling, not project code
+.claude/
+
+# Generated data — 4.7 GB, obtained from the project owner (see HANDOVER.md)
+/data/
+
+# Outputs: the reports ARE the findings and belong in git; the figures do not.
+/outputs/*
+!/outputs/*.md
+/outputs/figures/
+
+# Scratch space, never shared
+/local/
+
+# Run logs
+fetch.log
+scripts/fetch.log

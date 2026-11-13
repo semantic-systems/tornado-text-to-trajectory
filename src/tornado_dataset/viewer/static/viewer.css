@@ -1,0 +1,136 @@
+:root {
+  color-scheme: light dark;
+  --surface: #fcfcfb; --plane: #f9f9f7; --primary: #0b0b0b; --secondary: #52514e;
+  --muted: #898781; --grid: #e1e0d9; --axis: #c3c2b7; --accent: #2a78d6;
+  --accent-2: #eb6834; --border: rgba(11,11,11,0.10); --mark: rgba(42,120,214,0.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    --surface: #1a1a19; --plane: #0d0d0d; --primary: #ffffff; --secondary: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --axis: #383835; --accent: #3987e5;
+    --accent-2: #d95926; --border: rgba(255,255,255,0.10);
+    --mark: rgba(57,135,229,0.28);
+  }
+}
+:root[data-theme="dark"] {
+  --surface: #1a1a19; --plane: #0d0d0d; --primary: #ffffff; --secondary: #c3c2b7;
+  --muted: #898781; --grid: #2c2c2a; --axis: #383835; --accent: #3987e5;
+  --accent-2: #d95926; --border: rgba(255,255,255,0.10); --mark: rgba(57,135,229,0.28);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--plane); color: var(--primary);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding: 12px 18px; border-bottom: 1px solid var(--border); background: var(--surface);
+  position: sticky; top: 0; z-index: 10;
+}
+header h1 { font-size: 15px; margin: 0; }
+header .count { color: var(--secondary); font-variant-numeric: tabular-nums; }
+header .hint { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+input, select, button {
+  font: inherit; font-size: 13px; color: var(--primary); background: var(--surface);
+  border: 1px solid var(--axis); border-radius: 6px; padding: 5px 8px;
+}
+input[type=search] { min-width: 240px; }
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+
+main { display: grid; grid-template-columns: minmax(300px, 27%) 1fr; height: calc(100vh - 58px); }
+#list { overflow-y: auto; border-right: 1px solid var(--border); background: var(--surface); }
+#detail { overflow-y: auto; padding: 20px 26px 60px; }
+
+.row {
+  padding: 9px 14px; border-bottom: 1px solid var(--grid); cursor: pointer;
+}
+.row:hover { background: var(--plane); }
+.row[aria-selected="true"] { background: var(--mark); }
+.row .h { font-weight: 600; line-height: 1.35; }
+.row .m { color: var(--secondary); font-size: 12px; margin-top: 3px;
+          display: flex; gap: 8px; flex-wrap: wrap; }
+.pill {
+  font-size: 11px; padding: 1px 6px; border-radius: 999px;
+  border: 1px solid var(--axis); color: var(--secondary); white-space: nowrap;
+}
+.pill.linked { border-color: var(--accent); color: var(--accent); }
+.pill.none { border-color: var(--axis); color: var(--muted); }
+
+#detail h2 { font-size: 20px; margin: 0 0 6px; line-height: 1.3; }
+.meta { color: var(--secondary); margin-bottom: 16px; }
+.section-title {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); margin: 22px 0 8px;
+}
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 18px; }
+.field { display: flex; gap: 8px; font-size: 13px; border-bottom: 1px solid var(--grid); padding: 3px 0; }
+.field .k { color: var(--muted); min-width: 108px; }
+.field .v { color: var(--primary); word-break: break-word; }
+
+.body p { margin: 0 0 11px; max-width: 76ch; }
+mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2px; }
+
+.link-card {
+  border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+  margin-bottom: 12px; background: var(--surface); cursor: pointer;
+}
+.link-card:hover { border-color: var(--accent); }
+.link-card.describes { border-left: 3px solid var(--accent); }
+.link-card.mentions { border-left: 3px solid var(--axis); }
+.link-card.active { background: var(--mark); border-color: var(--accent); }
+
+/* ── map ── */
+.map-wrap {
+  border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  margin-bottom: 4px; background: var(--surface);
+}
+#map { height: 420px; width: 100%; }
+.map-bar {
+  display: flex; align-items: center; gap: 12px; padding: 7px 12px;
+  border-top: 1px solid var(--border); font-size: 12.5px; color: var(--secondary);
+}
+.map-bar .map-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.map-bar button { padding: 3px 8px; font-size: 12px; }
+.map-bar label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+
+/* Leaflet's chrome is light by default; give it the page's palette so a dark
+   session does not get a white popup punched through it. */
+.leaflet-container { background: var(--plane); font: inherit; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip,
+.leaflet-control-zoom a, .leaflet-control-attribution {
+  background: var(--surface) !important; color: var(--primary) !important;
+}
+.leaflet-control-zoom a, .leaflet-control-attribution a { color: var(--accent) !important; }
+.leaflet-popup-content { font-size: 12.5px; line-height: 1.5; }
+.leaflet-control-attribution { font-size: 10px; }
+
+/* In dark mode the tiles are dimmed rather than inverted: inverting standard OSM
+   tiles turns water pink and makes labels hard to read, and reading the map is
+   the whole point. */
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .leaflet-tile {
+    filter: brightness(0.78) contrast(1.05) saturate(0.85);
+  }
+}
+:root[data-theme="dark"] .leaflet-tile {
+  filter: brightness(0.78) contrast(1.05) saturate(0.85);
+}
+.link-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.link-head .rel { font-weight: 600; }
+.link-head .score { font-variant-numeric: tabular-nums; color: var(--secondary); }
+.evidence { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.chip { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--plane);
+        border: 1px solid var(--grid); color: var(--secondary); }
+.chip.yes { border-color: var(--accent); color: var(--accent); }
+.chip.no { color: var(--muted); text-decoration: line-through; }
+.event-facts { color: var(--secondary); font-size: 13px; margin-top: 7px; }
+.event-facts b { color: var(--primary); }
+.empty { color: var(--muted); padding: 30px 0; }
+.spinner { color: var(--muted); padding: 20px 0; }
+kbd {
+  font: inherit; font-size: 11px; border: 1px solid var(--axis); border-bottom-width: 2px;
+  border-radius: 4px; padding: 0 4px; color: var(--secondary);
+}

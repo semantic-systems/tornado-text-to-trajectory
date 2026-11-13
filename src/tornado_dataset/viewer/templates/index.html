@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LexisNexis tornado corpus</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='viewer.css') }}">
+</head>
+<body>
+<header>
+  <h1>LexisNexis tornado corpus</h1>
+  <span class="count" id="count">{{ '{:,}'.format(facets.total) }} articles</span>
+  <div class="filters">
+    <input type="search" id="q" placeholder="headline or source…" autocomplete="off">
+    <select id="year">
+      <option value="">any year</option>
+      {% for y in facets.years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+    </select>
+    <select id="status">
+      <option value="">any status</option>
+      {% for s in facets.statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+    </select>
+    <select id="relation">
+      <option value="">any relation</option>
+      {% for r in facets.relations %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+    </select>
+    <select id="has_links">
+      <option value="">linked or not</option>
+      <option value="yes">has links</option>
+      <option value="no">no links</option>
+    </select>
+    <select id="min_score">
+      <option value="">any score</option>
+      <option value="0.3">score ≥ 0.3</option>
+      <option value="0.5">score ≥ 0.5</option>
+      <option value="0.7">score ≥ 0.7</option>
+    </select>
+  </div>
+  <span class="hint"><kbd>j</kbd>/<kbd>k</kbd> move · <kbd>/</kbd> search</span>
+</header>
+
+<main>
+  <div id="list"><div class="spinner">loading…</div></div>
+  <div id="detail"><p class="empty">Pick an article on the left.</p></div>
+</main>
+
+<script src="{{ url_for('static', filename='vendor/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='viewer.js') }}"></script>
+</body>
+</html>
