@@ -12,6 +12,7 @@ infer a disaster's spatial footprint from text.
    Geometry, and how text attaches to it.
 3. [docs/PIPELINE.md](docs/PIPELINE.md) — per-stage detail.
 4. [docs/FINDINGS.md](docs/FINDINGS.md) — what the project has measured so far.
+5. [docs/WIKIPEDIA.md](docs/WIKIPEDIA.md) — Wikipedia as text source, coverage yardstick and silver labels: files, viewers, numbers; [docs/methods_wikipedia.md](docs/methods_wikipedia.md) is its draft methods section.
 
 ## Data sources
 
@@ -108,6 +109,7 @@ python scripts/41_qa_links.py          # score annotations -> outputs/link_qa_re
 python scripts/42_analyze_news_time.py # the corpus in time -> news_time_report.md
 python scripts/43_corpus_atlas.py --events-only  # all three corpora as a set
 python scripts/44_wikipedia_silver_links.py  # silver links: Wikipedia text + cited news -> tornadoes, via NCEI ids
+python scripts/figures_wikipedia.py          # figures for docs/WIKIPEDIA.md
 
 # 5x  method studies
 python scripts/50_watch_systems.py run        # SPC watch systems (fetch + link)
